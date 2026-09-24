@@ -6,7 +6,7 @@
 //
 // VERSION is stamped automatically by publish.ps1 on every publish. A new
 // version makes the phone install this worker fresh and throw away old copies.
-const VERSION = '20260925-015533';
+const VERSION = '20260925-015827';
 const CACHE = 'cricket-arcade-' + VERSION;
 
 // The page itself + the icon/manifest, so the app opens offline straight away.
