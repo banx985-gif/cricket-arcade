@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d2a1a">
+<title>Cricket Arcade</title>
+<link rel="stylesheet" href="css/main.css">
+<!-- Installable web app ("Add to Home screen"). -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="assets/branding/pwa/icon-192.png">
+<link rel="apple-touch-icon" href="assets/branding/pwa/apple-touch-icon-180.png">
+<meta name="apple-mobile-web-app-title" content="Cricket Arcade">
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Portrait blocker. Text is filled from the strings table at boot. -->
+  <div id="rotate-overlay">
+    <div class="rotate-phone"></div>
+    <div class="rotate-text" id="rotate-text"></div>
+  </div>
+
+  <!-- Invisible element whose padding reports the phone's safe-area insets. -->
+  <div id="safe-area-probe" aria-hidden="true"></div>
+
+  <!-- Plain scripts (no modules) so the game runs straight from file://. Order matters. -->
+  <script src="js/config.js"></script>
+  <script src="js/data/strings.js"></script>
+  <script src="js/data/batting.js"></script>
+  <script src="js/data/sixsmash.js"></script>
+  <script src="js/data/bowling.js"></script>
+  <script src="js/data/match.js"></script>
+  <script src="js/data/assets.js"></script>
+
+  <script src="js/core/rng.js"></script>
+  <script src="js/core/log.js"></script>
+  <script src="js/core/platform.js"></script>
+  <script src="js/core/display.js"></script>
+  <script src="js/core/input.js"></script>
+  <script src="js/core/audio.js"></script>
+  <script src="js/core/store.js"></script>
+  <script src="js/core/renderer.js"></script>
+  <script src="js/core/sprites.js"></script>
+  <script src="js/core/effects.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/core/scenes.js"></script>
+  <script src="js/core/devpanel.js"></script>
+
+  <script src="js/game/view3d.js"></script>
+  <script src="js/game/ballpath.js"></script>
+  <script src="js/game/delivery.js"></script>
+  <script src="js/game/contact.js"></script>
+  <script src="js/game/fielding.js"></script>
+  <script src="js/game/stadium.js"></script>
+  <script src="js/game/batcontrols.js"></script>
+  <script src="js/game/sixsmash_rules.js"></script>
+  <script src="js/game/wicketrush_rules.js"></script>
+  <script src="js/game/aibatter.js"></script>
+  <script src="js/game/bowlcontrols.js"></script>
+  <script src="js/game/pitchscene.js"></script>
+  <script src="js/game/match.js"></script>
+  <script src="js/game/running.js"></script>
+  <script src="js/game/matchhud.js"></script>
+  <script src="js/game/runcontrols.js"></script>
+
+  <script src="js/scenes/boot.js"></script>
+  <script src="js/scenes/title.js"></script>
+  <script src="js/scenes/sixsmash.js"></script>
+  <script src="js/scenes/wicketrush.js"></script>
+  <script src="js/scenes/matchbat.js"></script>
+  <script src="js/scenes/matchbowl.js"></script>
+  <script src="js/scenes/matchflow.js"></script>
+  <script src="js/scenes/result.js"></script>
+
+  <script src="js/main.js"></script>
+  <script>
+    // Offline support for the installed app. Only works from a real web
+    // address, so it is skipped when the game is opened as a file on a PC.
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((e) => console.warn('service worker not registered', e));
+      });
+    }
+  </script>
+</body>
+</html>

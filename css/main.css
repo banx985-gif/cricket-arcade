@@ -1,0 +1,83 @@
+/* Cricket Arcade — app shell styles (adapted from Scrapcore ZERO).
+   The canvas does all real rendering. CSS only handles the shell:
+   fullscreen layout, touch lockdown, portrait overlay, safe-area probe. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0d2a1a;
+  overscroll-behavior: none;
+  touch-action: none;                 /* no browser scroll/zoom gestures */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  position: fixed;                    /* stops iOS rubber-banding */
+  font-family: "Arial Black", "Helvetica Neue", Arial, sans-serif;
+}
+
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ---- Safe-area probe: JS reads its computed padding ---- */
+#safe-area-probe {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding-top:    env(safe-area-inset-top, 0px);
+  padding-right:  env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left:   env(safe-area-inset-left, 0px);
+}
+
+/* ---- Portrait blocker ---- */
+#rotate-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  background: #0d2a1a;
+  color: #ffd23f;
+}
+
+@media (orientation: portrait) {
+  #rotate-overlay { display: flex; }
+}
+
+.rotate-text {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-align: center;
+  padding: 0 24px;
+  text-shadow: 3px 3px 0 #000;
+}
+
+/* Simple phone shape that rotates 90° in a loop */
+.rotate-phone {
+  width: 44px;
+  height: 78px;
+  border: 5px solid #ffd23f;
+  border-radius: 10px;
+  box-shadow: 4px 4px 0 #000;
+  animation: rotate-hint 1.6s ease-in-out infinite;
+}
+
+@keyframes rotate-hint {
+  0%, 20%   { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(90deg); }
+}
