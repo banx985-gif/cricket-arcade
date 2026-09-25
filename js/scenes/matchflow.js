@@ -27,7 +27,8 @@ const TossScene = {
   enter(params) {
     Save.clearResume();                      // a new match replaces any unfinished one
     CareerMatch.on = false;
-    Match.start((params && params.format) || Dev.matchFormat || MATCH_DATA.defaultFormat);
+    // My XI (M10) has already set its match up (MyXIMatch.start): keep it.
+    if (!(params && params.keep)) { if (typeof MyXIMatch !== 'undefined') MyXIMatch.on = false; Match.start((params && params.format) || Dev.matchFormat || MATCH_DATA.defaultFormat); }
     Match.flipToss();
     Stadium.setConditions(Match.cond);
     this._t = 0;
@@ -184,6 +185,12 @@ const MatchResultScene = {
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();
     this.unlocked = [];
+    if (MyXIMatch.on) {
+      // My XI: the competition moves on (the My XI result screen), not the Quick Match record.
+      this.buttons.add('myxi.seeResult', cx - 280, 880, 560, 130, () => Scenes.go('myxiresult', MyXIMatch.finish(Save.data)), { size: 46 });
+      if (this.won) { Sound.play('fanfare'); Sound.play('crowdRoar'); } else Sound.play('crowdGroan');
+      return;
+    }
     if (CareerMatch.on) {
       // Career: the result is graded on the career screen, not the Quick Match record.
       this.buttons.add('career.seeGrade', cx - 280, 880, 560, 130, () => Scenes.go('careerresult', CareerMatch.finish()), { size: 50 });
@@ -257,7 +264,7 @@ const MatchResultScene = {
       R.text(T('unlock.newField', { f: T('field.' + u.id) }), cx + 40, 815, 38, '#ffd23f');
     }
     const rec = Save.best(Match.fmt.id);
-    if (rec && !CareerMatch.on && !(this.unlocked && this.unlocked.length)) R.text(T('match.record', { won: rec.won || 0, played: rec.played || 0 }), cx, 840, 30, '#d8e4f0', 'center', false);
+    if (rec && !CareerMatch.on && !MyXIMatch.on && !(this.unlocked && this.unlocked.length)) R.text(T('match.record', { won: rec.won || 0, played: rec.played || 0 }), cx, 840, 30, '#d8e4f0', 'center', false);
 
     this.buttons.draw();
     Effects.drawParticles(ctx);

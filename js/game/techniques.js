@@ -37,11 +37,38 @@ const Tech = {
     this.st.legendArmed = false;
     this._ball = {};
   },
-  end() { this.st = null; this.c = null; this.chips = []; this._ball = {}; },
-  snapshot() { return this.st ? JSON.parse(JSON.stringify(this.st)) : null; },
+  end() { this.st = null; this.c = null; this.chips = []; this._ball = {}; this.multi = null; },
+  snapshot() {
+    if (this.multi) { const o = {}; for (const [pid, x] of Object.entries(this.multi)) o[pid] = JSON.parse(JSON.stringify(x.st)); return { multi: o }; }
+    return this.st ? JSON.parse(JSON.stringify(this.st)) : null;
+  },
+  // My XI (M10): several players in one side have techniques (Legacy Players,
+  // rivals). owners: [{ pid, c }] (c: a career-shaped object). Each has its own
+  // state; mine(p) switches to p's, so every hook works for whoever is playing.
+  multi: null,
+  beginMany(owners, saved) {
+    this.multi = {};
+    this.chips = [];
+    for (const o of owners) {
+      this.begin(o.c, saved && saved.multi && saved.multi[o.pid]);
+      this.multi[o.pid] = { c: this.c, st: this.st, m: this.m };
+    }
+    this.st = null; this.c = null; this.m = null;
+  },
 
-  on() { return !!(this.st && typeof CareerMatch !== 'undefined' && CareerMatch.on); },
-  mine(p) { return this.on() && !!p && p.id === CareerMatch.pid; },
+  on() {
+    if (this.multi) return !!this.st;
+    return !!(this.st && typeof CareerMatch !== 'undefined' && CareerMatch.on);
+  },
+  mine(p) {
+    if (this.multi) {
+      const x = p && this.multi[p.id];
+      if (!x) { this.st = null; this.c = null; this.m = null; return false; }
+      this.st = x.st; this.c = x.c; this.m = x.m;
+      return true;
+    }
+    return this.on() && !!p && p.id === CareerMatch.pid;
+  },
   lo() { return SkillTree.loadout(this.c); },
   has(id) { const L = this.lo(); return L.active.includes(id) || L.passive.includes(id); },
   T(id) { return SKILL_TREE_DATA.techniques[id]; },

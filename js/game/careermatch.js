@@ -18,10 +18,12 @@ const CareerMatch = {
   ticker: [],          // recent simulated balls (for the fast-sim screen)
 
   teamName(side) {
+    if (typeof MyXIMatch !== 'undefined' && MyXIMatch.on) return MyXIMatch.teamName(side);
     if (this.on && this.career) return side === 'player' ? Career.team(this.career).name : this.fixture.opp.name;
     return T(MATCH_DATA.teams[side].nameKey);
   },
   teamShort(side) {
+    if (typeof MyXIMatch !== 'undefined' && MyXIMatch.on) return MyXIMatch.teamName(side).split(' ')[0].slice(0, 3).toUpperCase();
     if (this.on && this.career) {
       const n = side === 'player' ? Career.team(this.career).name : this.fixture.opp.name;
       return n.split(' ')[0].slice(0, 3).toUpperCase();

@@ -65,6 +65,7 @@ class ButtonList {
 
   draw() {
     for (const b of this.items) {
+      if (b.invisible) continue;                    // a tap area only (the screen draws it)
       const off = b.pressed ? 5 : 0;
       const dis = this.isDisabled(b);
       R.roundRect(b.x + 6, b.y + 8, b.w, b.h, 20, 'rgba(0,0,0,0.45)');

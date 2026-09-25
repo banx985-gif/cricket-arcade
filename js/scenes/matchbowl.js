@@ -46,6 +46,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     this.bowlP = Tech.bowlStats(this.bowler, this.inn);
     BowlControls.bands = this._bands();
     TechUI.layout('bowl', this.inn, () => this.state === 'aim');
+    if (MyXIMatch.on) TacticBar.layout('bowl'); else TacticBar.btns = [];    // My XI: between-over calls (M10)
   },
   _techBoost() { return Tech.releaseBoost(this); },
   _techAi() { return Tech.aiCtx(this); },
@@ -170,6 +171,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     if (this._pauseDown(id, x, y)) return;
     if (BowlerPicker.down(id, x, y)) return;
     if (!ThrowMeter.active && TechUI.down(id, x, y, () => { BowlControls.bands = this._bands(); })) return;
+    if (MyXIMatch.on && !BowlerPicker.open && !ThrowMeter.active && TacticBar.down(x, y)) return;
     if (ThrowMeter.active) {
       const b = ThrowMeter.btn;
       b.id = id; b.pressed = Math.hypot(x - b.x, y - b.y) <= b.r * 1.2;
@@ -311,6 +313,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     ThrowMeter.draw(ctx);
     MatchBatScene._drawFlashMarker.call(this, ctx);
     if (!BowlerPicker.open && !ThrowMeter.active) TechUI.draw(ctx);
+    if (MyXIMatch.on && !BowlerPicker.open && !ThrowMeter.active) TacticBar.draw(ctx);
     BowlerPicker.draw(ctx);
   },
 

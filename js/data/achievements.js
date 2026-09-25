@@ -18,7 +18,7 @@ const ACHIEVEMENT_DATA = {
   tiers: { bronze: 'medal_bronze', silver: 'medal_silver', gold: 'medal_gold', diamond: 'medal_diamond' },
   cats: ['batting', 'bowling', 'fielding', 'career', 'rivals', 'progress', 'myxi', 'challenges', 'secrets'],
   // Systems that exist now. An achievement whose 'requires' isn't here waits.
-  features: [],
+  features: ['myxi'],                      // (M10: My XI exists now)
   list: [
     // ---- Batting ----
     { id: 'first_blood',       cat: 'batting', tier: 'bronze',  cond: { on: 'match', stat: 'sixes', min: 1 }, reward: { coins: 100 } },

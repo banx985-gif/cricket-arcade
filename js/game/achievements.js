@@ -167,6 +167,7 @@ const Achievements = {
       coachesHired: Object.keys((save.coaches && save.coaches.hired) || {}).length,
       techsDiscovered: Object.keys((save.collection && save.collection.techniques) || {}).length,
       mythicOwned: EQUIPMENT_DATA.items.some((it) => it.rarity === 'mythic' && Gear.owns(save, it.id)) ? 1 : 0,
+      ...(typeof MyXI !== 'undefined' ? MyXI.facts(save) : {}),     // My XI (M10)
     };
   },
   // Progress toward one (for the Records screen's bars): { have, need } or null.

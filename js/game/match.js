@@ -248,6 +248,7 @@ const Match = {
       superOvers: this.superOvers,
       teams: this.teams, cond: this.cond, fatigue: this.fatigue,
       career: typeof CareerMatch !== 'undefined' ? CareerMatch.ctx() : null,
+      myxi: typeof MyXIMatch !== 'undefined' ? MyXIMatch.ctx() : null,
       innings: this.innings.map((i) => i.toJSON()),
       rng: RNG.snapshot(),
       summary: { battingSide: inn.battingSide, runs: inn.runs, wickets: inn.wickets, overs: inn.overs,
@@ -264,6 +265,7 @@ const Match = {
     const key = inn.index + ":" + inn.legal;
     if (this._lastCp === key) return;
     this._lastCp = key;
+    if (typeof MyXIMatch !== 'undefined' && MyXIMatch.on) MyXIMatch.onOver(this.current());   // My XI: the tactical calls for this over
     this.checkpoint("over");
   },
 

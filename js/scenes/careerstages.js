@@ -223,6 +223,15 @@ const CareerOffersScene = {
 };
 EventText.contract = (o) => T('offer.obj.' + o.id, { n: o.n });
 
+// A side's crest in a table (a picture, or a built club crest for My XI).
+const TourCrest = {
+  draw(id, x, y, w) {
+    const X = Tournament.extra[id];
+    if (X && X.crest && !X.crest.image) { Crest.draw(R.ctx, X.crest, x, y, w); return; }
+    Sprites.ui(Tournament.crest(id), x, y, w, w);
+  },
+};
+
 // =====================================================================================
 const CareerTableScene = {
   buttons: new ButtonList(),
@@ -240,8 +249,8 @@ const CareerTableScene = {
   render(ctx) {
     const c = this.career, tour = c.tour, cx = CONFIG.LOGICAL_W / 2;
     CareerUI.bg(ctx, 'bg_scout_room', 0.7);
-    const world = Tournament.fmt(tour) === 'world', F = Tournament.F(Tournament.fmt(tour));
-    R.text(T(world ? 'table.titleWorld' : 'table.title'), cx, 60, 50, '#ffffff');
+    const F = Tournament.F(Tournament.fmt(tour)), world = (F.advance || 1) === 2;   // (World Nations, My XI cups: quarter-finals)
+    R.text(this.career.titleText || T(Tournament.fmt(tour) === 'world' ? 'table.titleWorld' : 'table.title'), cx, 60, 50, '#ffffff');
     if (!tour) return this.buttons.draw();
     R.text(T(world ? 'table.subWorld' : 'table.sub'), cx, 112, 22, '#ffe28a', 'center', false);
     const adv = world ? 2 : 1, rowH = F.perGroup === 3 ? 96 : 78;
@@ -254,7 +263,7 @@ const CareerTableScene = {
       rows.forEach((r, i) => {
         const ry = y + 92 + i * rowH, me = r.id === tour.mine;
         if (i < adv) R.roundRect(x + 10, ry - 34, 580, 68, 16, 'rgba(255,210,63,0.16)');
-        Sprites.ui(Tournament.crest(r.id), x + 52, ry, 60, 60);
+        TourCrest.draw((r.id), x + 52, ry, 60, 60);
         CareerTreeScene._fit(Tournament.name(r.id), x + 92, ry, 200, 22, me ? '#9cff6a' : '#ffffff');
         [r.p, r.w, r.l, r.pts, (r.nrr >= 0 ? '+' : '') + r.nrr.toFixed(2)].forEach((v, j) => R.text(String(v), x + 330 + j * 56, ry, j === 3 ? 24 : 18, j === 3 ? '#ffd23f' : '#ffffff', 'center', false));
       });
@@ -280,7 +289,7 @@ const CareerTableScene = {
         else pr.forEach((id, j) => {
           if (!id) return;
           const yy = y + (world ? 18 + j * 32 : 42 + j * 66), won = m && m.winner === id, sz = world ? 28 : 52;
-          Sprites.ui(Tournament.crest(id), bx + 70, yy, sz, sz);
+          TourCrest.draw((id), bx + 70, yy, sz, sz);
           CareerTreeScene._fit(Tournament.name(id), bx + 100, yy, 280, world ? 18 : 22, id === tour.mine ? '#9cff6a' : won ? '#ffd23f' : '#ffffff');
           if (m) R.text(String(m.a === id ? m.ra : m.rb), bx + 470, yy, world ? 20 : 26, won ? '#ffd23f' : '#b8c6d6', 'right');
         });

@@ -42,6 +42,9 @@ const TitleScene = {
       { size: 28, color: '#9be7ff', icon: 'icon_collection' });
     this.topBtns.add('title.records', s.left + 24, s.top + 132, 330, 90, () => Scenes.go('records', { back: 'title' }), { size: 28, color: '#e9eef5', icon: 'meta_records' });
     this.topBtns.add('title.hof', s.left + 24, s.top + 232, 330, 80, () => Scenes.go('halloffame', { back: 'title' }), { size: 24, color: '#ffd23f' });
+    // My XI (M10): unlocked by the first retirement.
+    this.topBtns.add('title.myxi', s.right - 400, s.top + 132, 370, 110, () => Scenes.go(MyXI.club(Save.data) ? 'myxihome' : 'myxicreate'), { size: 36, color: '#9cff6a', icon: 'myxi_badge',
+      disabled: () => !MyXI.unlocked(Save.data), sub: () => (MyXI.unlocked(Save.data) ? (MyXI.club(Save.data) ? MyXI.club(Save.data).name : T('myxi.createClub')) : T('myxi.locked')) });
     this.resumeBtns.clear();
     this.resumeBtns.add('resume.resume', cx - 430, 640, 420, 120, () => this._resume(), { size: 38 });
     this.resumeBtns.add('resume.abandon', cx + 10, 640, 420, 120, () => this._abandon(), { size: 40, color: '#e9eef5' });
@@ -50,6 +53,11 @@ const TitleScene = {
   _resume() {
     const cp = this.resume.checkpoint;
     this.resume = BootScene.pendingResume = null;
+    if (cp.myxi) {
+      // A My XI match.
+      try { const [scene, params] = MyXIMatch.resumeFrom(cp); Scenes.go(scene, params); } catch (e) { Log.add('error', 'My XI resume failed: ' + e.message); Save.clearResume(); }
+      return;
+    }
     if (cp.career) {
       // A career match: reload the career, then pick up the match.
       CareerMatch.resumeFrom(cp).then(([scene, params]) => Scenes.go(scene, params)).catch((e) => {

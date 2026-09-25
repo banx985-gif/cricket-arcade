@@ -257,7 +257,7 @@ const CAREER_DATA = {
   },
   // The World Nations Championship (plan 8.6 Stage 7): the 12 origins' national sides.
   world: {
-    groups: 4, perGroup: 3, pointsWin: 2,
+    groups: 4, perGroup: 3, advance: 2, pointsWin: 2,
     simRuns: { base: 50, spread: 14, perRating: 0.9 },
     teams: [
       { id: 'australia', rating: 84, colours: ['#f5d020', '#1f8a4c'] }, { id: 'england', rating: 83, colours: ['#16325c', '#c8202f'] },

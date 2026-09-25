@@ -283,6 +283,36 @@ const Validate = {
       if (EVENT_DATA.rivals.length !== 12) p.push('there must be 12 rivals (plan 14.1)');
     }
 
+    // My XI (M10)
+    if (typeof MYXI_DATA !== 'undefined') {
+      const M = MYXI_DATA, item = (id, w) => { if (!EQUIPMENT_DATA.items.some((it) => it.id === id)) p.push(w + ' names unknown item "' + id + '"'); };
+      dupes('My XI chemistry', M.chemistry, 'id');
+      if (M.chemistry.length !== 8) p.push('My XI needs the 8 chemistry types (plan 15.11)');
+      for (const c of M.chemistry) { cart(c.icon, 'chemistry ' + c.id); str('myxi.chem.' + c.id, 'chemistry'); for (const k of Object.keys(c.stats)) if (!statKeys.has(k)) p.push('chemistry "' + c.id + '" raises unknown stat'); }
+      for (const kind of ['bat', 'bowl']) {
+        if (M.tactics[kind].length !== 4) p.push('My XI needs 4 ' + kind + ' tactical calls (plan 15.12)');
+        for (const t of M.tactics[kind]) { cart(t.icon, 'tactic ' + t.id); str('myxi.tac.' + t.id, 'tactic'); if (t.field && !FIELD_DATA.presets.some((f) => f.id === t.field)) p.push('tactic "' + t.id + '" uses unknown field'); }
+      }
+      dupes('My XI competitions', M.competitions, 'id');
+      if (M.competitions.length !== 6) p.push('My XI needs 6 competitions (plan 15.9)');
+      for (const C of M.competitions) {
+        cart(C.trophy, 'competition ' + C.id); str('myxi.comp.' + C.id, 'competition');
+        for (const f of [C.fmt, C.finalFmt].filter(Boolean)) if (!MATCH_DATA.formats[f]) p.push('competition "' + C.id + '" uses unknown format');
+        const rw = C.reward;
+        if (rw.item) item(rw.item, 'competition ' + C.id);
+        if (rw.recruit && !M.rewardRecruits[rw.recruit]) p.push('competition "' + C.id + '" rewards unknown recruit');
+        if (rw.stadium && !M.stadiums.some((s) => s.id === rw.stadium)) p.push('competition "' + C.id + '" rewards unknown stadium');
+        if (rw.coach && !COACH_DATA.coaches.some((k) => k.id === rw.coach)) p.push('competition "' + C.id + '" rewards unknown coach');
+      }
+      for (const s of M.stadiums) { cart(s.art, 'stadium ' + s.id); str('stadium.' + s.id, 'stadium'); }
+      for (const id of Object.keys(M.rivalRecruits)) if (!EVENT_DATA.rivals.some((r) => r.id === id)) p.push('My XI rival recruit "' + id + '" is not a rival');
+      if (Object.keys(M.rivalRecruits).length !== EVENT_DATA.rivals.length) p.push('every rival needs a My XI recruit profile');
+      for (const [id, R] of Object.entries(M.rivalRecruits)) { if (!SKILL_TREE_DATA.techniques[R.tech]) p.push('rival recruit "' + id + '" has unknown technique'); if (R.family && !BOWLING_DATA.families[R.family]) p.push('rival recruit "' + id + '" has unknown family'); }
+      for (const L of M.legends) { cart(L.crest, 'legends squad ' + L.id); str('elite.' + L.id, 'legends squad'); }
+      for (const [k, v] of Object.entries(M.captainPerkFor)) { if (!M.captainPerks[v]) p.push('captain perk "' + v + '" missing'); str('myxi.cap.' + v, 'captain perk'); }
+      for (const id of M.seriesRivals) if (!M.rivalRecruits[id]) p.push('series rival "' + id + '" unknown');
+    }
+
     // Manifest: every entry needs a file path, every id once (object keys are unique by nature)
     for (const [gname, g] of Object.entries(ASSET_MANIFEST.groups)) {
       for (const [id, e] of Object.entries(g)) if (!e || !e.src) p.push(`asset "${id}" in group ${gname} has no file path`);

@@ -23,12 +23,15 @@ const Tournament = {
     3: [[[0, 1]], [[0, 2]], [[1, 2]]],
   },
   fmt(tour) { return (tour && tour.fmt) || 'franchise'; },
-  F(fmt) { return fmt === 'world' ? CAREER_DATA.world : CAREER_DATA.franchise; },
+  // Extra formats and sides (My XI cups register theirs: see MyXI.registerRun).
+  formats: {},
+  extra: {},
+  F(fmt) { return fmt === 'world' ? CAREER_DATA.world : this.formats[fmt] || CAREER_DATA.franchise; },
   // A side in either competition (franchise ids and origin ids never clash).
-  team(id) { return CAREER_DATA.franchise.teams.find((t) => t.id === id) || CAREER_DATA.world.teams.find((t) => t.id === id) || null; },
+  team(id) { return this.extra[id] || CAREER_DATA.franchise.teams.find((t) => t.id === id) || CAREER_DATA.world.teams.find((t) => t.id === id) || null; },
   isNation(id) { return !!CAREER_DATA.world.teams.find((t) => t.id === id); },
-  name(id) { return this.isNation(id) ? ORIGIN_PACKS.origins[id].pathwayLabels[5] : T('franchise.' + id); },
-  crest(id) { return this.isNation(id) ? 'badge_' + id : this.team(id).crest; },
+  name(id) { if (this.extra[id]) return this.extra[id].name; return this.isNation(id) ? ORIGIN_PACKS.origins[id].pathwayLabels[5] : T('franchise.' + id); },
+  crest(id) { const x = this.extra[id]; if (x) return x.crest && x.crest.image ? x.crest.image : null; return this.isNation(id) ? 'badge_' + id : this.team(id).crest; },
   opp(id, final) {
     const t = this.team(id);
     return { name: this.name(id), franchise: id, colours: t.colours.slice(), crest: { image: this.crest(id), colours: t.colours.slice() }, rating: t.rating, final: !!final };
@@ -95,7 +98,7 @@ const Tournament = {
   //   franchise: A1 v B1, C1 v D1 (semis).   world: A1 v B2, B1 v A2, C1 v D2, D1 v C2 (quarters).
   firstKnockout(tour) {
     const top = (gi, k) => this.standings(tour, gi)[k].id;
-    if (this.fmt(tour) === 'world') return { round: 'quarter', pairs: [[top(0, 0), top(1, 1)], [top(1, 0), top(0, 1)], [top(2, 0), top(3, 1)], [top(3, 0), top(2, 1)]] };
+    if ((this.F(this.fmt(tour)).advance || 1) === 2) return { round: 'quarter', pairs: [[top(0, 0), top(1, 1)], [top(1, 0), top(0, 1)], [top(2, 0), top(3, 1)], [top(3, 0), top(2, 1)]] };
     return { round: 'semi', pairs: [[top(0, 0), top(1, 0)], [top(2, 0), top(3, 0)]] };
   },
   nextRound(round) { return { quarter: 'semi', semi: 'final' }[round] || null; },

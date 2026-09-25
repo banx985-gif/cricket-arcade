@@ -99,6 +99,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     this.windowScale = this._baseWindow * tw.k;
     this.techExtra = tw.extra;
     TechUI.layout('bat', this.inn, () => this.state === 'ready' || this.state === 'runup');
+    if (MyXIMatch.on) TacticBar.layout('bat'); else TacticBar.btns = [];     // My XI: between-over calls (M10)
   },
   _techMods(m, sh, aim) { return Tech.contactMods(m, sh, aim, this); },
   _techContact(c, sh) { Tech.afterContact(c, sh, this); },
@@ -183,6 +184,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (this._pauseDown(id, x, y)) return;
     if (RunControls.down(id, x, y)) return;
     if (TechUI.down(id, x, y, () => this._techBall())) return;
+    if (MyXIMatch.on && TacticBar.down(x, y)) return;
     BatControls.down(id, x, y);
   },
   pointerUp(id) {
@@ -387,6 +389,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     }
     this._drawFlashMarker(ctx);
     TechUI.draw(ctx);
+    if (MyXIMatch.on) TacticBar.draw(ctx);
   },
 
   _drawTimingRing(ctx) {

@@ -93,6 +93,13 @@ const Main = {
     Scenes.register('careerretire', CareerRetireScene);
     Scenes.register('halloffame', HallOfFameScene);
     Scenes.register('records', RecordsScene);
+    Scenes.register('myxicreate', MyXICreateScene);
+    Scenes.register('myxihome', MyXIHomeScene);
+    Scenes.register('myxisquad', MyXISquadScene);
+    Scenes.register('myxilineup', MyXILineupScene);
+    Scenes.register('myxitable', MyXITableScene);
+    Scenes.register('myxiresult', MyXIResultScene);
+    Scenes.register('myxiending', MyXIEndingScene);
     Scenes.go('boot');
 
     this._lastT = performance.now();

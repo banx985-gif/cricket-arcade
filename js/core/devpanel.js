@@ -72,9 +72,9 @@ const Dev = {
     b.clear();
     const cx = CONFIG.LOGICAL_W / 2;
     // tabs
-    const tabs = ['main', 'jump', 'match', 'save', 'career'];
+    const tabs = ['main', 'jump', 'match', 'save', 'career', 'myxi'];
     tabs.forEach((t, i) => {
-      b.add(() => T('dev.tab.' + t), cx - 775 + i * 310, 150, 300, 88, () => { this.tab = t; this._layout(); },
+      b.add(() => T('dev.tab.' + t), cx - 790 + i * 265, 150, 255, 88, () => { this.tab = t; this._layout(); },
         { size: 30, color: this.tab === t ? '#ffd23f' : '#6b7a8c', textColor: this.tab === t ? '#000' : '#fff' });
     });
     const w = 600, h = 88, gap = 6;                 // (rows 94 apart: the CAREER tab has 8 rows)
@@ -156,6 +156,28 @@ const Dev = {
       add(0, 4, () => T('dev.career.sponsor'), withCareer((c) => {
         c.pendingEvent = { id: 'sponsor_offer', offer: Career.roll(c, (r) => Sponsors.pick(c, r)) }; c.sponsor = null; this.hide(); home();
       }));
+    } else if (this.tab === 'myxi') {
+      // M10: a test Legacy Player (unlocks My XI), a quick club, each competition, win a match, the ending.
+      const S = () => Save.data, done = () => { Save.write(); this.say(T('dev.done')); if (Scenes.currentName === 'myxihome') MyXIHomeScene._layout(); };
+      add(0, 0, () => T('dev.myxi.legacy'), () => { this._makeLegacy(); done(); });
+      add(0, 1, () => T('dev.myxi.club'), () => {
+        if (!MyXI.unlocked(S())) this._makeLegacy();
+        if (!MyXI.club(S())) MyXI.create(S(), { name: 'Dev XI', colours: ['#c8202f', '#16325c'], crest: { shield: 'shield_classic', emblem: 'emblem_lion', colours: ['#c8202f', '#16325c'] }, stadium: 'local_oval' }, 4242);
+        done(); this.hide(); Scenes.go('myxihome');
+      });
+      MYXI_DATA.competitions.forEach((C, i) => add(i < 3 ? 0 : 1, 2 + (i % 3), () => T('dev.myxi.jump', { c: T('myxi.comp.' + C.id) }), () => {
+        const club = MyXI.club(S());
+        if (!club) { this.say(T('dev.myxi.noClub')); return; }
+        for (const P of MYXI_DATA.competitions.slice(0, i)) { club.comps[P.id] = club.comps[P.id] || { cleared: 0, played: 0, won: 0 }; club.comps[P.id].cleared = Math.max(1, club.comps[P.id].cleared); }
+        club.run = null; MyXI.startComp(S(), C.id); done(); this.hide(); Scenes.go('myxihome');
+      }));
+      add(1, 0, () => T('dev.myxi.win'), () => {
+        const club = MyXI.club(S()), fx = club && MyXI.next(S());
+        if (!fx) { this.say(T('dev.myxi.noMatch')); return; }
+        const r = MyXI.afterMatch(S(), { won: true, runs: 80, balls: 30, oppRuns: 50, oppBalls: 30 }); Achievements.checkAccount(S(), null);
+        done(); this.hide(); Scenes.go(r.ending ? 'myxiending' : 'myxihome');
+      });
+      add(1, 1, () => T('dev.myxi.ending'), () => { this.hide(); Scenes.go('myxiending'); });
     } else if (this.tab === 'save') {
       add(0, 3, () => T('dev.save.print'), () => { console.log('[save]', JSON.stringify(Save.data, null, 2)); this.say(T('dev.save.printed')); });
       add(1, 3, () => T('dev.save.corrupt'), () => {
@@ -182,6 +204,24 @@ const Dev = {
     for (const k of Object.keys(c.player.stats)) c.player.stats[k] = Math.max(c.player.stats[k], floor);
     Coaches.unlockForStage(Save.data, S.n);
     Save.write();
+  },
+
+  // A retired test player (a random career, fast-forwarded): unlocks My XI.
+  _makeLegacy() {
+    const seed = RNG.freshSeed(), r = makeRng(seed), roles = ['batter', 'bowler', 'allrounder'], role = roles[r.int(0, 2)];
+    const arch = CAREER_DATA.roles[role].archetypes[r.int(0, 2)].id, O = Object.keys(ORIGIN_PACKS.origins), origin = O[r.int(0, O.length - 1)];
+    const pres = r.chance(0.5) ? 'masculine' : 'feminine', P = ORIGIN_PACKS.origins[origin];
+    const c = Career.create({ name: r.pick(P.givenNames[pres]) + ' ' + r.pick(P.surnames), presentation: pres, look: CAREER_DATA.looks[pres][0], skin: 'tan', hairColour: 'brown',
+      batHand: 'right', bowlHand: 'right', role, archetype: arch, batRole: 'top', family: 'fast', origin }, seed);
+    Career.signClub(c, Career.clubOffers(c)[0]);
+    for (const k of Object.keys(c.player.stats)) c.player.stats[k] = Math.max(c.player.stats[k], 68 + r.int(0, 10));
+    c.history = [];
+    for (let i = 0; i < 30; i++) c.history.push({ stage: 'international', kind: 'league', grade: r.pick(['S', 'A', 'B']), won: r.chance(0.6),
+      bat: { batted: true, runs: r.int(5, 50), balls: 20, out: r.chance(0.6), fours: r.int(0, 4), sixes: r.int(0, 3) }, bowl: { bowled: role !== 'batter', wkts: role === 'batter' ? 0 : r.int(0, 3) }, facts: {} });
+    c.stage = 'elite'; c.phase = 'complete'; c.trophies = ['local_final', 'world_champion'];
+    const res = Legacy.retire(c, Save.data);
+    if (MyXI.club(Save.data)) MyXI.syncLegacy(Save.data);
+    return res.snap;
   },
 
   _matchDo(fn) {

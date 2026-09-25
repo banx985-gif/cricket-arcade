@@ -53,13 +53,16 @@ const PitchScene = {
     if (typeof CareerMatch !== 'undefined' && CareerMatch.on) {
       // Career: no restart. Leave to Career Home; Play Next picks up from the start of the over.
       b.add('pause.careerHome', cx - 260, 460, 520, 110, () => { CareerMatch.leave(); Scenes.go('careerhome', { slot: CareerMatch.slot }); }, { size: 44, color: '#e9eef5' });
+    } else if (typeof MyXIMatch !== 'undefined' && MyXIMatch.on) {
+      // My XI: leave to My XI Home (the fixture is still to play).
+      b.add('pause.myxiHome', cx - 260, 460, 520, 110, () => { MyXIMatch.on = false; Tech.end(); Scenes.go('myxihome'); }, { size: 44, color: '#e9eef5' });
     } else {
       b.add('pause.restart', cx - 260, 460, 520, 110, () => Scenes.go(sceneName), { size: 48, color: '#e9eef5' });
     }
     b.add(() => T(Sound.muted ? 'common.soundOff' : 'common.soundOn'), cx - 260, 590, 520, 110, () => {
       Sound.setMuted(!Sound.muted); Save.setMuted(Sound.muted);
     }, { size: 44, color: '#e9eef5' });
-    b.add('pause.quit', cx - 260, 720, 520, 110, () => { if (typeof CareerMatch !== 'undefined') CareerMatch.leave(); Scenes.go('title'); }, { size: 44, color: '#ffb3b3' });
+    b.add('pause.quit', cx - 260, 720, 520, 110, () => { if (typeof CareerMatch !== 'undefined') CareerMatch.leave(); if (typeof MyXIMatch !== 'undefined') MyXIMatch.on = false; Scenes.go('title'); }, { size: 44, color: '#ffb3b3' });
   },
 
   onAppHidden() { this.setPaused(true); },
