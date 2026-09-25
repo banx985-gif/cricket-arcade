@@ -33,6 +33,7 @@ const Unlocks = {
 
   fieldPreset(id, save) {
     const p = FIELD_DATA.presets.find((x) => x.id === id);
+    if (typeof MissionMatch !== 'undefined' && MissionMatch.on) return !!p;     // missions: every field setting
     return !!p && this.has('field', id, p.unlock, save);
   },
 

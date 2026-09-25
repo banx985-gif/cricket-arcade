@@ -100,6 +100,9 @@ const Main = {
     Scenes.register('myxitable', MyXITableScene);
     Scenes.register('myxiresult', MyXIResultScene);
     Scenes.register('myxiending', MyXIEndingScene);
+    Scenes.register('challenges', ChallengeHubScene);
+    Scenes.register('missions', MissionHubScene);
+    Scenes.register('missionresult', MissionResultScene);
     Scenes.go('boot');
 
     this._lastT = performance.now();

@@ -108,6 +108,7 @@ const Tech = {
     if (!this.st || this.st.armed || !(this.st.charges[id] > 0)) return false;
     this.st.charges[id]--;
     this.st.armed = id;
+    if (typeof MissionMatch !== 'undefined') MissionMatch.noteTech();     // (mission star objectives)
     this.note(id);
     Sound.play('combo');
     Effects.flash(0.25, '#9be7ff');

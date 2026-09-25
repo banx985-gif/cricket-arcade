@@ -137,6 +137,25 @@ const ASSET_MANIFEST = {
       result_banner_you_win: { src: 'assets/icons/results/banner_you_win.png' },
       result_toss_coin_heads: { src: 'assets/icons/results/toss_coin_heads.png' },
       result_toss_coin_tails: { src: 'assets/icons/results/toss_coin_tails.png' },
+
+      // Studio logo (M11): small on the title screen, at the top of the credits.
+      logo_banx_gamex: { src: 'assets/branding/banx_gamex_logo.png' },
+      icon_missions: { src: 'assets/icons/modes/missions_icon.png' },
+    },
+
+    // Six Smash / Wicket Rush hub and the Missions (M11). Loaded by those screens.
+    challenges: {
+      icon_fever: { src: 'assets/icons/challenge/fever.png' },
+      icon_combo: { src: 'assets/icons/challenge/combo_multiplier.png' },
+      chal_medal_bronze: { src: 'assets/badges/medals/bronze_medal.png' },
+      chal_medal_silver: { src: 'assets/badges/medals/silver_medal.png' },
+      chal_medal_gold: { src: 'assets/badges/medals/gold_medal.png' },
+      chal_medal_diamond: { src: 'assets/badges/medals/diamond_medal.png' },
+      chal_diff_rookie: { src: 'assets/icons/conditions/difficulty_rookie.png' },
+      chal_diff_pro: { src: 'assets/icons/conditions/difficulty_pro.png' },
+      chal_diff_legend: { src: 'assets/icons/conditions/difficulty_legend.png' },
+      bg_mission_hub: { src: 'assets/backgrounds/scout_room_bg.png' },
+      mis_coin: { src: 'assets/economy/coin.png' },
     },
 
     // Career Mode (M05). Loaded when you first open Career (it's large), not at start-up.

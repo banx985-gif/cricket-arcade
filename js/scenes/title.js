@@ -24,26 +24,29 @@ const TitleScene = {
       card(0, { mode: 'careerselect', title: 'title.modeCareer', sub: 'title.careerSub', career: true,
         icon: 'stage_local', heroes: ['hero_allrounder'], color: '#9b5cff',
         strip: ['grade_s', 'career_form_hot', 'train_timing_cage', 'badge_india'] }),
-      card(1, { mode: 'sixsmash', saveId: SIX_SMASH_DATA.classic.id, title: 'title.mode', sub: 'title.sixSub',
+      card(1, { mode: 'challenges', params: { game: 'six' }, game: 'six', title: 'title.mode', sub: 'title.sixSub',
         icon: 'icon_six_smash', heroes: ['batter'], color: '#ff5a1f',
         strip: ['kit_bat', 'kit_helmet', 'kit_gloves', 'kit_pads'] }),
       card(2, { mode: 'toss', saveId: MATCH_DATA.defaultFormat, title: 'title.modeMatch', sub: 'title.matchSub',
         icon: 'icon_quick_match', heroes: ['batter', 'bowler'], color: '#ffb400', match: true,
         strip: ['icon_run', 'marker_six', 'marker_four', 'marker_wicket'] }),
-      card(3, { mode: 'wicketrush', saveId: WICKET_RUSH_DATA.classic.id, title: 'title.modeWicket', sub: 'title.wicketSub',
+      card(3, { mode: 'challenges', params: { game: 'rush' }, game: 'rush', title: 'title.modeWicket', sub: 'title.wicketSub',
         icon: 'icon_wicket_rush', heroes: ['bowler'], color: '#1f8a4c',
         strip: BOWLING_DATA.deliveries.map(d => d.icon) }),
     ];
     const s = Display.safe;
     this.topBtns.clear();
-    this.topBtns.add('settings.title', s.right - 400, s.top + 24, 370, 96, () => Scenes.go('settings'),
+    this.topBtns.add('settings.title', s.right - 400, s.top + 24, 370, 88, () => Scenes.go('settings'),
       { size: 34, color: '#e9eef5' });
     this.topBtns.add('title.collection', s.left + 24, s.top + 24, 330, 96, () => Scenes.go('collection', { back: 'title' }),
       { size: 28, color: '#9be7ff', icon: 'icon_collection' });
     this.topBtns.add('title.records', s.left + 24, s.top + 132, 330, 90, () => Scenes.go('records', { back: 'title' }), { size: 28, color: '#e9eef5', icon: 'meta_records' });
     this.topBtns.add('title.hof', s.left + 24, s.top + 232, 330, 80, () => Scenes.go('halloffame', { back: 'title' }), { size: 24, color: '#ffd23f' });
     // My XI (M10): unlocked by the first retirement.
-    this.topBtns.add('title.myxi', s.right - 400, s.top + 132, 370, 110, () => Scenes.go(MyXI.club(Save.data) ? 'myxihome' : 'myxicreate'), { size: 36, color: '#9cff6a', icon: 'myxi_badge',
+    // Missions (M11): 48 handcrafted scenarios.
+    this.topBtns.add('title.missions', s.right - 400, s.top + 228, 370, 88, () => Scenes.go('missions'), { size: 30, color: '#ffb13b', icon: 'icon_missions',
+      sub: () => T('title.missionStars', { n: Missions.totalStars(Save.data), t: MISSION_DATA.list.length * 3 }) });
+    this.topBtns.add('title.myxi', s.right - 400, s.top + 122, 370, 96, () => Scenes.go(MyXI.club(Save.data) ? 'myxihome' : 'myxicreate'), { size: 36, color: '#9cff6a', icon: 'myxi_badge',
       disabled: () => !MyXI.unlocked(Save.data), sub: () => (MyXI.unlocked(Save.data) ? (MyXI.club(Save.data) ? MyXI.club(Save.data).name : T('myxi.createClub')) : T('myxi.locked')) });
     this.resumeBtns.clear();
     this.resumeBtns.add('resume.resume', cx - 430, 640, 420, 120, () => this._resume(), { size: 38 });
@@ -114,7 +117,7 @@ const TitleScene = {
       if (c.id !== id) continue;
       const go = c.pressed;
       c.id = null; c.pressed = false;
-      if (go) { Sound.play('uiTap'); Scenes.go(c.mode); }
+      if (go) { Sound.play('uiTap'); Scenes.go(c.mode, c.params); }
     }
   },
   keyDown(code) {
@@ -124,9 +127,10 @@ const TitleScene = {
       return;
     }
     if (code === 'Digit1' || code === 'Enter') { Sound.unlock(); Scenes.go('careerselect'); }
-    if (code === 'Digit2') { Sound.unlock(); Scenes.go('sixsmash'); }
+    if (code === 'Digit2') { Sound.unlock(); Scenes.go('challenges', { game: 'six' }); }
     if (code === 'Digit3') { Sound.unlock(); Scenes.go('toss'); }
-    if (code === 'Digit4') { Sound.unlock(); Scenes.go('wicketrush'); }
+    if (code === 'Digit4') { Sound.unlock(); Scenes.go('challenges', { game: 'rush' }); }
+    if (code === 'KeyM') { Sound.unlock(); Scenes.go('missions'); }
     if (code === 'KeyO') Scenes.go('settings');
     if (code === 'KeyC') Scenes.go('collection', { back: 'title' });
   },
@@ -153,7 +157,9 @@ const TitleScene = {
     for (const c of this.cards) this._drawCard(ctx, c);
 
     this.topBtns.draw();
-    Sprites.ui('icon_settings', Display.safe.right - 356, Display.safe.top + 72, 60, 60);
+    Sprites.ui('icon_settings', Display.safe.right - 356, Display.safe.top + 68, 60, 60);
+    // The studio logo, small in the bottom-left corner (the art is about 180 x 220: never above ~2x).
+    Sprites.ui('logo_banx_gamex', Display.safe.left + 74, Display.safe.bottom - 92, 110, 132, { alpha: 0.95 });
     R.text(T('title.pcHint2'), cx, 1010, 24, '#b8c6d6', 'center', false);
     if (this.resume) this._drawResume(ctx);
   },
@@ -215,6 +221,11 @@ const TitleScene = {
       const n = Save.data ? Save.data.careerSlots.filter(Boolean).length : 0;
       line = n ? T('title.careersActive', { n }) : T('title.noCareer');
     } else if (c.match) line = best ? T('title.matchRecord', { won: best.won || 0, played: best.played || 0 }) : T('title.noMatches');
+    else if (c.game && Save.data) {
+      // Six Smash / Wicket Rush: medals across the 5 rulesets.
+      const n = Challenge.rulesets(c.game).filter((r) => (Challenge.record(Save.data, r.id) || {}).medal).length;
+      line = n ? T('title.medals', { n, t: Challenge.rulesets(c.game).length }) : T('title.fiveRulesets');
+    }
     else line = best ? T('title.best', { score: formatNumber(best.score) }) : T('title.noBest');
     R.text(line, x + w / 2, y + 566, 30, '#ffd23f');
   },

@@ -41,7 +41,9 @@ const Save = {
       hallOfFame: [],
       records: {},
       achievements: {},
-      missionStars: {},
+      missionStars: {},         // mission id -> { cleared, stars [3], … } (M11)
+      missionMeta: { milestones: {} },
+      challengeMeta: { milestones: {}, goldenSixes: 0, feverBest: 0 },   // Six Smash / Wicket Rush (M11)
       careerSlots: [null, null, null],   // summaries only; the careers live in career.1..3
     };
   },

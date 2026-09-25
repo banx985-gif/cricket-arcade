@@ -72,10 +72,10 @@ const Dev = {
     b.clear();
     const cx = CONFIG.LOGICAL_W / 2;
     // tabs
-    const tabs = ['main', 'jump', 'match', 'save', 'career', 'myxi'];
+    const tabs = ['main', 'jump', 'match', 'save', 'career', 'myxi', 'chal', 'mission'];
     tabs.forEach((t, i) => {
-      b.add(() => T('dev.tab.' + t), cx - 790 + i * 265, 150, 255, 88, () => { this.tab = t; this._layout(); },
-        { size: 30, color: this.tab === t ? '#ffd23f' : '#6b7a8c', textColor: this.tab === t ? '#000' : '#fff' });
+      b.add(() => T('dev.tab.' + t), cx - 792 + i * 198, 150, 190, 88, () => { this.tab = t; this._layout(); },
+        { size: 26, color: this.tab === t ? '#ffd23f' : '#6b7a8c', textColor: this.tab === t ? '#000' : '#fff' });
     });
     const w = 600, h = 88, gap = 6;                 // (rows 94 apart: the CAREER tab has 8 rows)
     const L = cx - w - gap / 2, Rr = cx + gap / 2;
@@ -178,6 +178,39 @@ const Dev = {
         done(); this.hide(); Scenes.go(r.ending ? 'myxiending' : 'myxihome');
       });
       add(1, 1, () => T('dev.myxi.ending'), () => { this.hide(); Scenes.go('myxiending'); });
+    } else if (this.tab === 'chal') {
+      // M11: straight into any Six Smash / Wicket Rush ruleset (your last player, Pro).
+      const go = (game, rs) => () => {
+        const last = Challenge.last[game] || {};
+        this.hide();
+        Scenes.go(game === 'six' ? 'sixsmash' : 'wicketrush', { rs, diff: last.diff || 'pro', pick: last.pick || (game === 'six' ? Challenge.athlete('six') : Challenge.athlete('rush', 'fast')) });
+      };
+      Challenge.rulesets('six').forEach((r, i) => add(0, i, () => T('dev.chal.go', { r: T('chal.rs.' + r.id) }), go('six', r.id)));
+      Challenge.rulesets('rush').forEach((r, i) => add(1, i, () => T('dev.chal.go', { r: T('chal.rs.' + r.id) }), go('rush', r.id)));
+      add(0, 5, () => T('dev.chal.fever'), () => {
+        const r = Scenes.currentName === 'sixsmash' && SixSmashScene.rules;
+        if (!r || !r.rs.fever) { this.say(T('dev.chal.sixOnly')); return; }
+        r.fever.meter = CHALLENGE_DATA.six.fever.meter - 0.5; this.say(T('dev.done'));
+      });
+      add(1, 5, () => T('dev.chal.reset'), () => { Save.data.challenges = {}; Save.data.challengeMeta = null; Save.write(); this.say(T('dev.done')); }, { color: '#ffb3b3' });
+    } else if (this.tab === 'mission') {
+      // M11: open every mission, jump to one, win the one you're in (a scripted run).
+      const S = () => Save.data;
+      add(0, 0, () => T('dev.mis.unlock', { state: this._state(S().unlocks && S().unlocks.allMissions) }), () => {
+        S().unlocks = S().unlocks || {}; S().unlocks.allMissions = !S().unlocks.allMissions; Save.write(); if (Scenes.currentName === 'missions') MissionHubScene._layout();
+      });
+      add(0, 1, () => T('dev.mis.jump'), () => this._askMission());
+      add(0, 2, () => T('dev.mis.win'), () => {
+        if (!MissionMatch.on) { this.say(T('dev.mis.notIn')); return; }
+        this.hide(); Scenes.go('missionresult', MissionMatch.scriptWin());
+      });
+      add(0, 3, () => T('dev.mis.lose'), () => {
+        if (!MissionMatch.on) { this.say(T('dev.mis.notIn')); return; }
+        const inn = Match.current(); inn.ended = true; inn.endReason = 'mission';
+        this.hide(); Scenes.go('missionresult', MissionMatch.finish(S()));
+      });
+      add(0, 4, () => T('dev.mis.reset'), () => { S().missionStars = {}; S().missionMeta = null; Save.write(); this.say(T('dev.done')); }, { color: '#ffb3b3' });
+      MISSION_DATA.categories.forEach((c, i) => add(1, i, () => T('dev.mis.cat', { c: T('mis.cat.' + c.id) }), () => { this.hide(); Scenes.go('missions', { cat: c.id }); }));
     } else if (this.tab === 'save') {
       add(0, 3, () => T('dev.save.print'), () => { console.log('[save]', JSON.stringify(Save.data, null, 2)); this.say(T('dev.save.printed')); });
       add(1, 3, () => T('dev.save.corrupt'), () => {
@@ -276,6 +309,17 @@ const Dev = {
         T('dev.save.resume', { state: rs ? rs.checkpoint.label : T('dev.save.no') }),
       ]);
     });
+  },
+
+  // A mission by number (1–48) or id (e.g. bat08): straight to its briefing.
+  _askMission() {
+    let v = null;
+    try { v = window.prompt(T('dev.mis.prompt'), 'bat08'); } catch (e) { v = null; }
+    if (v === null) return;
+    const n = parseInt(v, 10), m = n >= 1 && n <= MISSION_DATA.list.length ? MISSION_DATA.list[n - 1] : Missions.def(String(v).trim());
+    if (!m) { this.say(T('dev.mis.unknown')); return; }
+    Save.data.unlocks = Save.data.unlocks || {}; Save.data.unlocks.allMissions = true;
+    this.hide(); Scenes.go('missions', { brief: m.id });
   },
 
   _askSeed() {

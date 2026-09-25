@@ -241,6 +241,7 @@ const Match = {
   checkpoint(phase, next) {
     const inn = this.current();
     if (!inn || this.over) return null;
+    if (typeof MissionMatch !== 'undefined' && MissionMatch.on) return null;   // missions are short: no resume
     const cp = {
       label: phase === 'break' ? 'break before ' + next : 'innings ' + (inn.index + 1) + ' at ' + inn.overs + ' overs',
       phase, next: next || null,

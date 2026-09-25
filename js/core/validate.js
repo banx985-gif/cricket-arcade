@@ -313,6 +313,70 @@ const Validate = {
       for (const id of M.seriesRivals) if (!M.rivalRecruits[id]) p.push('series rival "' + id + '" unknown');
     }
 
+    // ---- Six Smash / Wicket Rush rulesets and Missions (M11) ----
+    if (typeof CHALLENGE_DATA !== 'undefined') {
+      const cstr = (k, what) => { if (STRINGS.en[k] === undefined) p.push(what + ' text "' + k + '" missing'); };
+      for (const g of ['six', 'rush']) {
+        const list = CHALLENGE_DATA[g].rulesets;
+        dupes(g + ' rulesets', list, 'id');
+        if (list.length !== 5) p.push(g + ' needs 5 rulesets');
+        for (const r of list) {
+          if (!allArt[r.icon]) p.push('ruleset "' + r.id + '" icon not in the manifest');
+          if (r.medals.length !== 4 || r.medals.some((v, i) => i && v <= r.medals[i - 1])) p.push('ruleset "' + r.id + '" medals must be 4 rising scores');
+          for (const k of ['', '.sub', '.rules']) cstr('chal.rs.' + r.id + k, 'ruleset');
+          if (r.boss && !EVENT_DATA.rivals.some((x) => x.id === r.boss.rival)) p.push('ruleset "' + r.id + '" boss is not a rival');
+          if (r.lives && !r.loseLife) p.push('ruleset "' + r.id + '" has lives but nothing loses one');
+        }
+      }
+      for (const [d, D] of Object.entries(CHALLENGE_DATA.difficulty)) { if (!allArt[D.icon]) p.push('difficulty "' + d + '" icon missing'); cstr('chal.diff.' + d, 'difficulty'); }
+      for (const m of CHALLENGE_DATA.medals) if (!allArt[CHALLENGE_DATA.medalIcon[m]]) p.push('medal "' + m + '" art missing');
+    }
+    if (typeof MISSION_DATA !== 'undefined') {
+      const M = MISSION_DATA, ids = dupes('missions', M.list, 'id');
+      const counts = { batting: 12, bowling: 12, pressure: 8, rival: 8, expert: 8 };
+      if (M.list.length !== 48) p.push('there must be 48 missions (' + M.list.length + ')');
+      for (const [c, n] of Object.entries(counts)) if (M.list.filter((m) => m.cat === c).length !== n) p.push('mission category "' + c + '" needs ' + n);
+      const stats = ['runs', 'wktsLost', 'boundaries', 'sixes', 'fours', 'perfect', 'dots', 'ballsLeft', 'techUsed', 'heroRuns',
+        'wickets', 'bowled', 'lbw', 'caught', 'runsConceded', 'boundariesConceded', 'extras', 'rivalOut'];
+      const deliveries = new Set(Object.values(BOWLING_DATA.families).flatMap((f) => f.deliveries.map((d) => d.id)));
+      const goals = { bat: ['runs', 'boundaries', 'survive', 'milestone'], bowl: ['defend', 'wickets', 'dots', 'dismiss'] };
+      for (const [id, C] of Object.entries(M.cast)) {
+        if (STRINGS.en['mis.cast.' + id] === undefined) p.push('mission cast "' + id + '" has no name text');
+        for (const t of C.tech) if (!SKILL_TREE_DATA.techniques[t]) p.push('mission cast "' + id + '" has unknown technique ' + t);
+        if (C.family && !BOWLING_DATA.families[C.family]) p.push('mission cast "' + id + '" has unknown family');
+      }
+      for (const m of M.list) {
+        const where = 'mission "' + m.id + '"', F = MATCH_DATA.formats[m.fmt];
+        if (!F) { p.push(where + ' unknown format'); continue; }
+        for (const k of ['', '.brief']) if (STRINGS.en['mis.' + m.id + k] === undefined) p.push(where + ' text "mis.' + m.id + k + '" missing');
+        if (!goals[m.side] || !goals[m.side].includes(m.goal.kind)) p.push(where + ' goal "' + m.goal.kind + '" does not fit side ' + m.side);
+        if ((m.goal.kind === 'runs' || m.goal.kind === 'defend') && !m.target) p.push(where + ' needs a target');
+        if (!m.super && m.at.over * 6 + m.at.ball + m.balls > F.overs * 6) p.push(where + ' runs past the last over');
+        if (m.stars.length !== 3) p.push(where + ' needs 3 stars');
+        for (const s of m.stars) {
+          if (s.field) { if (!FIELD_DATA.presets.some((f) => f.id === s.field)) p.push(where + ' star field unknown'); continue; }
+          if (s.stat.startsWith('wk_') ? !deliveries.has(s.stat.slice(3)) : !stats.includes(s.stat)) p.push(where + ' star stat "' + s.stat + '" unknown');
+          if (STRINGS.en['mis.star.' + (s.stat.startsWith('wk_') ? 'wk' : s.stat + (s.min !== undefined ? '.min' : '.max'))] === undefined) p.push(where + ' star text for ' + s.stat + ' missing');
+        }
+        if (m.side === 'bat' && !M.cast[m.hero]) p.push(where + ' hero unknown');
+        if (m.partner && !M.cast[m.partner]) p.push(where + ' partner unknown');
+        if (m.side === 'bowl') for (const b of m.bowlers || []) if (!M.cast[b] || !M.cast[b].family) p.push(where + ' bowler "' + b + '" is not a bowler');
+        if (m.side === 'bowl' && m.balls > 6 && (m.bowlers || []).length < 2) p.push(where + ' needs two bowlers (no two overs in a row)');
+        const O = m.opp || {};
+        if (O.rival) {
+          const R0 = EVENT_DATA.rivals.find((r) => r.id === O.rival);
+          if (!R0) p.push(where + ' rival unknown');
+          else if (m.side === 'bowl' && R0.slot !== m.at.wkts + 1) p.push(where + ' the rival must be on strike (slot ' + R0.slot + ')');
+          else if (m.side === 'bat' && (O.attack || []).includes('rival') && !R0.family) p.push(where + ' rival does not bowl');
+        }
+        for (const f of O.attack || []) if (f !== 'rival' && !BOWLING_DATA.families[f]) p.push(where + ' attack family "' + f + '" unknown');
+        const rw = m.reward || M.rewards[m.diff];
+        for (const r of [rw.first, rw.perfect]) if (r.item && !EQUIPMENT_DATA.items.some((it) => it.id === r.item)) p.push(where + ' rewards unknown item');
+      }
+      for (const c of M.categories) if (!allArt[c.icon]) p.push('mission category "' + c.id + '" icon not in the manifest');
+      if (ids.size !== M.list.length) p.push('mission ids repeat');
+    }
+
     // Manifest: every entry needs a file path, every id once (object keys are unique by nature)
     for (const [gname, g] of Object.entries(ASSET_MANIFEST.groups)) {
       for (const [id, e] of Object.entries(g)) if (!e || !e.src) p.push(`asset "${id}" in group ${gname} has no file path`);

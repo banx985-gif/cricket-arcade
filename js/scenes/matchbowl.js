@@ -38,7 +38,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
   // Release bands with the bowler's stats for this ball, then the techniques.
   _bands() {
     const C = BOWLING_DATA.charge;
-    const k = Duel.bandScale(this.bowlP || this.bowler, this._fatigue());
+    const k = Duel.bandScale(this.bowlP || this.bowler, this._fatigue()) * MissionMatch.windowK();
     const around = (b) => { const m = (b[0] + b[1]) / 2, h = (b[1] - b[0]) / 2 * k; return [m - h, m + h]; };
     return Tech.bands({ perfect: around(C.perfect), good: around(C.good) }, this);
   },
@@ -94,13 +94,16 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     const sug = BowlerRules.aiPick(inn, this.team, Match.fatigue, rng);
     const ph = BowlerRules.phase(inn);
     const fam = Bowling.family(sug.family);
-    const fieldId = Fielding.aiChoose({ phase: ph, kind: fam.kind, family: fam.id, wicketsFell: false }, rng, (id) => Unlocks.fieldPreset(id));
+    // My XI: the captain's bowling call brings its own field (you can still change it).
+    const called = MyXIMatch.on ? MyXIMatch.field(inn) : null;
+    const fieldId = called || Fielding.aiChoose({ phase: ph, kind: fam.kind, family: fam.id, wicketsFell: false }, rng, (id) => Unlocks.fieldPreset(id));
     this._setState('pick');
     BowlControls.enabled = false;
     BowlerPicker.show({
       inn, team: this.team, fatigue: Match.fatigue, suggest: { bowlerId: sug.id, fieldId },
       done: (bowlerId, field) => {
         Match.setBowler(inn, bowlerId, field);
+        MissionMatch.noteField(field);
         this._applyOver(true);
         this._setState('aim');
         this._techSetup();
@@ -298,6 +301,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     const fam = this.bowler && Bowling.family(this.bowler.family), dtype = fam && fam.deliveries[this.typeIdx] ? fam.deliveries[this.typeIdx].id : null;
     ThrowMeter.stop();
     const res = inn.apply({ kind, batRuns, boundary, wicket, dtype, thr });
+    if (MissionMatch.on) MissionMatch.afterBall(inn);
     if (res.overDone || inn.ended) Match.overDone(inn);
     if (Tech.mine(this.bowler)) Tech.bowlBallEnd(key, kind === 'legal', !!res.wicket, res.runs);
     TechUI.btns = [];
@@ -314,6 +318,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     MatchBatScene._drawFlashMarker.call(this, ctx);
     if (!BowlerPicker.open && !ThrowMeter.active) TechUI.draw(ctx);
     if (MyXIMatch.on && !BowlerPicker.open && !ThrowMeter.active) TacticBar.draw(ctx);
+    if (MissionMatch.on && !BowlerPicker.open) MissionHud.draw(ctx, this);
     BowlerPicker.draw(ctx);
   },
 

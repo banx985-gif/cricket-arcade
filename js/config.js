@@ -4,9 +4,9 @@
 // Gameplay tuning lives in js/data/, not here â€” this file is engine/app level.
 
 const CONFIG = {
-  BUILD_VERSION: '0.10.0-m10',
-  BUILD_STAMP: '20260925-230158',            // filled in by publish.ps1 (date-time of the published build)
-  CONTENT_VERSION: 5,
+  BUILD_VERSION: '0.11.0-m11',
+  BUILD_STAMP: '20260926-011836',            // filled in by publish.ps1 (date-time of the published build)
+  CONTENT_VERSION: 6,
   SAVE_SCHEMA_VERSION: 2,
   DEBUG_BUILD: true,          // dev panel + content checks. publish.ps1 -Release turns this off.
 

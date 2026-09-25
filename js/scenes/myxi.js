@@ -559,7 +559,7 @@ const MyXIEndingScene = {
     Sound.play('fanfare'); Sound.play('crowdRoar');
   },
   _montageEnd() { return this.TROPHY + Math.max(1, this.legends.length) * this.CARD; },
-  _creditsEnd() { return this._montageEnd() + 16; },
+  _creditsEnd() { return this._montageEnd() + 9; },
   _finish() {
     if (this.phase === 'done') return;
     this.phase = 'done';
@@ -601,11 +601,19 @@ const MyXIEndingScene = {
         ctx.restore();
       }
     } else {
+      // The credits (M11): the studio logo at the top, then two lines. The art is small
+      // (about 180 x 220), so it is never drawn above ~2x.
       const t = this._t - this._montageEnd(), lines = T('myxi.credits').split('|');
-      Sprites.ui('reward_ending_credits', cx, 300, 460, 400, { alpha: Math.min(1, t / 1) });
+      Sprites.ui('reward_ending_credits', cx, 560, 700, 620, { alpha: Math.min(0.22, t / 3) });
+      const a = Math.min(1, t / 0.8);
+      ctx.save(); ctx.globalAlpha = a;
+      if (!Sprites.ui('logo_banx_gamex', cx, 230, 250, 300)) R.text(T('credits.studio'), cx, 230, 60, '#ffd23f');
+      ctx.restore();
       lines.forEach((ln, i) => {
-        const y = 1100 + i * 70 - t * 90;
-        if (y > 480 && y < 1010) R.text(ln, cx, y, i % 3 === 0 ? 34 : 26, i % 3 === 0 ? '#ffd23f' : '#ffffff', 'center', i % 3 === 0 ? undefined : false);
+        const k = Math.max(0, Math.min(1, (t - 0.8 - i * 0.9) / 0.6));
+        ctx.save(); ctx.globalAlpha = k;
+        R.text(ln, cx, 490 + i * 80, 38, i === 0 ? '#ffffff' : '#9be7ff', 'center', false);
+        ctx.restore();
       });
       if (this.phase === 'done') { R.text(T('myxi.postgameUnlocked'), cx, 860, 30, '#9cff6a'); this.buttons.draw(); }
     }

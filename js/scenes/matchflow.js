@@ -28,7 +28,8 @@ const TossScene = {
     Save.clearResume();                      // a new match replaces any unfinished one
     CareerMatch.on = false;
     // My XI (M10) has already set its match up (MyXIMatch.start): keep it.
-    if (!(params && params.keep)) { if (typeof MyXIMatch !== 'undefined') MyXIMatch.on = false; Match.start((params && params.format) || Dev.matchFormat || MATCH_DATA.defaultFormat); }
+    if (typeof MissionMatch !== 'undefined' && MissionMatch.on) MissionMatch.leave();
+    if (!(params && params.keep)) { Tech.end(); if (typeof MyXIMatch !== 'undefined') MyXIMatch.on = false; Match.start((params && params.format) || Dev.matchFormat || MATCH_DATA.defaultFormat); }
     Match.flipToss();
     Stadium.setConditions(Match.cond);
     this._t = 0;
@@ -126,6 +127,7 @@ const MatchBreakScene = {
     this.data = params;
     this._t = 0;
     Stadium.setConditions(Match.cond);
+    if (MissionMatch.on) { Scenes.go('missionresult', MissionMatch.finish(Save.data)); return; }   // (M11)
     if (params.next === 'result') { Scenes.go('matchresult'); return; }
     Match.checkpoint('break', params.next);   // resume point: the innings break
     Effects.init();

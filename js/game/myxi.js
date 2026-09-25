@@ -487,6 +487,7 @@ const MyXIMatch = {
     const club = MyXI.club(save), run = club.run, fx = MyXI.next(save);
     if (!fx) return null;
     MyXI.registerRun(run);
+    if (typeof MissionMatch !== 'undefined') MissionMatch.on = false;
     this.on = true; this.fixture = fx;
     this.tactic = { bat: 'balanced', bowl: 'balanced' }; this.queued = { bat: 'balanced', bowl: 'balanced' };
     CareerMatch.on = false;

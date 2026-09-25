@@ -21,6 +21,7 @@ const Sprites = {
     for (const id of Object.keys(group)) {
       const e = group[id];
       if (!e || !e.src) continue;
+      if (this.status[id] === 'ok' || this.status[id] === 'loading') continue;   // already here (or on its way)
       this.status[id] = 'loading';
       this._pending.push(new Promise((done) => {
         const img = new Image();

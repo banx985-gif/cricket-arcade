@@ -52,7 +52,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     this.batterP = Match.batter(inn);
     if (Match.needsBowler(inn)) {
       const rng = RNG.stream('aiPick:' + inn.index);
-      const bw = BowlerRules.aiPick(inn, this.team, Match.fatigue, rng);
+      const bw = (MissionMatch.on && MissionMatch.aiBowler(inn)) || BowlerRules.aiPick(inn, this.team, Match.fatigue, rng);   // (a mission names its attack)
       const ph = BowlerRules.phase(inn);
       const fam = Bowling.family(bw.family);
       Match.setBowler(inn, bw.id, Fielding.aiChoose({ phase: ph, kind: fam.kind, family: fam.id, wicketsFell: inn.wickets > (this._wktsAtOver || 0) }, rng));
@@ -82,7 +82,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     // Reading the variation: a deceptive bowler shows it later, or not at all.
     const Rd = PLAYER_DATA.duel.read, dec = Teams.u(bowl.stats.deception);
     this.readAt = this.del.variation && rng.chance(Rd.hideChance * dec) ? null : Rd.showAt[0] + (Rd.showAt[1] - Rd.showAt[0]) * dec;
-    this._baseWindow = Duel.windowScale(this.batP, bowl, { pressure: Duel.pressure(inn), fatigue, kind: this.del.kind, chase: !!inn.target });
+    this._baseWindow = Duel.windowScale(this.batP, bowl, { pressure: Duel.pressure(inn), fatigue, kind: this.del.kind, chase: !!inn.target }) * MissionMatch.windowK();
     this._techBall();
 
     this._setState('ready');
@@ -316,6 +316,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') wicket = key;
     else if (run && run.runOut) wicket = 'runout';
     const res = inn.apply({ kind, batRuns, boundary, wicket, contact: this.shot ? this.shot.grade : null });
+    if (MissionMatch.on) MissionMatch.afterBall(inn);          // a mission can be decided before the innings ends
     if (res.overDone || inn.ended) Match.overDone(inn);
     if (Tech.mine(this.batterP)) Tech.batBallEnd(key, kind === 'legal', res.wicket ? wicket : null);
     TechUI.btns = [];
@@ -390,6 +391,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     this._drawFlashMarker(ctx);
     TechUI.draw(ctx);
     if (MyXIMatch.on) TacticBar.draw(ctx);
+    if (MissionMatch.on) MissionHud.draw(ctx, this);
   },
 
   _drawTimingRing(ctx) {

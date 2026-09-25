@@ -73,6 +73,8 @@ const CareerMatch = {
   start(c, slot) {
     const fx = Career.next(c);
     if (!fx) return null;
+    if (typeof MissionMatch !== 'undefined') MissionMatch.on = false;
+    Tech.end();                                    // (no challenge / My XI techniques left over)
     this.on = true; this.career = c; this.slot = slot; this.fixture = fx;
     this.ticker = []; this.tactic = 'steady';
     fx.attempt = (fx.attempt || 0) + 1;

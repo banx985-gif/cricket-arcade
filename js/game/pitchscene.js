@@ -42,7 +42,9 @@ const PitchScene = {
 
   _setState(s) { this.state = s; this.stateT = 0; },
 
-  _layoutPause(sceneName) {
+  // params: what RESTART starts the scene with (a challenge: the same ruleset,
+  // player and difficulty). quitTo: where QUIT goes (default: the Title).
+  _layoutPause(sceneName, params, quitTo) {
     const s = Display.safe;
     this.pauseBtn.x = s.right - this.pauseBtn.w - 22;
     this.pauseBtn.y = s.top + 20;
@@ -50,6 +52,15 @@ const PitchScene = {
     const b = this.pauseButtons;
     b.clear();
     b.add('pause.resume', cx - 260, 330, 520, 110, () => this.setPaused(false), { size: 48 });
+    if (typeof MissionMatch !== 'undefined' && MissionMatch.on) {
+      // Missions (M11): try again from the start, or back to the Mission Hub.
+      b.add('pause.restart', cx - 260, 460, 520, 110, () => Scenes.go(MissionMatch.start(MissionMatch.m.id)), { size: 48, color: '#e9eef5' });
+      b.add(() => T(Sound.muted ? 'common.soundOff' : 'common.soundOn'), cx - 260, 590, 520, 110, () => {
+        Sound.setMuted(!Sound.muted); Save.setMuted(Sound.muted);
+      }, { size: 44, color: '#e9eef5' });
+      b.add('mis.toHub', cx - 260, 720, 520, 110, () => { MissionMatch.leave(); Scenes.go('missions'); }, { size: 44, color: '#ffb3b3' });
+      return;
+    }
     if (typeof CareerMatch !== 'undefined' && CareerMatch.on) {
       // Career: no restart. Leave to Career Home; Play Next picks up from the start of the over.
       b.add('pause.careerHome', cx - 260, 460, 520, 110, () => { CareerMatch.leave(); Scenes.go('careerhome', { slot: CareerMatch.slot }); }, { size: 44, color: '#e9eef5' });
@@ -57,12 +68,12 @@ const PitchScene = {
       // My XI: leave to My XI Home (the fixture is still to play).
       b.add('pause.myxiHome', cx - 260, 460, 520, 110, () => { MyXIMatch.on = false; Tech.end(); Scenes.go('myxihome'); }, { size: 44, color: '#e9eef5' });
     } else {
-      b.add('pause.restart', cx - 260, 460, 520, 110, () => Scenes.go(sceneName), { size: 48, color: '#e9eef5' });
+      b.add('pause.restart', cx - 260, 460, 520, 110, () => Scenes.go(sceneName, params || undefined), { size: 48, color: '#e9eef5' });
     }
     b.add(() => T(Sound.muted ? 'common.soundOff' : 'common.soundOn'), cx - 260, 590, 520, 110, () => {
       Sound.setMuted(!Sound.muted); Save.setMuted(Sound.muted);
     }, { size: 44, color: '#e9eef5' });
-    b.add('pause.quit', cx - 260, 720, 520, 110, () => { if (typeof CareerMatch !== 'undefined') CareerMatch.leave(); if (typeof MyXIMatch !== 'undefined') MyXIMatch.on = false; Scenes.go('title'); }, { size: 44, color: '#ffb3b3' });
+    b.add('pause.quit', cx - 260, 720, 520, 110, () => { if (typeof CareerMatch !== 'undefined') CareerMatch.leave(); if (typeof MyXIMatch !== 'undefined') MyXIMatch.on = false; Scenes.go(quitTo || 'title'); }, { size: 44, color: '#ffb3b3' });
   },
 
   onAppHidden() { this.setPaused(true); },

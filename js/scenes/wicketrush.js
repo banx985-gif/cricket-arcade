@@ -24,14 +24,27 @@ const WicketRushScene = Object.assign({}, PitchScene, {
   batterP: null,       // the AI batter (stats)
   swipe: null,         // Step 4 window: { t, done }
 
+  isChallenge: false,  // true only on this scene (the match scene built from it stays false)
+  chal: null,          // Challenge.current
+  target: null,        // this ball's target stump: 'off' | 'middle' | 'leg' | 'bail'
+
   // ---------------------------------------------------------------- setup
-  enter() {
+  // params: { rs, diff, pick } from the Challenge hub (plan 17). Your picked
+  // bowler's stats, techniques and frozen Legacy loadout apply.
+  enter(params) {
+    this.isChallenge = true;
+    Tech.end();
     this._initPitch();
+    this.chal = Challenge.begin('rush', params && params.rs ? params : null);
     this.seed = RNG.begin(Dev.nextSeed());
-    this.rules = new WicketRushRules(WICKET_RUSH_DATA.classic);
-    // Wicket Rush: an average fast bowler against the balanced challenge batter.
-    this.bowler = Teams.plain('you', 'fast');
-    this.batterP = Teams.plain('ai');
+    this.rules = new WicketRushRules(this.chal.rs);
+    this.inn = this.rules;                  // the techniques read the innings from here
+    this.bowler = this.chal.player;
+    if (!this.bowler.family) this.bowler.family = 'fast';
+    this.bowlP = this.bowler;
+    if (this.chal.pc) Tech.beginMany([{ pid: this.bowler.id, c: this.chal.pc }]);
+    this.batterP = Challenge.rushBatter(this.rules, this.chal.diff);
+    this._targetRng = RNG.stream('targets');
     Fielding.clear();
     Stadium.setConditions(null);
     const R0 = BOWLING_DATA.reticle.start;
@@ -40,8 +53,19 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     Effects.init();
     this._initControls();
     this._layout();
+    Log.add('challenge', `rush ${this.rules.rs.id} ${this.chal.diff} bowler ${this.bowler.name} (${this.bowler.family})`);
     this._startBall();
   },
+
+  // ---- your techniques (game/techniques.js), as in a match ----
+  _techSetup() {
+    this.bowlP = Tech.bowlStats(this.bowler, this.inn);
+    BowlControls.bands = this._bands();
+    TechUI.layout('bowl', this.inn, () => this.state === 'aim');
+  },
+  _techBoost() { return Tech.releaseBoost(this); },
+  _techAi() { return Tech.aiCtx(this); },
+  _techMods(m) { return Tech.hitMods(m, this); },
 
   _initControls() {
     BowlControls.init({
@@ -54,10 +78,10 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     BowlControls.selected = 0;
   },
 
-  exit() { BowlControls.reset(); },
+  exit() { BowlControls.reset(); Tech.end(); TechUI.btns = []; },
 
   _layout() {
-    this._layoutPause('wicketrush');
+    this._layoutPause('wicketrush', this.isChallenge ? { rs: this.chal.rs, diff: this.chal.diff, pick: this.chal.pick } : null, 'challenges');
     BowlControls.layout();
   },
 
@@ -78,11 +102,12 @@ const WicketRushScene = Object.assign({}, PitchScene, {
   _pressure() { return this.rules.pressure; },
 
   // Release bands for this bowler: Control widens them, fatigue shrinks them.
+  // (a challenge: the difficulty widens / narrows them too, then the techniques)
   _bands() {
     const C = BOWLING_DATA.charge;
-    const k = Duel.bandScale(this.bowler, this._fatigue());
+    const k = Duel.bandScale(this.bowlP || this.bowler, this._fatigue()) * (this.chal ? Challenge.diff(this.chal.diff).window : 1);
     const around = (b) => { const m = (b[0] + b[1]) / 2, h = (b[1] - b[0]) / 2 * k; return [m - h, m + h]; };
-    return { perfect: around(C.perfect), good: around(C.good) };
+    return Tech.bands({ perfect: around(C.perfect), good: around(C.good) }, this);
   },
 
   _startBall() {
@@ -97,18 +122,37 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     BowlControls.meterOn = false;
     BowlControls.enabled = true;
     BowlControls.swipeOpen = false;
-    BowlControls.bands = this._bands();
-    const r = this.rules;
-    const n = r.ball + 1, total = r.rs.balls;
-    this.banner = { text: n === total ? T('hud.lastBall') : T('hud.ballNo', { n, total }), color: '#ffffff', t: 0 };
+    const r = this.rules, rs = r.rs;
+    // The batter (Survival: better as the run goes on) and your techniques for this ball.
+    this.batterP = Challenge.rushBatter(r, this.chal.diff);
+    this._techSetup();
+    const n = r.ball + 1, total = rs.balls;
+    const text = rs.lives ? T('chal.ballN', { n }) : n === total ? T('hud.lastBall') : T('hud.ballNo', { n, total });
+    this.banner = { text, color: '#ffffff', t: 0 };
     this.golden = false;
-    const G = WICKET_RUSH_DATA.hooks.goldenWicket;
-    if (Dev.forceGolden || (G.enabled && r.pressure >= G.pressureNeeded)) {
+    // Target stump (plan 17.3).
+    const T0 = rs.targets;
+    this.target = T0 && ((r.ball + 1) % T0.every === 0) ? this._targetRng.pick(CHALLENGE_DATA.rush.targets.kinds) : null;
+    if (Dev.forceGolden || r.goldenDue()) {
       this.golden = true; Dev.forceGolden = false;
       this.banner.sub = T('bowl.goldenWicket'); this.banner.icon = 'icon_golden_wicket';
     } else if (r.freeHit) {
       this.banner.sub = T('bowl.freeHit'); this.banner.subColor = '#ff9d2e';
+    } else if (this.target) {
+      this.banner.sub = T('chal.stumpTarget.' + this.target); this.banner.subColor = '#5fd4ff';
     }
+  },
+
+  // Was the ball on the target stump? (its line where it reaches the stumps)
+  _onTarget() {
+    if (!this.target || !this.del || this.release.noBall) return false;
+    const sim = this.del.sim;
+    if (!sim.hitsStumps) return false;
+    const hw = BATTING_DATA.pitch.stumpsHalfWidth, x = sim.stumpsX;
+    if (this.target === 'bail') return sim.path.y[sim.stumpsIdx] >= CHALLENGE_DATA.rush.targets.bailHeight;
+    if (this.target === 'off') return x > hw / 3;
+    if (this.target === 'leg') return x < -hw / 3;
+    return Math.abs(x) <= hw / 3;
   },
 
   // ---------------------------------------------------------------- input
@@ -352,11 +396,13 @@ const WicketRushScene = Object.assign({}, PitchScene, {
   _endBall(key, runs) {
     const F = BOWLING_DATA.feel;
     const r = this.rules;
-    const res = r.apply(key, {
+    const res = r.apply(key === 'padLeg' ? 'dot' : key, {
       runs: runs || 0, noBall: this.release.noBall, golden: this.del.golden,
-      perfectRelease: this.release.grade === 'perfect',
+      perfectRelease: this.release.grade === 'perfect', onTarget: this._onTarget(), onStumps: !!this.del.sim.hitsStumps,
     });
     const wicket = WicketRushRules.isWicket(key) && !res.notOut;
+    if (Tech.mine(this.bowler)) Tech.bowlBallEnd(key, !this.release.noBall && key !== 'wide', wicket, runs || 0);
+    TechUI.btns = [];
     const look = this._outcomeLook(res.notOut ? 'notout' : key, runs);
     if (res.notOut) look.text = T(this.release.noBall ? 'outcome.notOutNoBall' : 'outcome.notOut');
     this.outcome = Object.assign(look, {
@@ -375,6 +421,10 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     else if (res.comboDown) Effects.text(T('bowl.comboDown'), cx, 780, '#ff9d9d', 44, { life: 1.2 });
     if (this.release.noBall) Effects.text(T('outcome.noball'), cx, 250, '#ffb36b', 70, { life: 1.4 });
     if (res.freeHitNext) Effects.text(T('bowl.freeHitNext'), cx, 860, '#ff9d2e', 44, { life: 1.6 });
+    if (res.onTarget) { Effects.text(T(wicket ? 'chal.targetWicket' : 'chal.onTarget'), cx, 560, '#5fd4ff', 62, { life: 1.5 }); Sound.play('combo'); }
+    if (res.lifeLost) Effects.text(T('chal.lifeLost', { n: r.livesLeft }), cx, 800, '#ff6b6b', 54, { life: 1.5 });
+    if (res.bossOut && !res.bossBeaten) Effects.text(T('chal.bossOut', { n: r.boss.left }), cx, 300, '#ffd23f', 64, { life: 1.8 });
+    if (res.bossBeaten) { Effects.text(T('chal.bossBeaten'), cx, 300, '#ffd23f', 84, { life: 2.2 }); Sound.play('fanfare'); }
 
     this._outcomeFeel(key === 'wide' ? 'none' : (res.notOut ? 'none' : key));
     if (wicket) {
@@ -396,16 +446,19 @@ const WicketRushScene = Object.assign({}, PitchScene, {
 
   _finish() {
     const r = this.rules;
-    const prev = Save.best(r.rs.id);
-    const isBest = Save.submit(r.rs.id, r.score, { wickets: r.wickets, combo: r.bestCombo });
-    Scenes.go('result', {
-      mode: 'wicketrush', titleKey: 'result.titleWicket',
-      score: r.score, seed: this.seed, isBest, prevBest: prev ? prev.score : 0,
+    const sum = Challenge.finish(Save.data, {
+      rs: r.rs.id, raw: r.score, diff: this.chal.diff, player: this.bowler, pick: this.chal.pick,
+      stats: { wickets: r.wickets, combo: r.bestCombo, streak: r.bestCombo, targets: r.onTargets, perfects: r.perfects },
+    });
+    Scenes.go('result', Object.assign(sum, {
+      mode: 'wicketrush', game: 'rush', rs: r.rs.id, titleKey: 'chal.rs.' + r.rs.id, seed: this.seed,
+      again: { rs: this.chal.rs, diff: this.chal.diff, pick: this.chal.pick },
       stats: [
         ['result.wickets', r.wickets], ['result.dots', r.dots],
-        ['result.runsConceded', r.runs], ['result.bestCombo', r.bestCombo],
+        r.rs.targets ? ['chal.stat.onTarget', r.onTargets] : r.rs.perfectOnly ? ['chal.stat.perfectRel', r.perfects] : ['result.runsConceded', r.runs],
+        r.rs.boss ? ['chal.stat.bossOuts', (r.boss.max - r.boss.left) + ' / ' + r.boss.max] : ['result.bestCombo', r.bestCombo],
       ],
-    });
+    }));
   },
 
   // ---------------------------------------------------------------- bowler animation
@@ -422,6 +475,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     Stadium.drawField(ctx);
     if (this.state === 'aim' || this.state === 'charge') this._drawReticle(ctx);
     this._drawWorld(ctx);
+    if (this.isChallenge) this._drawTarget(ctx);
     Effects.drawParticles(ctx);
     if (Dev.hitzone && this.del) this._drawDebug(ctx);
     Effects.drawFlash(ctx);
@@ -431,7 +485,26 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     this._drawSwipeHint(ctx);
     this._drawOutcome(ctx);
     Effects.drawTexts(ctx);
+    if (this.isChallenge && !this.paused) TechUI.draw(ctx);
     if (this.paused) this._drawPause(ctx);
+  },
+
+  // Code-drawn target stump (plan 17.3): a glowing ring on that stump (or the bails).
+  _drawTarget(ctx) {
+    if (!this.target || this.state === 'outcome') return;
+    const hw = BATTING_DATA.pitch.stumpsHalfWidth, h = BATTING_DATA.pitch.stumpsHeight;
+    const x = this.target === 'off' ? hw : this.target === 'leg' ? -hw : 0;
+    const y = this.target === 'bail' ? h : h * 0.5;
+    const p = View3D.project(x, y, 0);
+    if (!p) return;
+    const pulse = 1 + Math.sin(Stadium._time * 6) * 0.12;
+    const r = Math.max(24, (this.target === 'bail' ? 0.2 : 0.12) * p.s) * pulse;
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    R.circle(p.x, p.y, r * 1.6, 'rgba(95,212,255,0.25)');
+    R.circle(p.x, p.y, r, null, '#bff0ff', 5);
+    ctx.restore();
+    R.text(T('chal.target'), p.x + r + 50, p.y, 22, '#bff0ff');
   },
 
   // "SWIPE FOR MORE SWING / SPIN" with arrows while the Step 4 window is open.
@@ -509,7 +582,10 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     R.panel(s.left + 22, s.top + 18, 470, 220);
     R.text(T('hud.score'), s.left + 48, s.top + 50, 28, '#b8c6d6', 'left', false);
     R.text(formatNumber(r.score), s.left + 46, s.top + 112, 76, '#ffffff', 'left');
-    R.text(T('hud.ballsLeft', { n: r.ballsLeft }), s.left + 48, s.top + 172, 30, '#ffffff', 'left', false);
+    if (r.rs && r.rs.lives) {
+      R.text(T('chal.lives'), s.left + 48, s.top + 172, 26, '#b8c6d6', 'left', false);
+      for (let i = 0; i < r.rs.lives; i++) R.circle(s.left + 170 + i * 44, s.top + 172, 16, i < r.livesLeft ? '#ff5a5a' : 'rgba(255,255,255,0.15)', '#ffffff', 3);
+    } else R.text(T('hud.ballsLeft', { n: r.ballsLeft }), s.left + 48, s.top + 172, 30, '#ffffff', 'left', false);
     R.text(T('bowl.wicketsN', { n: r.wickets }), s.left + 48, s.top + 208, 30, '#ffd23f', 'left', false);
     // combo badge
     const bx = s.left + 405, by = s.top + 100;
@@ -524,6 +600,16 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     if (r.pressure > 0) R.roundRect(px + 3, py + 3, (pw - 6) * r.pressure, ph - 6, 10,
       r.pressure > 0.75 ? '#ff5a1f' : r.pressure > 0.4 ? '#ffb400' : '#6fd36f');
     R.text(T('bowl.pressure'), px + 14, py + ph / 2 + 1, 20, '#ffffff', 'left', false);
+    if (this.isChallenge) {
+      R.text(T('chal.playerLine', { name: this.bowler.short || this.bowler.name, d: T('chal.diff.' + this.chal.diff) }), s.left + 30, py + 56, 22, '#d8e4f0', 'left', false);
+      if (r.boss) {
+        // Boss Batter: his lives across the top.
+        const cx = s.right - 290, yy = s.top + 240;
+        R.panel(cx - 260, yy, 520, 76);
+        R.text(T('chal.bossName', { name: this.batterP.short }), cx, yy + 24, 22, '#ffd23f');
+        for (let i = 0; i < r.boss.max; i++) Sprites.ui('marker_wicket', cx - 70 + i * 70, yy + 54, 44, 40, { alpha: i < r.boss.max - r.boss.left ? 1 : 0.25 });
+      }
+    }
 
     this._drawPauseButton();
     this._drawBanner(ctx, this.state === 'aim' || this.state === 'charge');
