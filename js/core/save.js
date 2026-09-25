@@ -27,7 +27,7 @@ const Save = {
   defaults() {
     return {
       meta: this._meta(),
-      settings: { muted: false, haptics: true, aimInvert: false, aimSensitivity: 'normal' },
+      settings: typeof SETTINGS_DATA !== 'undefined' ? Object.assign({}, SETTINGS_DATA.defaults) : { muted: false, haptics: true, aimInvert: false, aimSensitivity: 'normal' },
       challenges: {},            // modeId -> { score, streak, sixes, wickets, combo … }
       matches: {},               // formatId -> { played, won }
       // ---- empty until their systems exist (plan 33) ----
@@ -141,6 +141,7 @@ const Save = {
     this.data = doc;
     if (typeof Gear !== 'undefined') Gear.ensure(this.data);     // the starter kit is always in the Locker
     if (typeof Coaches !== 'undefined') Coaches.ensure(this.data); // and the starting coaches
+    if (typeof Meta !== 'undefined') Meta.onLoad(this.data);       // settings, profile level, mode unlocks (M12)
     this._applySettings();
     // Write it back in the current format (repairs a bad main from the backup,
     // finishes a migration, and drops the old key).
@@ -156,6 +157,8 @@ const Save = {
     const s = this.data.settings;
     if (typeof Sound !== 'undefined') Sound.setMuted(s.muted);
     if (typeof Platform !== 'undefined') Platform.hapticsOn = s.haptics !== false;
+    if (typeof Sound !== 'undefined' && Sound.applyVolume) Sound.applyVolume();          // volume sliders (M12)
+    if (typeof R !== 'undefined') R.textScale = s.textSize === 'large' ? 1.15 : 1;       // bigger text
   },
 
   // ---------------------------------------------------------------- write
@@ -262,6 +265,7 @@ const Save = {
     this.data = this.defaults();
     if (typeof Gear !== 'undefined') Gear.ensure(this.data);
     if (typeof Coaches !== 'undefined') Coaches.ensure(this.data);
+    if (typeof Meta !== 'undefined') Meta.onLoad(this.data);
     this._applySettings();
     this.recovered = null;
     Log.add('save', 'full data reset');

@@ -104,6 +104,15 @@ const Dev = {
       add(0, 3, () => T('dev.jump.settings'), go('settings'));
       add(1, 0, () => T('dev.jump.match'), () => { this.matchFormat = null; go('toss')(); });
       add(1, 1, () => T('dev.jump.match1'), () => { this.matchFormat = 'test1'; go('toss', { format: 'test1' })(); });
+      // M12: Quick Match setup, the Trophy Room, every mode open, profile XP, a fresh first launch
+      add(1, 2, () => T('dev.jump.quickmatch'), go('quickmatch'));
+      add(1, 3, () => T('dev.jump.trophies'), go('trophyroom'));
+      add(1, 4, () => T('dev.meta.allModes', { state: this._state(Save.data.unlocks && Save.data.unlocks.allModes) }), () => {
+        Save.data.unlocks = Save.data.unlocks || {}; Save.data.unlocks.allModes = !Save.data.unlocks.allModes; Save.write(); if (Scenes.currentName === 'title') TitleScene._layout();
+      });
+      add(1, 5, () => T('dev.meta.xp'), () => { Profile.add(Save.data, 1000, 'dev'); Save.write(); this.say(T('dev.meta.level', { n: Profile.level(Save.data) })); });
+      add(0, 4, () => T('dev.meta.firstLaunch'), () => { Save.data.tutorial = { step: 'welcome' }; Save.write(); this.hide(); Scenes.go('title'); });
+      add(0, 5, () => T('dev.meta.tutorial'), () => { this.hide(); Scenes.go('tutorial', { phase: 'batIntro', replay: true, career: null }); });
     } else if (this.tab === 'match') {
       add(0, 0, () => T('dev.match.tieLastBall'), () => this._tieLastBall());
       add(0, 1, () => T('dev.match.tieNow'), () => this._tieNow());

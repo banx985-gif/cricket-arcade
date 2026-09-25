@@ -332,7 +332,7 @@ const CareerCoachScene = {
     return chk.ok ? T('coach.hire') : chk.reason === 'tier' ? T('gear.needsStage', chk.params) : T('coach.locked');
   },
   _hire() {
-    if (!Coaches.hire(this.career, Save.data, this.sel).ok) { Sound.play('edge'); return; }
+    if (!Coaches.hire(this.career, Save.data, this.sel).ok) { Sound.play('ui_error'); return; }
     CareerSave.save(this.career, this.slot);
     Sound.play('fanfare');
     this.flash = { text: T('coach.hired', { name: T('coach.' + this.sel) }), t: 0 };
@@ -340,7 +340,7 @@ const CareerCoachScene = {
   // ---- the Wicket Tree respec (between stages, costs coins) ----
   _openRespec() {
     const c = this.career, chk = SkillTree.canRespec(c, Save.data.currencies.coins || 0);
-    if (!chk.ok && chk.reason !== 'coins') { this.flash = { text: T('tree.respec.' + chk.reason), t: 0, bad: true }; Sound.play('edge'); return; }
+    if (!chk.ok && chk.reason !== 'coins') { this.flash = { text: T('tree.respec.' + chk.reason), t: 0, bad: true }; Sound.play('ui_error'); return; }
     this.popup = 'respec';
     const b = this.popBtns, cx = CONFIG.LOGICAL_W / 2;
     b.clear();

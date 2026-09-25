@@ -224,8 +224,9 @@ const CareerCreateScene = {
         b.add('career.role.' + role, 200 + i * 330, 200, 310, 110, () => this._setRole(role), { size: role === 'allrounder' ? 26 : 32, color: sel(d.role === role), icon: CareerScene.roleIcon(role) });
       });
       CAREER_DATA.roles[d.role].archetypes.forEach((a, i) => {
-        b.add('create.arch.' + a.id, 200 + i * 330, 380, 310, 100, () => { d.archetype = a.id; if (a.family) d.family = a.family; this._layout(); },
-          { size: 21, color: sel(d.archetype === a.id) });
+        const open = Profile.open(Save.data, 'archetype', a.id);     // some open with the profile level (plan 21.1)
+        b.add(open ? 'create.arch.' + a.id : () => T('profile.lockedAt', { n: Profile.levelOf('archetype', a.id) }), 200 + i * 330, 380, 310, 100, () => { d.archetype = a.id; if (a.family) d.family = a.family; this._layout(); },
+          { size: 21, color: sel(d.archetype === a.id), disabled: !open, sub: open ? null : 'create.arch.' + a.id });
       });
       if (d.role !== 'bowler') {
         Object.keys(CAREER_DATA.battingRoles).forEach((r, i) => {
@@ -267,7 +268,7 @@ const CareerCreateScene = {
   },
   _cycle(what, dir) {
     const d = this.draft;
-    const list = what === 'look' ? CAREER_DATA.looks[d.presentation] : CAREER_DATA.facialHair;
+    const list = (what === 'look' ? CAREER_DATA.looks[d.presentation] : CAREER_DATA.facialHair).filter((id) => Profile.open(Save.data, 'look', id));
     const cur = what === 'look' ? d.look : d.facial;
     const i = (list.indexOf(cur) + dir + list.length) % list.length;
     if (what === 'look') d.look = list[i]; else d.facial = list[i];
@@ -422,7 +423,7 @@ const CareerSignScene = {
     this.slot = params.slot; this.career = params.career; this._t = 0;
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();
-    this.buttons.add('career.toHome', cx - 260, 900, 520, 120, () => Scenes.go('careerhome', { slot: this.slot, career: this.career }), { size: 46 });
+    this.buttons.add('career.toHome', cx - 260, 900, 520, 120, () => this._next(), { size: 46 });
     Sound.play('fanfare');
   },
   update(dt) {
@@ -433,7 +434,12 @@ const CareerSignScene = {
   pointerDown(id, x, y) { if (!Dev.pointerDown(id, x, y)) this.buttons.down(id, x, y); },
   pointerMove(id, x, y) { if (!Dev.pointerMove(id, x, y)) this.buttons.move(id, x, y); },
   pointerUp(id) { if (!Dev.pointerUp(id)) this.buttons.up(id); },
-  keyDown(code) { if (code === 'Enter' || code === 'Space') Scenes.go('careerhome', { slot: this.slot, career: this.career }); },
+  keyDown(code) { if (code === 'Enter' || code === 'Space') this._next(); },
+  // The first career goes on into the tutorial's lessons (plan 26, 39).
+  _next() {
+    if (Tutorial.active(Save.data) && Tutorial.state(Save.data).step === 'create') Scenes.go('tutorial', { phase: 'batIntro', slot: this.slot, career: this.career });
+    else Scenes.go('careerhome', { slot: this.slot, career: this.career });
+  },
   render(ctx) {
     CareerUI.bg(ctx, 'bg_scout_room', 0.5);
     const cx = CONFIG.LOGICAL_W / 2, c = this.career;

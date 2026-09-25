@@ -103,6 +103,10 @@ const Main = {
     Scenes.register('challenges', ChallengeHubScene);
     Scenes.register('missions', MissionHubScene);
     Scenes.register('missionresult', MissionResultScene);
+    Scenes.register('quickmatch', QuickMatchScene);
+    Scenes.register('tutorial', TutorialScene);
+    Scenes.register('trophyroom', TrophyRoomScene);
+    Scenes.register('credits', CreditsScene);
     Scenes.go('boot');
 
     this._lastT = performance.now();
@@ -117,6 +121,8 @@ const Main = {
   },
 
   _tick(t) {
+    // Settings > Video: 30 FPS draws every other frame (time still runs at full speed).
+    if (typeof GameSettings !== 'undefined' && GameSettings.get('fps') === 30 && (this._skip = !this._skip)) { requestAnimationFrame((tt) => this._tick(tt)); return; }
     let dt = (t - this._lastT) / 1000;
     this._lastT = t;
     if (dt > CONFIG.MAX_DT) dt = CONFIG.MAX_DT;
@@ -140,11 +146,13 @@ const Main = {
         Dev.update(dt);
         Scenes.update(dt * scale, dt);
         AchievementToast.update(dt);
+        MetaToast.update(dt);                          // new mode / profile level (M12)
       }
       Display.beginFrame();
       Scenes.render(Display.ctx);
       Stadium.drawLayerOverlay(Display.ctx);
       AchievementToast.draw(Display.ctx);           // an achievement just earned (M09)
+      MetaToast.draw(Display.ctx);
       Dev.render(Display.ctx, this.fps);
       if (typeof Validate !== 'undefined') Validate.render(Display.ctx);
       if (this.tapToContinue) this._drawTapToContinue(Display.ctx, dt);

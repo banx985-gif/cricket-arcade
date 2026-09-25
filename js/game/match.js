@@ -175,6 +175,8 @@ const Match = {
     this.fmt = MATCH_DATA.formats[formatId || MATCH_DATA.defaultFormat];
     this.seed = RNG.begin(o.seed !== undefined ? o.seed : Dev.nextSeed());
     this.isCareer = !!o.career;
+    this.difficulty = o.difficulty || 'pro';      // Rookie / Pro / Legend (plan 20; game/meta.js Difficulty)
+    this.quick = o.quick || null;                // a Quick Match set up on its screen (plan 19)
     this.innings = [];
     this.superOvers = 0;
     this.over = false;
@@ -247,7 +249,7 @@ const Match = {
       phase, next: next || null,
       fmt: this.fmt.id, seed: this.seed, toss: this.toss, mainBattedFirst: this.mainBattedFirst,
       superOvers: this.superOvers,
-      teams: this.teams, cond: this.cond, fatigue: this.fatigue,
+      teams: this.teams, cond: this.cond, fatigue: this.fatigue, difficulty: this.difficulty, quick: this.quick,
       career: typeof CareerMatch !== 'undefined' ? CareerMatch.ctx() : null,
       myxi: typeof MyXIMatch !== 'undefined' ? MyXIMatch.ctx() : null,
       innings: this.innings.map((i) => i.toJSON()),
@@ -282,6 +284,8 @@ const Match = {
     this.teams = cp.teams || Teams.forMatch();
     this.cond = cp.cond || { stadium: STADIUM_DATA.defaultStadium, pitch: 'balanced', weather: 'clear' };
     this.fatigue = cp.fatigue || {};
+    this.difficulty = cp.difficulty || 'pro';
+    this.quick = cp.quick || null;
     this.isCareer = !!cp.career;
     for (const inn of this.innings) { if (!inn.overBowlers) inn.overBowlers = []; if (!inn.bowlerFigs) inn.bowlerFigs = {}; }
     this.over = false;

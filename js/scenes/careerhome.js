@@ -33,6 +33,7 @@ const CareerHomeScene = {
     if (this.career && this.career.phase === 'promoted' && !params.stay) { Scenes.go('careerpromoted', { slot: this.slot, career: this.career }); return; }
     this._layout();
     this._checkEvent();
+    if (!Tutorial.done(Save.data) && Tutorial.state(Save.data).step === 'tour') TutorialTour.start();
   },
   // A pending event (or a rival's build-up before a boss match) opens its panel.
   _checkEvent() {
@@ -160,7 +161,7 @@ const CareerHomeScene = {
   update(dt) { this._t += dt; if (EventPanel.isOpen()) EventPanel.update(dt); },
 
   _list() { return EventPanel.isOpen() && EventPanel.career === this.career ? EventPanel.buttons : this.panel ? this.panelBtns : this.buttons; },
-  pointerDown(id, x, y) { if (Dev.pointerDown(id, x, y)) return; Sound.unlock(); this._list().down(id, x, y); },
+  pointerDown(id, x, y) { if (Dev.pointerDown(id, x, y)) return; Sound.unlock(); if (TutorialTour.on && !EventPanel.isOpen()) { TutorialTour.tap(); return; } this._list().down(id, x, y); },
   pointerMove(id, x, y) { if (!Dev.pointerMove(id, x, y)) this._list().move(id, x, y); },
   pointerUp(id) { if (!Dev.pointerUp(id)) this._list().up(id); },
   keyDown(code) {
@@ -257,6 +258,7 @@ const CareerHomeScene = {
 
     if (this.panel) this._drawPanel(ctx);
     if (EventPanel.isOpen() && EventPanel.career === c) EventPanel.draw(ctx);
+    TutorialTour.draw(ctx);                        // the first-time tour (M12)
   },
 
   // Under the fixture: the sponsor deal, the contract, and 'scouts watching' (M08).

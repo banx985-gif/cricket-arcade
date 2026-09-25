@@ -51,7 +51,7 @@ const ChallengeHubScene = {
     b.add('title.mode', cx - 430, 116, 410, 96, () => this._choose('six'), { size: 40, color: this.game === 'six' ? '#ff7a3a' : '#5b6570', textColor: this.game === 'six' ? CONFIG.COLOR.ink : '#ffffff', icon: 'icon_six_smash' });
     b.add('title.modeWicket', cx + 20, 116, 410, 96, () => this._choose('rush'), { size: 40, color: this.game === 'rush' ? '#3ddc84' : '#5b6570', textColor: this.game === 'rush' ? CONFIG.COLOR.ink : '#ffffff', icon: 'icon_wicket_rush' });
     // ruleset cards (tap areas; drawn by the screen)
-    this._cards().forEach((c) => { const bt = b.add(() => '', c.x, c.y, c.w, c.h, () => { this.sel = c.id; this._layout(); }); bt.invisible = true; });
+    this._cards().forEach((c) => { const bt = b.add(() => '', c.x, c.y, c.w, c.h, () => { if (Profile.open(Save.data, 'ruleset', c.id)) { this.sel = c.id; this._layout(); } else Sound.play('ui_error'); }); bt.invisible = true; });
     // right column: player, difficulty, play
     const rx = cx + 260;
     b.add('chal.changePlayer', rx + 452, 636, 190, 92, () => { if (this.options) ChallengePicker.open(this); }, { size: 28, color: '#9be7ff', disabled: () => !this.options });
@@ -111,6 +111,14 @@ const ChallengeHubScene = {
 
   _drawCard(ctx, c) {
     const on = c.id === this.sel, rec = Challenge.record(Save.data, c.id), col = this.game === 'six' ? '#ff7a3a' : '#3ddc84';
+    if (!Profile.open(Save.data, 'ruleset', c.id)) {
+      // opens with the Global Profile Level (plan 21.1: new challenge rulesets)
+      R.roundRect(c.x, c.y, c.w, c.h, 26, 'rgba(20,24,30,0.9)', '#5b6570', 3);
+      Sprites.ui('mode_locked', c.x + c.w / 2, c.y + 90, 110, 110, { alpha: 0.6 });
+      R.text(T('chal.rs.' + c.id), c.x + c.w / 2, c.y + 190, 28, '#8a96a3');
+      R.text(T('profile.lockedAt', { n: Profile.levelOf('ruleset', c.id) }), c.x + c.w / 2, c.y + 250, 22, '#ffd23f', 'center', false);
+      return;
+    }
     R.roundRect(c.x + 6, c.y + 8, c.w, c.h, 26, 'rgba(0,0,0,0.45)');
     R.roundRect(c.x, c.y, c.w, c.h, 26, on ? 'rgba(30,48,72,0.97)' : 'rgba(10,22,40,0.9)', on ? '#ffd23f' : col, on ? 7 : 4);
     Sprites.ui(c.r.icon, c.x + c.w / 2, c.y + 80, 130, 110);

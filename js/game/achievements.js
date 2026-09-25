@@ -106,6 +106,10 @@ const MatchFacts = {
     // results
     const dec = inns[inns.length - 1];
     if (won && inns.length > 2) f.superOverWin = 1;
+    // Legend difficulty (plan 20): a win, and the secret wicket + six + catch
+    const legend = Match.difficulty === 'legend';
+    f.legendWin = won && legend ? 1 : 0;
+    f.legendTriple = legend && f.wickets >= 1 && f.sixes >= 1 && f.catches >= 1 ? 1 : 0;
     if (won && dec && dec.log && dec.log.length && dec.log[dec.log.length - 1].n === dec.maxBalls && dec.log[dec.log.length - 1].k === 'l') f.lastBallWin = 1;
     if (won && main.length === 2) {
       const [a, b] = main;
@@ -168,6 +172,9 @@ const Achievements = {
       techsDiscovered: Object.keys((save.collection && save.collection.techniques) || {}).length,
       mythicOwned: EQUIPMENT_DATA.items.some((it) => it.rarity === 'mythic' && Gear.owns(save, it.id)) ? 1 : 0,
       ...(typeof MyXI !== 'undefined' ? MyXI.facts(save) : {}),     // My XI (M10)
+      legendCareers: hof.filter((h) => h.legendCareer).length,                   // Hard Way (M12)
+      formatsWon: ['quick5', 'quick10', 'quick20'].filter((f) => save.matches && save.matches[f] && save.matches[f].won > 0).length,
+      profileLevel: typeof Profile !== 'undefined' ? Profile.level(save) : 1,
       ...(typeof Challenge !== 'undefined' ? Challenge.facts(save) : {}),        // Six Smash / Wicket Rush medals (M11)
       ...(typeof Missions !== 'undefined' ? Missions.accountFacts(save) : {}),   // Missions (M11)
     };

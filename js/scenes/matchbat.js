@@ -82,7 +82,8 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     // Reading the variation: a deceptive bowler shows it later, or not at all.
     const Rd = PLAYER_DATA.duel.read, dec = Teams.u(bowl.stats.deception);
     this.readAt = this.del.variation && rng.chance(Rd.hideChance * dec) ? null : Rd.showAt[0] + (Rd.showAt[1] - Rd.showAt[0]) * dec;
-    this._baseWindow = Duel.windowScale(this.batP, bowl, { pressure: Duel.pressure(inn), fatigue, kind: this.del.kind, chase: !!inn.target }) * MissionMatch.windowK();
+    // Difficulty (plan 20): wider or tighter timing, and how much a tense chase squeezes it.
+    this._baseWindow = Duel.windowScale(this.batP, bowl, { pressure: Duel.pressure(inn) * Difficulty.k('pressure'), fatigue, kind: this.del.kind, chase: !!inn.target }) * Difficulty.k('window');
     this._techBall();
 
     this._setState('ready');
@@ -125,7 +126,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (grade !== 'miss' && !Contact.inReach(ballAtContact)) { grade = shot.grade = 'miss'; shot.missReason = 'outOfReach'; }
     else if (grade === 'miss') shot.missReason = err < 0 ? 'tooEarly' : 'tooLate';
 
-    const f = BallPlay.fate({ del: this.del, shotId, grade, bat: this.batP, bowl: this.bowlerP, releaseGrade: this.del.releaseGrade }, RNG.stream('duel'));
+    const f = BallPlay.fate({ del: this.del, shotId, grade, bat: this.batP, bowl: this.bowlerP, releaseGrade: this.del.releaseGrade, punish: Difficulty.k('punish') }, RNG.stream('duel'));
     this.fate = f;
     if (f.kind === 'contact') {
       // Early presses wait for the ball; late ones connect straight away.
@@ -226,6 +227,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
           this._setState('delivery');
           BatControls.enabled = true;
           Sound.play('release');
+          Sound.play(this.del.kind === 'spin' ? 'sfx_delivery_spin' : 'sfx_delivery_fast');
           if (this.extraKind === 'noball') {
             Effects.text(T('outcome.noball'), CONFIG.LOGICAL_W / 2, 300, '#ffb36b', 64, { life: 1.4 });
             Sound.play('crowdCheer', { gain: 0.4 });
@@ -250,7 +252,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
           RunControls.risk = h.running.risk(h.t);
           RunControls.canCancel = h.running.canCancel();
           RunControls.queued = h.running.queued;
-          if (h.running.runOut && !this.stumpsBroken) { this.stumpsBroken = true; this.stumpsBrokenAt = Stadium._time; Sound.play('stumps'); }
+          if (h.running.runOut && !this.stumpsBroken) { this.stumpsBroken = true; this.stumpsBrokenAt = Stadium._time; Sound.play('sfx_runout'); Sound.play('sfx_bails'); }
         }
         const key = this._stepInPlay();
         if (key) this._endBall(key);
@@ -319,6 +321,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (MissionMatch.on) MissionMatch.afterBall(inn);          // a mission can be decided before the innings ends
     if (res.overDone || inn.ended) Match.overDone(inn);
     if (Tech.mine(this.batterP)) Tech.batBallEnd(key, kind === 'legal', res.wicket ? wicket : null);
+    if (MissionMatch.on && MissionMatch.m.tutorial) TutorialCoach.ballEnd({ shot: this.shot && this.shot.id, grade: this.shot && this.shot.grade, key, runs: batRuns, boundary });
     TechUI.btns = [];
     this._showBallResult(key, res, batRuns, wicket, true);
   },
@@ -391,7 +394,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     this._drawFlashMarker(ctx);
     TechUI.draw(ctx);
     if (MyXIMatch.on) TacticBar.draw(ctx);
-    if (MissionMatch.on) MissionHud.draw(ctx, this);
+    if (MissionMatch.on) { if (MissionMatch.m.tutorial) TutorialCoach.draw(ctx, this); else MissionHud.draw(ctx, this); }
   },
 
   _drawTimingRing(ctx) {
@@ -407,11 +410,12 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     const r = 26 + Math.max(0, left) * 260;
     const perfect = Math.abs(left) <= w.perfect;
     const good = Math.abs(left) <= w.good;
-    const col = perfect ? '#ffd23f' : good ? '#9cff6a' : 'rgba(255,255,255,0.85)';
+    const A = Access.ring(perfect, good), col = A.col;           // colour-safe / high-contrast targeting (Settings)
     const a = Math.min(1, (0.75 - left) / 0.25);
     ctx.globalAlpha = Math.max(0, a);
-    R.circle(p.x, p.y, r, null, CONFIG.COLOR.ink, 9);
-    R.circle(p.x, p.y, r, null, col, 5);
+    R.circle(p.x, p.y, r, null, CONFIG.COLOR.ink, A.outline);
+    R.circle(p.x, p.y, r, null, col, A.w);
+    if (A.label) R.text(T(perfect ? 'timing.perfect' : 'timing.good'), p.x, p.y - r - 26, 24, col);
     R.circle(p.x, p.y, 22, null, 'rgba(255,255,255,0.5)', 3);
     ctx.globalAlpha = 1;
   },

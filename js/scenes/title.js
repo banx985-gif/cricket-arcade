@@ -8,9 +8,13 @@ const TitleScene = {
   resumeBtns: new ButtonList(),
   resume: null,                   // unfinished match checkpoint, if any
 
+  lockMsg: null,
   enter() {
     this._t = 0;
     this.resume = BootScene.pendingResume;
+    // First launch (plan 39): basic settings, then the tutorial career (or skip it).
+    this.welcome = !this.resume && Tutorial.state(Save.data).step === 'welcome' && !Save.data.careerSlots.some(Boolean);
+    if (this.welcome) WelcomePanel.layout(() => { this.welcome = false; this._layout(); });
     Effects.init();
     this._layout();
   },
@@ -24,13 +28,13 @@ const TitleScene = {
       card(0, { mode: 'careerselect', title: 'title.modeCareer', sub: 'title.careerSub', career: true,
         icon: 'stage_local', heroes: ['hero_allrounder'], color: '#9b5cff',
         strip: ['grade_s', 'career_form_hot', 'train_timing_cage', 'badge_india'] }),
-      card(1, { mode: 'challenges', params: { game: 'six' }, game: 'six', title: 'title.mode', sub: 'title.sixSub',
+      card(1, { mode: 'challenges', params: { game: 'six' }, game: 'six', lock: 'sixsmash', title: 'title.mode', sub: 'title.sixSub',
         icon: 'icon_six_smash', heroes: ['batter'], color: '#ff5a1f',
         strip: ['kit_bat', 'kit_helmet', 'kit_gloves', 'kit_pads'] }),
-      card(2, { mode: 'toss', saveId: MATCH_DATA.defaultFormat, title: 'title.modeMatch', sub: 'title.matchSub',
+      card(2, { mode: 'quickmatch', lock: 'quickmatch', saveId: MATCH_DATA.defaultFormat, title: 'title.modeMatch', sub: 'title.matchSub',
         icon: 'icon_quick_match', heroes: ['batter', 'bowler'], color: '#ffb400', match: true,
         strip: ['icon_run', 'marker_six', 'marker_four', 'marker_wicket'] }),
-      card(3, { mode: 'challenges', params: { game: 'rush' }, game: 'rush', title: 'title.modeWicket', sub: 'title.wicketSub',
+      card(3, { mode: 'challenges', params: { game: 'rush' }, game: 'rush', lock: 'wicketrush', title: 'title.modeWicket', sub: 'title.wicketSub',
         icon: 'icon_wicket_rush', heroes: ['bowler'], color: '#1f8a4c',
         strip: BOWLING_DATA.deliveries.map(d => d.icon) }),
     ];
@@ -38,14 +42,19 @@ const TitleScene = {
     this.topBtns.clear();
     this.topBtns.add('settings.title', s.right - 400, s.top + 24, 370, 88, () => Scenes.go('settings'),
       { size: 34, color: '#e9eef5' });
+    // Locked modes are greyed; a tap says what opens them (plan 21.6).
+    const locked = (id) => () => !Modes.unlocked(Save.data, id);
+    const why = (id) => () => { this.lockMsg = { text: T('mode.locked', { m: T('mode.name.' + id), how: T(Modes.hint(id)) }), t: 0 }; };
     this.topBtns.add('title.collection', s.left + 24, s.top + 24, 330, 96, () => Scenes.go('collection', { back: 'title' }),
-      { size: 28, color: '#9be7ff', icon: 'icon_collection' });
-    this.topBtns.add('title.records', s.left + 24, s.top + 132, 330, 90, () => Scenes.go('records', { back: 'title' }), { size: 28, color: '#e9eef5', icon: 'meta_records' });
-    this.topBtns.add('title.hof', s.left + 24, s.top + 232, 330, 80, () => Scenes.go('halloffame', { back: 'title' }), { size: 24, color: '#ffd23f' });
+      { size: 28, color: '#9be7ff', icon: 'icon_collection', disabled: locked('collection'), onLocked: why('collection') });
+    this.topBtns.add('title.records', s.left + 24, s.top + 132, 330, 90, () => Scenes.go('records', { back: 'title' }), { size: 28, color: '#e9eef5', icon: 'meta_records', disabled: locked('records'), onLocked: why('records') });
+    this.topBtns.add('title.hof', s.left + 24, s.top + 232, 160, 80, () => Scenes.go('halloffame', { back: 'title' }), { size: 20, color: '#ffd23f', disabled: locked('records'), onLocked: why('records') });
+    this.topBtns.add('title.trophies', s.left + 194, s.top + 232, 160, 80, () => Scenes.go('trophyroom'), { size: 20, color: '#ffb13b', disabled: locked('records'), onLocked: why('records') });
     // My XI (M10): unlocked by the first retirement.
     // Missions (M11): 48 handcrafted scenarios.
     this.topBtns.add('title.missions', s.right - 400, s.top + 228, 370, 88, () => Scenes.go('missions'), { size: 30, color: '#ffb13b', icon: 'icon_missions',
-      sub: () => T('title.missionStars', { n: Missions.totalStars(Save.data), t: MISSION_DATA.list.length * 3 }) });
+      disabled: locked('missions'), onLocked: why('missions'),
+      sub: () => (Modes.unlocked(Save.data, 'missions') ? T('title.missionStars', { n: Missions.totalStars(Save.data), t: MISSION_DATA.list.length * 3 }) : T('title.lockedShort')) });
     this.topBtns.add('title.myxi', s.right - 400, s.top + 122, 370, 96, () => Scenes.go(MyXI.club(Save.data) ? 'myxihome' : 'myxicreate'), { size: 36, color: '#9cff6a', icon: 'myxi_badge',
       disabled: () => !MyXI.unlocked(Save.data), sub: () => (MyXI.unlocked(Save.data) ? (MyXI.club(Save.data) ? MyXI.club(Save.data).name : T('myxi.createClub')) : T('myxi.locked')) });
     this.resumeBtns.clear();
@@ -88,6 +97,7 @@ const TitleScene = {
     this._t += dt;
     Stadium.update(dt);
     Effects.update(dt);
+    if (this.lockMsg) { this.lockMsg.t += dt; if (this.lockMsg.t > 3) this.lockMsg = null; }
   },
 
   _cardAt(x, y) {
@@ -99,6 +109,7 @@ const TitleScene = {
     Sound.unlock();
     Fullscreen.request();
     if (this.resume) { this.resumeBtns.down(id, x, y); return; }
+    if (this.welcome) { WelcomePanel.buttons.down(id, x, y); return; }
     if (this.topBtns.down(id, x, y)) return;
     const c = this._cardAt(x, y);
     if (c && c.id === null) { c.id = id; c.pressed = true; }
@@ -106,18 +117,22 @@ const TitleScene = {
   pointerMove(id, x, y) {
     if (Dev.pointerMove(id, x, y)) return;
     if (this.resume) { this.resumeBtns.move(id, x, y); return; }
+    if (this.welcome) { WelcomePanel.buttons.move(id, x, y); return; }
     this.topBtns.move(id, x, y);
     for (const c of this.cards) if (c.id === id) c.pressed = this._cardAt(x, y) === c;
   },
   pointerUp(id) {
     if (Dev.pointerUp(id)) return;
     if (this.resume) { this.resumeBtns.up(id); return; }
+    if (this.welcome) { WelcomePanel.buttons.up(id); return; }
     if (this.topBtns.up(id)) return;
     for (const c of this.cards) {
       if (c.id !== id) continue;
       const go = c.pressed;
       c.id = null; c.pressed = false;
-      if (go) { Sound.play('uiTap'); Scenes.go(c.mode, c.params); }
+      if (!go) continue;
+      if (c.lock && !Modes.unlocked(Save.data, c.lock)) { Sound.play('ui_error'); this.lockMsg = { text: T('mode.locked', { m: T('mode.name.' + c.lock), how: T(Modes.hint(c.lock)) }), t: 0 }; continue; }
+      Sound.play('uiTap'); Scenes.go(c.mode, c.params);
     }
   },
   keyDown(code) {
@@ -127,10 +142,12 @@ const TitleScene = {
       return;
     }
     if (code === 'Digit1' || code === 'Enter') { Sound.unlock(); Scenes.go('careerselect'); }
-    if (code === 'Digit2') { Sound.unlock(); Scenes.go('challenges', { game: 'six' }); }
-    if (code === 'Digit3') { Sound.unlock(); Scenes.go('toss'); }
-    if (code === 'Digit4') { Sound.unlock(); Scenes.go('challenges', { game: 'rush' }); }
-    if (code === 'KeyM') { Sound.unlock(); Scenes.go('missions'); }
+    if (this.welcome) return;
+    const open = (id) => Modes.unlocked(Save.data, id);
+    if (code === 'Digit2' && open('sixsmash')) { Sound.unlock(); Scenes.go('challenges', { game: 'six' }); }
+    if (code === 'Digit3' && open('quickmatch')) { Sound.unlock(); Scenes.go('quickmatch'); }
+    if (code === 'Digit4' && open('wicketrush')) { Sound.unlock(); Scenes.go('challenges', { game: 'rush' }); }
+    if (code === 'KeyM' && open('missions')) { Sound.unlock(); Scenes.go('missions'); }
     if (code === 'KeyO') Scenes.go('settings');
     if (code === 'KeyC') Scenes.go('collection', { back: 'title' });
   },
@@ -160,8 +177,27 @@ const TitleScene = {
     Sprites.ui('icon_settings', Display.safe.right - 356, Display.safe.top + 68, 60, 60);
     // The studio logo, small in the bottom-left corner (the art is about 180 x 220: never above ~2x).
     Sprites.ui('logo_banx_gamex', Display.safe.left + 74, Display.safe.bottom - 92, 110, 132, { alpha: 0.95 });
-    R.text(T('title.pcHint2'), cx, 1010, 24, '#b8c6d6', 'center', false);
+    R.text(T('title.pcHint2'), cx, 1040, 20, '#b8c6d6', 'center', false);
+    this._drawProfile(ctx);
+    if (this.lockMsg) {
+      const a = Math.min(1, (3 - this.lockMsg.t) / 0.3);
+      ctx.save(); ctx.globalAlpha = Math.max(0, a);
+      R.roundRect(cx - 560, 880, 1120, 76, 26, 'rgba(40,14,14,0.95)', '#ff9d7a', 3);
+      R.text(this.lockMsg.text, cx, 918, 26, '#ffffff', 'center', false);
+      ctx.restore();
+    }
     if (this.resume) this._drawResume(ctx);
+    if (this.welcome) WelcomePanel.draw(ctx);
+  },
+
+  // The Global Profile Level (plan 21.1), bottom centre.
+  _drawProfile(ctx) {
+    const cx = CONFIG.LOGICAL_W / 2, g = Profile.state(Save.data), y = 985;
+    Sprites.ui('econ_profile_level', cx - 250, y, 64, 64);
+    R.text(T('profile.level', { n: g.level }), cx - 210, y - 12, 28, '#ffffff', 'left');
+    R.text(g.title ? T('profile.title.' + g.title) : T('profile.title.rookie'), cx + 250, y - 12, 20, '#ffd23f', 'right', false);
+    const need = Profile.xpFor(g.level);
+    CareerUI.meter(cx - 210, y + 12, 460, 16, g.level >= PROFILE_DATA.maxLevel ? 1 : g.xp, g.level >= PROFILE_DATA.maxLevel ? 1 : need, '#9cff6a');
   },
 
   // "You have a match in progress" box.
@@ -217,6 +253,16 @@ const TitleScene = {
     R.text(T(c.sub), x + w / 2, y + 520, 22, '#d8e4f0', 'center', false);
     const best = c.saveId && Save.data && Save.best(c.saveId);
     let line;
+    if (c.lock && !Modes.unlocked(Save.data, c.lock)) {
+      // a locked mode: dimmed, with a padlock and what opens it
+      ctx.save(); ctx.globalAlpha = 0.72; R.roundRect(x, y, w, h, 34, 'rgba(8,12,18,0.9)'); ctx.restore();
+      R.roundRect(x + 10, y + 430, w - 20, h - 440, 26, 'rgba(8,12,18,0.97)');
+      Sprites.ui('mode_locked', x + w / 2, y + 250, 150, 150);
+      R.text(T(c.title), x + w / 2, y + 480, 46, '#b8c6d6');
+      R.text(T('title.lockedShort'), x + w / 2, y + 532, 22, '#8a96a3', 'center', false);
+      R.text(T('mode.card.' + MODE_DATA.hints[c.lock]), x + w / 2, y + 568, 22, '#ffd23f', 'center', false);
+      return;
+    }
     if (c.career) {
       const n = Save.data ? Save.data.careerSlots.filter(Boolean).length : 0;
       line = n ? T('title.careersActive', { n }) : T('title.noCareer');

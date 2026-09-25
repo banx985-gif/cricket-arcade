@@ -1,7 +1,11 @@
-// Cricket Arcade — Audio (engine copied from Scrapcore ZERO, new sound list).
-// Every sound is synthesised at runtime with WebAudio — no files, nothing to
-// download. These are placeholder sounds; real recorded SFX can replace a
-// recipe later under the same id.
+// Cricket Arcade — Audio (engine from Scrapcore ZERO; M12 sound system, plan 31, 34).
+// Every sound has a named id (data/sound.js). Each id is synthesised in code for now
+// (WebAudio placeholders: no files, nothing to download). If a real recording exists
+// at assets/audio/<id>.mp3 it is used instead, automatically, with no code change.
+//
+// Buses (each with a Settings slider): music · sfx (+ ui) · crowd, under master.
+// Music: one track at a time, per screen (SOUND_DATA.sceneMusic); a quiet crowd bed
+// plays under the match screens.
 //
 // Everything is guarded: if WebAudio is unavailable, blocked, or the context
 // cannot start, the game runs silently rather than failing.
@@ -9,7 +13,7 @@
 const Sound = {
   ctx: null,
   master: null,
-  sfxGain: null,
+  bus: {},             // music / sfx / ui / crowd gains
   ready: false,
   blocked: false,
   muted: false,
@@ -17,6 +21,11 @@ const Sound = {
   _voices: 0,
   MAX_VOICES: 16,          // plan 36: max 16 simultaneous SFX
   _noiseSeed: 12345,
+  _files: {},              // id -> 'loading' | 'none' | AudioBuffer
+  _music: null,            // { id, def, step, nextT, src?, gain }
+  _musicWant: null,
+  _crowdBed: null,
+  _duck: 1,
 
   init() {
     if (this.ready || this.blocked) return;
@@ -25,20 +34,17 @@ const Sound = {
       if (!AC) { this.blocked = true; return; }
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.sfxGain = this.ctx.createGain();
 
       // Phone speakers exaggerate everything above ~5kHz; a gentle low-pass,
-      // a high-shelf cut and a compressor keep synth SFX from sounding harsh.
+      // a high-shelf cut and a compressor keep synth sounds from being harsh.
       this.tone = this.ctx.createBiquadFilter();
       this.tone.type = 'lowpass';
       this.tone.frequency.value = 5600;
       this.tone.Q.value = 0.4;
-
       this.shelf = this.ctx.createBiquadFilter();
       this.shelf.type = 'highshelf';
       this.shelf.frequency.value = 3200;
       this.shelf.gain.value = -5;
-
       this.comp = this.ctx.createDynamicsCompressor();
       this.comp.threshold.value = -20;
       this.comp.knee.value = 24;
@@ -46,13 +52,16 @@ const Sound = {
       this.comp.attack.value = 0.004;
       this.comp.release.value = 0.2;
 
-      this.sfxGain.connect(this.tone);
+      for (const b of ['music', 'sfx', 'ui', 'crowd']) { this.bus[b] = this.ctx.createGain(); this.bus[b].connect(this.tone); }
       this.tone.connect(this.shelf);
       this.shelf.connect(this.comp);
       this.comp.connect(this.master);
       this.master.connect(this.ctx.destination);
       this.ready = true;
       this.applyVolume();
+      this._musicTimer = setInterval(() => this._tickMusic(), 60);
+      if (this._musicWant) { const w = this._musicWant; this._musicWant = null; this.music(w); }
+      if (this._crowdWant) this.crowdBed(true);
     } catch (e) {
       this.blocked = true;
     }
@@ -74,11 +83,27 @@ const Sound = {
     this.applyVolume();
   },
 
+  // The Settings sliders (0–100) -> the bus volumes.
+  vol(key) {
+    const s = (typeof Save !== 'undefined' && Save.data && Save.data.settings) || {};
+    const v = s[key] !== undefined ? s[key] : (typeof SETTINGS_DATA !== 'undefined' ? SETTINGS_DATA.defaults[key] : 80);
+    return Math.max(0, Math.min(100, v)) / 100;
+  },
   applyVolume() {
     if (!this.ready) return;
-    this.master.gain.value = this.muted ? 0 : 0.85;
-    this.sfxGain.gain.value = 0.5;
+    const t = this.ctx.currentTime;
+    const set = (g, v) => { g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(v, t, 0.05); };
+    set(this.master, this.muted ? 0 : 0.85 * this.vol('master'));
+    set(this.bus.sfx, 0.5 * this.vol('sfx'));
+    set(this.bus.ui, 0.5 * this.vol('sfx'));
+    set(this.bus.crowd, 0.55 * this.vol('crowd'));
+    set(this.bus.music, 0.55 * this.vol('music') * this._duck);
   },
+
+  // ---- every id (for the tests and the sound list) ----
+  ids() { return Object.keys(SOUND_DATA.sfx).concat(Object.keys(SOUND_DATA.music)); },
+  resolve(id) { const a = SOUND_DATA.aliases[id]; return a || id; },
+  known(id) { const r = this.resolve(id); return !!(SOUND_DATA.sfx[r] || SOUND_DATA.music[r]); },
 
   _now() { return this.ctx.currentTime; },
 
@@ -88,7 +113,21 @@ const Sound = {
     return this._noiseSeed / 4294967296;
   },
 
-  _env(node, t, attack, hold, release, peak) {
+  // A real recording for this id, if one has been added (fetched once, in the background).
+  _file(id) {
+    const f = this._files[id];
+    if (f && f !== 'loading' && f !== 'none') return f;
+    if (f) return null;
+    if (typeof location === 'undefined' || !/^https?:$/.test(location.protocol) || typeof fetch === 'undefined') { this._files[id] = 'none'; return null; }
+    this._files[id] = 'loading';
+    fetch(SOUND_DATA.fileDir + id + SOUND_DATA.fileExt).then((r) => (r.ok ? r.arrayBuffer() : null))
+      .then((buf) => (buf ? this.ctx.decodeAudioData(buf) : null))
+      .then((ab) => { this._files[id] = ab || 'none'; if (ab && this._music && this._music.id === id) { const m = this._music; this._music = null; this.music(m.id); } })
+      .catch(() => { this._files[id] = 'none'; });
+    return null;
+  },
+
+  _env(node, t, attack, hold, release, peak, bus) {
     const g = this.ctx.createGain();
     attack = Math.max(attack, 0.004);
     g.gain.setValueAtTime(0, t);
@@ -96,7 +135,7 @@ const Sound = {
     g.gain.setValueAtTime(Math.max(0.0001, peak), t + attack + hold);
     g.gain.exponentialRampToValueAtTime(0.0001, t + attack + hold + release);
     node.connect(g);
-    g.connect(this.sfxGain);
+    g.connect(this._out || this.bus.sfx);
     this._voices++;
     setTimeout(() => { this._voices = Math.max(0, this._voices - 1); },
       (attack + hold + release) * 1000 + 60);
@@ -122,52 +161,33 @@ const Sound = {
     return f;
   },
 
-  // ---- the sound list -----------------------------------------------------
-  DEFS: {
-    uiTap:      { kind: 'tone',  freq: 520, type: 'sine', a: 0.005, h: 0.01, r: 0.07, gain: 0.14, vary: 0.02, lp: 2400 },
-    batHit:     { kind: 'thump', freq: 360, a: 0.002, h: 0.012, r: 0.10, gain: 0.34, vary: 0.06, lp: 3400, noise: 1.0 },
-    batPerfect: { kind: 'crack', freq: 300, a: 0.002, h: 0.02, r: 0.26, gain: 0.45, vary: 0.03, lp: 4200 },
-    batDefend:  { kind: 'thump', freq: 240, a: 0.003, h: 0.008, r: 0.07, gain: 0.22, vary: 0.05, lp: 2000, noise: 0.5 },
-    edge:       { kind: 'thump', freq: 900, a: 0.002, h: 0.004, r: 0.05, gain: 0.18, vary: 0.1, lp: 4200, noise: 1.2 },
-    swish:      { kind: 'noise', freq: 1200, a: 0.03, h: 0.02, r: 0.10, gain: 0.10, vary: 0.1, lp: 3000 },
-    bounce:     { kind: 'thump', freq: 120, a: 0.003, h: 0.01, r: 0.08, gain: 0.16, vary: 0.08, lp: 900, noise: 0.6 },
-    stumps:     { kind: 'clatter', freq: 700, a: 0.002, h: 0.02, r: 0.3, gain: 0.34, vary: 0.05, lp: 4200 },
-    catchIt:    { kind: 'thump', freq: 180, a: 0.003, h: 0.01, r: 0.1, gain: 0.25, vary: 0.04, lp: 1400, noise: 0.8 },
-    release:    { kind: 'noise', freq: 700, a: 0.02, h: 0.01, r: 0.08, gain: 0.07, vary: 0.1, lp: 2000 },
-    crowdCheer: { kind: 'crowd', freq: 900, a: 0.25, h: 0.6, r: 1.4, gain: 0.30, vary: 0.05, lp: 2600 },
-    crowdRoar:  { kind: 'crowd', freq: 800, a: 0.12, h: 1.1, r: 1.8, gain: 0.42, vary: 0.05, lp: 3000 },
-    crowdGroan: { kind: 'crowd', freq: 420, a: 0.15, h: 0.3, r: 0.8, gain: 0.22, vary: 0.05, lp: 1200, sweepDown: true },
-    six:        { kind: 'arp',   freq: 523, a: 0.01, h: 0.07, r: 0.3, gain: 0.22, vary: 0, lp: 3200 },
-    four:       { kind: 'arp2',  freq: 440, a: 0.01, h: 0.06, r: 0.22, gain: 0.18, vary: 0, lp: 3000 },
-    combo:      { kind: 'sweep', from: 300, to: 900, a: 0.01, h: 0.05, r: 0.2, gain: 0.14, vary: 0, lp: 2800, type: 'triangle' },
-    wicket:     { kind: 'sweep', from: 360, to: 90, a: 0.01, h: 0.08, r: 0.45, gain: 0.26, vary: 0, lp: 1400, type: 'triangle' },
-    fanfare:    { kind: 'arp',   freq: 392, a: 0.02, h: 0.12, r: 0.45, gain: 0.26, vary: 0, lp: 3000 },
-  },
-
-  THROTTLE: { bounce: 0.06, uiTap: 0.04 },
-
+  // Play a sound by id (or one of the older names). opts: { gain, pitch }
   play(id, opts) {
     if (!this.ready || this.blocked || this.muted) return false;
     if (this.ctx.state === 'suspended') return false;
-    const def = this.DEFS[id];
+    const rid = this.resolve(id), def = SOUND_DATA.sfx[rid];
     if (!def) return false;
     if (this._voices > this.MAX_VOICES) return false;
 
     const t = this._now();
-    const gap = this.THROTTLE[id];
-    if (gap) {
-      if (this._lastPlay[id] && t - this._lastPlay[id] < gap) return false;
-      this._lastPlay[id] = t;
+    if (def.throttle) {
+      if (this._lastPlay[rid] && t - this._lastPlay[rid] < def.throttle) return false;
+      this._lastPlay[rid] = t;
     }
-
     const o = opts || {};
     const vary = def.vary || 0;
     const pitch = (1 + (this._rand() * 2 - 1) * vary) * (o.pitch || 1);
     const gain = (def.gain || 0.2) * (o.gain !== undefined ? o.gain : 1);
-
     try {
-      this._render(def, t, pitch, gain);
+      this._out = this.bus[def.bus] || this.bus.sfx;
+      const file = this._file(rid);
+      if (file) {
+        const src = this.ctx.createBufferSource(), g = this.ctx.createGain();
+        src.buffer = file; src.playbackRate.value = pitch; g.gain.value = o.gain !== undefined ? o.gain : 1;
+        src.connect(g); g.connect(this._out); src.start(t);
+      } else this._render(def, t, pitch, gain);
     } catch (e) { /* never let audio break the frame */ }
+    this._out = null;
     return true;
   },
 
@@ -279,6 +299,141 @@ const Sound = {
         osc.start(st);
         osc.stop(st + def.a + def.h + def.r + 0.02);
       });
+    } else if (def.kind === 'chord') {
+      // A shimmering held chord (rare reveal).
+      [0, 4, 7, 11, 14].forEach((semi, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = i % 2 ? 'sine' : 'triangle';
+        const st = t + i * 0.05;
+        osc.frequency.setValueAtTime(def.freq * Math.pow(2, semi / 12), st);
+        this._env(osc, st, def.a, def.h, def.r, gain * 0.3);
+        osc.start(st);
+        osc.stop(st + dur + 0.05);
+      });
+    }
+  },
+
+  // ---- the crowd bed under match screens (a looped, filtered noise) ----
+  crowdBed(on) {
+    this._crowdWant = !!on;
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    if (on && !this._crowdBed) {
+      const def = SOUND_DATA.sfx.crowd_ambience;
+      const file = this._file('crowd_ambience');
+      const src = file ? this.ctx.createBufferSource() : this._noise(2.5);
+      if (file) src.buffer = file;
+      src.loop = true;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'bandpass'; f.frequency.value = def.freq; f.Q.value = 0.35;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(def.gain * 1.6, t + def.a);
+      if (file) src.connect(g); else { src.connect(f); f.connect(g); }
+      g.connect(this.bus.crowd);
+      src.start(t);
+      this._crowdBed = { src, g };
+    } else if (!on && this._crowdBed) {
+      const b = this._crowdBed;
+      this._crowdBed = null;
+      b.g.gain.cancelScheduledValues(t); b.g.gain.setTargetAtTime(0, t, 0.3);
+      setTimeout(() => { try { b.src.stop(); } catch (e) { /* already stopped */ } }, 1500);
+    }
+  },
+
+  // ---- music (one track at a time) ----
+  music(id) {
+    if (!id) return;
+    if (!this.ready) { this._musicWant = id; return; }
+    if (this._music && this._music.id === id) return;
+    this.stopMusic();
+    const def = SOUND_DATA.music[id];
+    if (!def) return;
+    const t = this.ctx.currentTime, g = this.ctx.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1, t + 1.2);
+    g.connect(this.bus.music);
+    const m = this._music = { id, def, step: 0, nextT: t + 0.15, gain: g };
+    const file = this._file(id);
+    if (file) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = file; src.loop = true; src.connect(g); src.start(t);
+      m.src = src;
+    }
+  },
+  stopMusic() {
+    const m = this._music;
+    if (!m || !this.ready) { this._music = null; return; }
+    this._music = null;
+    const t = this.ctx.currentTime;
+    m.gain.gain.cancelScheduledValues(t); m.gain.gain.setTargetAtTime(0, t, 0.25);
+    setTimeout(() => { try { if (m.src) m.src.stop(); m.gain.disconnect(); } catch (e) { /* gone */ } }, 1600);
+  },
+  // Which music for a screen; match screens duck the music under the crowd.
+  forScene(name) {
+    const S = SOUND_DATA;
+    let id = S.sceneMusic[name];
+    if (id === 'match') {
+      const fx = (typeof CareerMatch !== 'undefined' && CareerMatch.on && CareerMatch.fixture) || (typeof MyXIMatch !== 'undefined' && MyXIMatch.on && MyXIMatch.fixture) || null;
+      id = fx && fx.rival ? 'music_rival' : fx && (fx.kind === 'final' || fx.final) ? 'music_final' : 'music_match';
+    }
+    const inMatch = S.crowdScenes.includes(name);
+    this._duck = inMatch ? S.inMatchMusic : 1;
+    if (id) this.music(id);
+    this.crowdBed(inMatch);
+    this.applyVolume();
+  },
+
+  // The placeholder music: a soft generated loop (pad + bass + arpeggio + light beat),
+  // scheduled a little ahead so it never stutters.
+  _tickMusic() {
+    const m = this._music;
+    if (!m || m.src || !this.ready || this.ctx.state !== 'running') return;
+    const now = this.ctx.currentTime, d = m.def, step = 60 / d.bpm / 2;
+    if (m.nextT < now) m.nextT = now + 0.05;
+    while (m.nextT < now + 0.3) {
+      this._musicStep(m, m.step, m.nextT, step);
+      m.step++; m.nextT += step;
+    }
+  },
+  _musicStep(m, s, t, step) {
+    const d = m.def, ctx = this.ctx, out = m.gain;
+    const bar = Math.floor(s / 8), b8 = s % 8;
+    const root = d.root * Math.pow(2, d.chords[bar % d.chords.length] / 12);
+    const minor = d.style === 'tense';
+    const third = minor ? 3 : 4;
+    const note = (freq, st, len, type, g, lp) => {
+      const o = ctx.createOscillator(), gg = ctx.createGain(), f = ctx.createBiquadFilter();
+      o.type = type; o.frequency.setValueAtTime(freq, st);
+      f.type = 'lowpass'; f.frequency.value = lp || 2200;
+      gg.gain.setValueAtTime(0, st); gg.gain.linearRampToValueAtTime(g, st + Math.min(0.08, len * 0.3));
+      gg.gain.exponentialRampToValueAtTime(0.0001, st + len);
+      o.connect(f); f.connect(gg); gg.connect(out);
+      o.start(st); o.stop(st + len + 0.05);
+    };
+    // pad: the chord for the whole bar
+    if (b8 === 0) for (const semi of [0, third, 7]) note(root * Math.pow(2, semi / 12), t, step * 8, 'sine', 0.035, 1600);
+    // bass
+    const bassEvery = d.style === 'calm' ? 4 : 2;
+    if (b8 % bassEvery === 0) note(root / 2, t, step * bassEvery * 0.9, 'triangle', 0.07, 700);
+    // arpeggio
+    if (d.style !== 'calm' || b8 % 2 === 0) {
+      const arp = [0, third, 7, 12, 7, third, 0, 7][b8];
+      note(root * 2 * Math.pow(2, arp / 12), t, step * 0.9, 'triangle', d.style === 'calm' ? 0.022 : 0.028, 3000);
+    }
+    // a light beat
+    if (d.style !== 'calm') {
+      if (b8 % 4 === 0) note(62, t, 0.18, 'sine', 0.12, 400);
+      if (b8 % 2 === 1) {
+        const n = this._noise(0.05), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        f.type = 'highpass'; f.frequency.value = 6000;
+        g.gain.setValueAtTime(0.018, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+        n.connect(f); f.connect(g); g.connect(out); n.start(t);
+      }
+      if (d.style === 'drive' && (b8 === 2 || b8 === 6)) {
+        const n = this._noise(0.12), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.7;
+        g.gain.setValueAtTime(0.04, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+        n.connect(f); f.connect(g); g.connect(out); n.start(t);
+      }
     }
   },
 };

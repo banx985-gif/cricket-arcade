@@ -34,7 +34,7 @@ const BallPlay = {
       const p = Duel.beatenChance({
         grade: o.grade, shotId: o.shotId, threat: del.threat || 1,
         releaseGrade: o.releaseGrade || del.releaseGrade || 'ai', stumpsX: del.sim.stumpsX, bat: o.bat, bowl: o.bowl,
-      });
+      }) * (o.punish || 1);                     // difficulty: how hard a mistimed shot is punished
       if (rng.chance(p)) return { kind: 'beaten', result: Duel.missResult(del, false, rng) || 'bowled' };
     }
     return { kind: 'contact', result: null };

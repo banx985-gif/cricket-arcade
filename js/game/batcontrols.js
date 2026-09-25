@@ -32,13 +32,16 @@ const BatControls = {
   },
 
   layout() {
+    if (!this.BASE) this.BASE = this.LAYOUT;
+    this.LAYOUT = ControlPrefs.scaled(this.BASE);            // Settings: control size
     const s = Display.safe, L = this.LAYOUT;
-    this.home.x = s.left + L.padX;
+    this.home.x = ControlPrefs.fromLeft(s, L.padX);          // Settings: left-handed layout mirrors it
     this.home.y = s.bottom - L.padY;
     for (const k of Object.keys(L.buttons)) {
       const b = L.buttons[k];
-      this.btn[k].x = s.right - b.dx;
+      this.btn[k].x = ControlPrefs.fromRight(s, b.dx);
       this.btn[k].y = s.bottom - b.dy;
+      this.btn[k].r = b.r;
     }
   },
 
@@ -60,7 +63,7 @@ const BatControls = {
     }
     // Aim pad: anywhere in the lower-left region; the pad follows the thumb.
     const s = Display.safe;
-    const inZone = x < s.left + (s.right - s.left) * 0.42 && y > s.top + 260;
+    const inZone = ControlPrefs.aimSide(s, x, 0.42) && y > s.top + 260;
     if (inZone && this.pad.id === null) {
       const p = this.pad;
       p.id = id;
@@ -139,7 +142,9 @@ const BatControls = {
       const l = Math.hypot(kx, ky);
       return { x: kx / l, y: ky / l, active: true };
     }
-    if (p.active && (p.x || p.y)) return { x: p.x, y: p.y, active: true };
+    // Settings: batting direction sensitivity
+    const sens = typeof GameSettings !== 'undefined' ? GameSettings.factor('batSensitivity') : 1;
+    if (p.active && (p.x || p.y)) return { x: Math.max(-1, Math.min(1, p.x * sens)), y: p.y, active: true };
     if (this._time - p.lastT < this.LAYOUT.aimMemory && (p.lastX || p.lastY)) {
       return { x: p.lastX, y: p.lastY, active: true };
     }

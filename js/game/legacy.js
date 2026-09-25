@@ -78,6 +78,7 @@ const Legacy = {
       signatureTech: signature, signatureMastery: signature ? SkillTree.masteryLevel(c, signature) : null,
       tree: SkillTree.legacySnapshot(c),
       trophies: (c.trophies || []).slice(), captain: !!c.captain,
+      legendCareer: (c.difficulty || []).length > 0 && c.difficulty.every((d) => d.difficulty === 'legend'),
       stageReached: Career.stage(c).n, club: c.club ? c.club.name : null, franchise: c.contract ? c.contract.franchise : null,
       rivals: Object.keys((c.hooks && c.hooks.rivals) || {}).filter((id) => c.hooks.rivals[id].beaten),
       records: totals,
@@ -94,6 +95,7 @@ const Legacy = {
   // Frees the slot (the caller saves). Returns { snap, marks, firstRetirement }.
   retire(c, save) {
     const snap = this.snapshot(c, save);
+    if (typeof Profile !== 'undefined') Profile.add(save, PROFILE_DATA.xp.careerComplete, 'retire');       // a finished career (M12)
     save.hallOfFame = save.hallOfFame || [];
     const first = save.hallOfFame.length === 0;
     snap.marks = this.marks(snap);

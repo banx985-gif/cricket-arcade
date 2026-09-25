@@ -49,7 +49,7 @@ const BowlerPicker = {
   confirm() {
     if (!this.open) return;
     const ok = this.options.find((o) => o.p.id === this.bowlerId && o.ok);
-    if (!ok) { Sound.play('edge'); return; }
+    if (!ok) { Sound.play('ui_error'); return; }
     const field = this.fieldId === 'auto' ? this.suggested.fieldId : this.fieldId;
     const done = this.onDone;
     this.hide();
@@ -64,13 +64,13 @@ const BowlerPicker = {
     const c = this._hit(this.cards, x, y);
     if (c) {
       if (c.o.ok) { this.bowlerId = c.o.p.id; Sound.play('uiTap'); }
-      else { Sound.play('edge'); c.shake = 0.3; }
+      else { Sound.play('ui_error'); c.shake = 0.3; }
       return true;
     }
     const f = this._hit(this.fields, x, y);
     if (f) {
       if (f.unlocked) { this.fieldId = f.id; Sound.play('uiTap'); }
-      else { Sound.play('edge'); f.shake = 0.3; }
+      else { Sound.play('ui_error'); f.shake = 0.3; }
       return true;
     }
     return true;                      // the picker swallows every touch while open

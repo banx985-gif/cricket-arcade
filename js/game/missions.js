@@ -121,6 +121,7 @@ const Missions = {
     if (cleared) { st.cleared = 1; st.stars = st.stars.map((v, i) => (v || got[i] ? 1 : 0)); }
     const out = { cleared, got, stars: st.stars.slice(), newStars: st.stars.reduce((a, b) => a + b, 0) - before, rewards: [], milestones: [] };
     const rw = this.reward(m);
+    if (typeof Profile !== 'undefined') Profile.add(save, (cleared && !(prev && prev.cleared) ? PROFILE_DATA.xp.missionClear : 0) + PROFILE_DATA.xp.missionStar * Math.max(0, out.newStars), 'mission');
     if (cleared && !st.firstPaid) { st.firstPaid = 1; out.first = true; out.rewards.push({ kind: 'first', reward: this.pay(save, rw.first) }); }
     if (st.stars.every((v) => v) && !st.perfectPaid) { st.perfectPaid = 1; out.perfect = true; out.rewards.push({ kind: 'perfect', reward: this.pay(save, rw.perfect) }); }
     save.missionStars[m.id] = st;
@@ -150,8 +151,9 @@ const MissionMatch = {
   ctx: null,       // { m, start {runs, wkts, legal, log}, heroNo, rivalNo, attack [ids], fields {}, techUsed }
 
   // Build the match and return the scene to go to.
-  start(id) {
-    const m = Missions.def(id);
+  start(id) { return this.startDef(Missions.def(id)); },
+  // (the tutorial's lessons and first match are mission-shaped too: def.tutorial)
+  startDef(m) {
     this.tries = this.m === m ? (this.tries || 0) + 1 : 1;      // each try bowls different balls
     this.on = true; this.m = m;
     CareerMatch.on = false;
@@ -161,7 +163,7 @@ const MissionMatch = {
     const seed = this._seed(m.id, this.tries);
     const ctx = this.ctx = { m, fields: {}, techUsed: 0, owners: [] };
     Match.start(m.fmt, {
-      seed,
+      seed, difficulty: m.diff,                      // missions: a fixed difficulty each (plan 20)
       teams: () => this.teams(m, ctx),
       cond: (cr) => ({ stadium: STADIUM_DATA.defaultStadium, pitch: (m.cond && m.cond.pitch) || 'balanced', weather: (m.cond && m.cond.weather) || 'clear' }),
     });
@@ -184,7 +186,9 @@ const MissionMatch = {
     const ai = Teams.generate({ side: 'ai', rating: O.rating || 60, rng });
     player.name = T('mis.teamYou'); ai.name = T('mis.teamThem');
     const put = (team, side, slot, castId) => {
-      const { e, pc } = Missions.castEntity(castId, side, slot);
+      // a cast id, or a ready-made { e, pc } (the tutorial's career player)
+      const made = typeof castId === 'object' ? { e: Object.assign({}, castId.e, { id: side + slot, no: slot }), pc: castId.pc } : Missions.castEntity(castId, side, slot);
+      const { e, pc } = made;
       team.players[slot - 1] = e;
       if (pc) ctx.owners.push({ pid: e.id, c: pc });
       return e;
@@ -251,8 +255,6 @@ const MissionMatch = {
     const id = ctx.attack[done % ctx.attack.length];
     return Match.team('ai').players.find((p) => p.id === id) || null;
   },
-  // Timing windows / release bands by the mission's difficulty.
-  windowK() { return this.on ? Challenge.diff(this.m.diff).window : 1; },
   // A field setting used this over (field star objectives).
   noteField(id) { if (this.on && id) this.ctx.fields[id] = true; },
   noteTech() { if (this.on) this.ctx.techUsed++; },
@@ -260,7 +262,9 @@ const MissionMatch = {
   // After every ball: has the mission been decided? Ends the innings if so.
   afterBall(inn) {
     if (!this.on) return null;
-    const f = Missions.facts(this.ctx, inn), res = Missions.judge(this.m, f, inn, inn.ended);
+    const f = Missions.facts(this.ctx, inn);
+    // a tutorial lesson ends when its last prompt is done
+    const res = this.m.goal.kind === 'lesson' ? (TutorialCoach.complete() ? 'won' : inn.ended ? 'lost' : null) : Missions.judge(this.m, f, inn, inn.ended);
     if (res && !inn.ended) { inn.ended = true; inn.endReason = 'mission'; }
     this.ctx.result = res;
     return res;
@@ -268,6 +272,13 @@ const MissionMatch = {
   // The end: stars and rewards. Returns the result screen's data.
   finish(save) {
     const inn = Match.current(), f = Missions.facts(this.ctx, inn);
+    if (this.m.tutorial) {
+      // the tutorial: nothing recorded as a mission
+      const won = this.m.goal.kind === 'lesson' ? TutorialCoach.complete() : Missions.judge(this.m, f, inn, true) === 'won';
+      const out = { tutorial: this.m.tutorial, cleared: won, facts: f, score: inn.runs + '/' + inn.wickets };
+      this.leave();
+      return out;
+    }
     const res = Missions.judge(this.m, f, inn, true) || 'lost';
     const out = Missions.record(save, this.m, res === 'won', f);
     out.id = this.m.id; out.facts = f;

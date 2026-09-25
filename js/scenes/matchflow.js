@@ -112,7 +112,7 @@ const TossScene = {
     R.text(T('match.formatLine', { n: Match.fmt.overs }), cx, 1010, 28, '#b8c6d6', 'center', false);
     if (Match.cond) {
       const c = Match.cond;
-      R.text(T('match.conditions', { ground: T(STADIUM_DATA.stadiums[c.stadium].nameKey), pitch: T(STADIUM_DATA.pitchTypes[c.pitch].nameKey),
+      R.text(T('match.conditions', { ground: T('stadium.' + c.stadium), pitch: T(STADIUM_DATA.pitchTypes[c.pitch].nameKey),
         weather: T(STADIUM_DATA.weather[c.weather].nameKey) }), cx, 960, 30, '#ffd23f', 'center', false);
     }
   },
@@ -127,7 +127,11 @@ const MatchBreakScene = {
     this.data = params;
     this._t = 0;
     Stadium.setConditions(Match.cond);
-    if (MissionMatch.on) { Scenes.go('missionresult', MissionMatch.finish(Save.data)); return; }   // (M11)
+    if (MissionMatch.on) {                               // (M11 missions; M12 the tutorial)
+      const tut = MissionMatch.m.tutorial, out = MissionMatch.finish(Save.data);
+      Scenes.go(tut ? 'tutorial' : 'missionresult', tut ? { phase: 'after', out } : out);
+      return;
+    }
     if (params.next === 'result') { Scenes.go('matchresult'); return; }
     Match.checkpoint('break', params.next);   // resume point: the innings break
     Effects.init();
@@ -187,6 +191,7 @@ const MatchResultScene = {
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();
     this.unlocked = [];
+    this.coins = 0;
     if (MyXIMatch.on) {
       // My XI: the competition moves on (the My XI result screen), not the Quick Match record.
       this.buttons.add('myxi.seeResult', cx - 280, 880, 560, 130, () => Scenes.go('myxiresult', MyXIMatch.finish(Save.data)), { size: 46 });
@@ -200,11 +205,16 @@ const MatchResultScene = {
       return;
     }
     Save.recordMatch(Match.fmt.id, this.won);
+    // Quick Match (plan 19): modest Coins (x difficulty) and a little profile XP for a win.
+    this.coins = QuickMatch.coins(this.won, Match.difficulty);
+    Save.data.currencies.coins = (Save.data.currencies.coins || 0) + this.coins;
+    if (this.won) Profile.add(Save.data, PROFILE_DATA.xp.quickWin, 'quick');
+    Sound.play('ui_currency');
     Achievements.afterMatch(Save.data, {}, null); Achievements.checkAccount(Save.data, null);   // (M09)
     // Anything earned by this result (e.g. field settings at Quick Match win milestones).
     this.unlocked = Unlocks.check();
     if (this.unlocked.length) Save.write();
-    this.buttons.add('match.playAgain', cx - 440, 880, 400, 130, () => Scenes.go('toss'), { size: 50 });
+    this.buttons.add('match.playAgain', cx - 440, 880, 400, 130, () => (Match.quick && QuickMatch.last ? Scenes.go(QuickMatch.start(Save.data, QuickMatch.last), { keep: true }) : Scenes.go('toss')), { size: 50 });
     this.buttons.add('result.title_btn', cx + 40, 880, 400, 130, () => Scenes.go('title'), { size: 54, color: '#e9eef5' });
     if (this.won) { Sound.play('fanfare'); Sound.play('crowdRoar'); }
     else Sound.play('crowdGroan');
@@ -267,6 +277,7 @@ const MatchResultScene = {
     }
     const rec = Save.best(Match.fmt.id);
     if (rec && !CareerMatch.on && !MyXIMatch.on && !(this.unlocked && this.unlocked.length)) R.text(T('match.record', { won: rec.won || 0, played: rec.played || 0 }), cx, 840, 30, '#d8e4f0', 'center', false);
+    if (this.coins) R.text(T('qm.coinsWon', { n: this.coins, d: T('chal.diff.' + (Match.difficulty || 'pro')) }), cx, 800, 30, '#ffd23f', 'center', false);
 
     this.buttons.draw();
     Effects.drawParticles(ctx);

@@ -50,11 +50,13 @@ const BowlControls = {
   band(name) { return (this.bands && this.bands[name]) || BOWLING_DATA.charge[name]; },
 
   layout() {
+    if (!this.BASE) this.BASE = this.LAYOUT;
+    this.LAYOUT = ControlPrefs.scaled(this.BASE);            // Settings: control size
     const s = Display.safe, L = this.LAYOUT;
-    this.bowl.x = s.right - L.bowl.dx;
+    this.bowl.x = ControlPrefs.fromRight(s, L.bowl.dx);      // Settings: left-handed layout mirrors it
     this.bowl.y = s.bottom - L.bowl.dy;
-    L.slots.forEach((p, i) => { if (this.slots[i]) { this.slots[i].x = s.right - p.dx; this.slots[i].y = s.bottom - p.dy; } });
-    this.home.x = s.left + L.padX;
+    L.slots.forEach((p, i) => { if (this.slots[i]) { this.slots[i].x = ControlPrefs.fromRight(s, p.dx); this.slots[i].y = s.bottom - p.dy; } });
+    this.home.x = ControlPrefs.fromLeft(s, L.padX);
     this.home.y = s.bottom - L.padY;
   },
 
@@ -84,7 +86,7 @@ const BowlControls = {
       }
     }
     const s = Display.safe;
-    if (this.drag.id === null && x < s.left + (s.right - s.left) * 0.45 && y > s.top + 240) {
+    if (this.drag.id === null && ControlPrefs.aimSide(s, x, 0.45) && y > s.top + 240) {
       const d = this.drag;
       d.id = id; d.lx = x; d.ly = y; d.active = true; d.ox = x; d.oy = y;
       return true;

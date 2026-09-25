@@ -27,7 +27,10 @@ const Effects = {
     this._slowT = 0; this._slowScale = 1;
   },
 
+  // (Settings, plan 34: Reduced motion turns slow-motion and shake off; Reduce flash
+  // softens flashes; VFX Low/Normal/High scales the particle count.)
   slowMo(dur, scale) {
+    if ((typeof GameSettings !== 'undefined' ? GameSettings.get('reducedMotion') : null)) return;
     if (dur >= this._slowT) { this._slowT = dur; this._slowScale = scale; }
   },
 
@@ -42,12 +45,14 @@ const Effects = {
   },
 
   shake(amp, dur) {
+    if ((typeof GameSettings !== 'undefined' ? GameSettings.get('shake') : null) === false || (typeof GameSettings !== 'undefined' ? GameSettings.get('reducedMotion') : null)) return;
     this.shakeAmp = Math.max(this.shakeAmp, amp);
     this.shakeT = Math.max(this.shakeT, dur);
     this.shakeDur = Math.max(dur, 0.01);
   },
 
   flash(alpha, color) {
+    if ((typeof GameSettings !== 'undefined' ? GameSettings.get('reduceFlash') : null)) alpha *= 0.2;
     this.flashA = Math.max(this.flashA, alpha);
     this.flashColor = color || '#ffffff';
   },
@@ -61,6 +66,7 @@ const Effects = {
 
   sparks(x, y, count, color, speed) {
     const f = RNG.fx;
+    if (typeof GameSettings !== 'undefined') count = Math.max(1, Math.round(count * GameSettings.factor('vfx')));
     for (let i = 0; i < count; i++) {
       const a = f.range(0, Math.PI * 2);
       const s = (speed || 600) * f.range(0.35, 1.1);

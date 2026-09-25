@@ -19,11 +19,13 @@ const CareerMatch = {
 
   teamName(side) {
     if (typeof MyXIMatch !== 'undefined' && MyXIMatch.on) return MyXIMatch.teamName(side);
+    if ((Match.quick || (typeof MissionMatch !== 'undefined' && MissionMatch.on)) && Match.teams && Match.teams[side] && Match.teams[side].name) return Match.teams[side].name;
     if (this.on && this.career) return side === 'player' ? Career.team(this.career).name : this.fixture.opp.name;
     return T(MATCH_DATA.teams[side].nameKey);
   },
   teamShort(side) {
     if (typeof MyXIMatch !== 'undefined' && MyXIMatch.on) return MyXIMatch.teamName(side).split(' ')[0].slice(0, 3).toUpperCase();
+    if (Match.quick && Match.teams && Match.teams[side] && Match.teams[side].name) return Match.teams[side].name.replace(/^The /, '').split(' ')[0].slice(0, 3).toUpperCase();
     if (this.on && this.career) {
       const n = side === 'player' ? Career.team(this.career).name : this.fixture.opp.name;
       return n.split(' ')[0].slice(0, 3).toUpperCase();
@@ -61,7 +63,7 @@ const CareerMatch = {
   teams(c, fixture) {
     const rng = RNG.stream('teams');
     const club = Teams.generate({ side: 'player', rating: Career.teamRating(c), origin: c.origin, rng });
-    const opp = Teams.generate({ side: 'ai', rating: fixture.opp.rating, origin: c.origin, rng });
+    const opp = Teams.generate({ side: 'ai', rating: fixture.opp.rating + Difficulty.D(Difficulty.forCareer(c)).opp, origin: c.origin, rng });
     const pos = this.batPos(c);
     club.players[pos - 1] = this._playerEntity(c, pos);
     club.name = Career.team(c).name; opp.name = fixture.opp.name;
@@ -92,6 +94,7 @@ const CareerMatch = {
         return { stadium: STADIUM_DATA.defaultStadium, pitch: pick(O.pitchWeights), weather: pick(O.weatherWeights) };
       },
       career: true,
+      difficulty: Difficulty.forCareer(c),          // chosen between matches (plan 20)
     });
     this.pid = 'player' + this.batPos(c);
     this._assign(c);
@@ -101,7 +104,7 @@ const CareerMatch = {
     if (t.winner === 'player') t.choice = RNG.stream('toss').chance(0.5) ? 'bat' : 'bowl';
     Match.choose(t.choice);
     c.matchInProgress = { n: fx.n, attempt: fx.attempt };
-    c.difficulty.push({ n: fx.n, stage: c.stage, difficulty: 'normal' });   // plan 8.25 tracking
+    c.difficulty.push({ n: fx.n, stage: c.stage, difficulty: Difficulty.forCareer(c) });   // plan 8.25 tracking
     CareerSave.save(c, slot);                                                // autosave before entering a match
     Log.add('career', `fixture ${fx.n} v ${fx.opp.name} (${fmt}) toss ${t.winner} ${t.choice}`);
     return 'careerprematch';
@@ -241,6 +244,7 @@ const CareerMatch = {
       hatTricks: mf.hatTricks, chaseWinNotOut: mf.chaseWinNotOut, closerWin: mf.closerWin };
     const stageId = c.stage;                        // (a final can promote the career, so note the stage first)
     const summary = Career.finishMatch(c, fx, perf);
+    summary.profile = Profile.add(Save.data, PROFILE_DATA.xp.careerMatch, 'career');            // Global Profile Level (M12)
     // Match drops (plan 12.7): sometimes a league match, the Local Final when you win.
     // Duplicates reroll, then turn into Coins (Gear.resolveDrop).
     summary.drop = Gear.matchDrop(c, Save.data, stageId, fx, summary.grade, summary.won);
@@ -306,6 +310,7 @@ const CareerMatch = {
 const CareerSave = {
   save(c, slot) {
     if (typeof Achievements !== 'undefined' && Save.data) Achievements.checkCareer(Save.data, c);   // career / account achievements
+    if (typeof Meta !== 'undefined' && Save.data) Meta.onCareerSave(Save.data, c);                 // profile XP for stages, mode unlocks (M12)
     return Save.saveCareer(slot, c, Career.summary(c));
   },
   load(slot) {

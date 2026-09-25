@@ -163,6 +163,7 @@ const Challenge = {
       const r = CHALLENGE_DATA.medalRewards[m];
       this.pay(save, r);
       rewards.push({ medal: m, reward: r });
+      if (typeof Profile !== 'undefined') Profile.add(save, PROFILE_DATA.xp.medal[m], 'challenge');
     }
     save.challenges[o.rs] = rec;
     const M = this.meta(save);
@@ -171,7 +172,7 @@ const Challenge = {
     // Milestones across every ruleset.
     const pts = this.medalPoints(save), milestones = [];
     for (const ms of CHALLENGE_DATA.milestones) {
-      if (pts >= ms.points && !M.milestones[ms.id]) { M.milestones[ms.id] = 1; this.pay(save, ms.reward); milestones.push(ms); }
+      if (pts >= ms.points && !M.milestones[ms.id]) { M.milestones[ms.id] = 1; this.pay(save, ms.reward); milestones.push(ms); if (typeof Profile !== 'undefined') Profile.add(save, PROFILE_DATA.xp.challengeMilestone, 'challenge'); }
     }
     const achievements = typeof Achievements !== 'undefined' ? Achievements.checkAccount(save, null) : [];
     Save.write();
@@ -181,6 +182,7 @@ const Challenge = {
 
   pay(save, r) {
     const C = save.currencies = save.currencies || {};
+    if (r.coins && typeof Sound !== 'undefined' && Sound.play) Sound.play('ui_currency');
     if (r.coins) C.coins = (C.coins || 0) + r.coins;
     if (r.st) C.bankedTokens = (C.bankedTokens || 0) + r.st;      // Skill Tokens go to the next career opened
     if (r.lm) C.legacyMarks = (C.legacyMarks || 0) + r.lm;

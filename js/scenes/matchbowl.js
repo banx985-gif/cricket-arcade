@@ -38,7 +38,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
   // Release bands with the bowler's stats for this ball, then the techniques.
   _bands() {
     const C = BOWLING_DATA.charge;
-    const k = Duel.bandScale(this.bowlP || this.bowler, this._fatigue()) * MissionMatch.windowK();
+    const k = Duel.bandScale(this.bowlP || this.bowler, this._fatigue()) * Difficulty.k('band');      // difficulty (plan 20)
     const around = (b) => { const m = (b[0] + b[1]) / 2, h = (b[1] - b[0]) / 2 * k; return [m - h, m + h]; };
     return Tech.bands({ perfect: around(C.perfect), good: around(C.good) }, this);
   },
@@ -49,7 +49,8 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     if (MyXIMatch.on) TacticBar.layout('bowl'); else TacticBar.btns = [];    // My XI: between-over calls (M10)
   },
   _techBoost() { return Tech.releaseBoost(this); },
-  _techAi() { return Tech.aiCtx(this); },
+  // The AI batter against you: your techniques, then the difficulty (a Rookie AI makes more mistakes).
+  _techAi() { const o = Tech.aiCtx(this); o.sigmaK *= Difficulty.k('aiSigma'); o.readK /= Difficulty.k('aiRead'); return o; },
   _techMods(m) { return Tech.hitMods(m, this); },
 
   _layout() {
@@ -152,7 +153,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     h.throw = Throw.make(p.from, Math.max(p.t0, h.t + 0.05), grade);
     h.running.setReturn(h.throw.returnT, false);
     this._showTiming(grade === 'okay' ? 'good' : grade === 'bad' ? 'loose' : 'perfect', 'throw_' + grade);
-    Sound.play('release');
+    Sound.play('sfx_throw');
     Log.add('ball', `throw ${grade} returnT ${h.throw.returnT.toFixed(2)}`);
   },
 
@@ -263,7 +264,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
             this._overthrow();
             h.running.aiSteal(h.t);
           }
-          if (h.running.runOut && !this.stumpsBroken) { this.stumpsBroken = true; this.stumpsBrokenAt = Stadium._time; Sound.play('stumps'); }
+          if (h.running.runOut && !this.stumpsBroken) { this.stumpsBroken = true; this.stumpsBrokenAt = Stadium._time; Sound.play('sfx_runout'); Sound.play('sfx_bails'); }
         }
         const key = this._stepInPlay();
         if (key) this._endBall(key);
@@ -318,7 +319,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     MatchBatScene._drawFlashMarker.call(this, ctx);
     if (!BowlerPicker.open && !ThrowMeter.active) TechUI.draw(ctx);
     if (MyXIMatch.on && !BowlerPicker.open && !ThrowMeter.active) TacticBar.draw(ctx);
-    if (MissionMatch.on && !BowlerPicker.open) MissionHud.draw(ctx, this);
+    if (MissionMatch.on && !BowlerPicker.open) { if (MissionMatch.m.tutorial) TutorialCoach.draw(ctx, this); else MissionHud.draw(ctx, this); }
     BowlerPicker.draw(ctx);
   },
 

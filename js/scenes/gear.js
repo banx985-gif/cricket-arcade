@@ -179,7 +179,7 @@ const CareerGearScene = {
   },
   _equip() {
     const c = this.career, before = Career.overall(c), r = Gear.equip(c, Save.data, this.pick);
-    if (!r.ok) { Sound.play('edge'); return; }
+    if (!r.ok) { Sound.play('ui_error'); return; }
     CareerSave.save(c, this.slot);
     Sound.play('fanfare');
     const t = this.tiles.find((k) => k.slot === this.sel), col = Gear.rarity(Gear.item(this.pick)).colour;
@@ -352,7 +352,7 @@ const CareerShopScene = {
   },
   _buy() {
     const c = this.career, r = Gear.buy(c, Save.data, this.pick);
-    if (!r.ok) { Sound.play('edge'); return; }
+    if (!r.ok) { Sound.play('ui_error'); return; }
     Save.write();
     Sound.play('fanfare');
     const k = this.cards.find((q) => q.id === this.pick);
@@ -362,7 +362,7 @@ const CareerShopScene = {
   },
   _equipNow() {
     const r = Gear.equip(this.career, Save.data, this.pick);
-    if (!r.ok) { Sound.play('edge'); return; }
+    if (!r.ok) { Sound.play('ui_error'); return; }
     CareerSave.save(this.career, this.slot);
     Sound.play('four');
     this.flash = { text: T('gear.equippedFlash'), t: 0 };
@@ -458,6 +458,7 @@ const CollectionScene = {
     this.params = params || {};
     this.back = this.params.back || 'title';
     this.sel = null;
+    CollectionBook.check(Save.data);             // Collection Book milestones (plan 21.3)
     this._layout();
   },
   _layout() {
@@ -498,6 +499,11 @@ const CollectionScene = {
     Sprites.ui('icon_collection', s.left + 310, s.top + 64, 130, 110);
     R.text(T('collection.title'), cx - 140, s.top + 48, 50, '#ffffff');
     R.text(T('collection.count', { n: have, total: ids.length }), cx - 140, s.top + 98, 22, '#ffe28a', 'center', false);
+    // Collection Book milestones (plan 21.3): gear + techniques together
+    const bk = CollectionBook.counts(Save.data), M = CollectionBook.meta(Save.data);
+    const next = COLLECTION_DATA.milestones.find((m) => !M.milestones[m.id]);
+    const marks = COLLECTION_DATA.milestones.map((m) => (M.milestones[m.id] ? '✓' : '') + m.pct + '%').join('  ·  ');
+    R.text(T('collection.book', { p: bk.pct, marks }) + (next ? '   ' + T('collection.nextMilestone', { p: next.pct, r: Meta.rewardText(next.reward) }) : ''), cx - 140, s.top + 136, 18, '#9be7ff', 'center', false);
     for (const k of this.cells) {
       const got = this._have(k.id), picked = this.sel === k.id;
       if (this.tab === 'gear') {
@@ -550,6 +556,8 @@ const CollectionScene = {
   },
   // A clue for an item you haven't found: the first place it comes from.
   _hint(it) {
+    // Secrets (plan 21.5): the rarest pieces keep their clue hidden until the Collection Book gives one.
+    if (CollectionBook.secret(Save.data, it) && !(CollectionBook.meta(Save.data).clues > 0)) return T('collection.secretClue');
     const src = it.src.find((x) => x !== 'starter') || 'shop';
     return T('gear.hint.' + src, { t: it.tier });
   },

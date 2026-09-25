@@ -163,6 +163,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     this.typeIdx = i;
     BowlControls.selected = i;
     Sound.play('uiTap');
+    if (typeof TutorialCoach !== 'undefined') TutorialCoach.event('pick');
   },
 
   bowlDown() {
@@ -186,6 +187,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     const W = BOWLING_DATA.swipe;
     sw.done = true;
     BowlControls.swipeOpen = false;
+    if (typeof TutorialCoach !== 'undefined') TutorialCoach.event('swipe');
     const mag = Math.min(1, Math.abs(dx) / W.fullPx);
     this.del = Bowling.withSwipe(this.del, { dir: Math.sign(dx), mag });
     this.del.golden = this.golden;
@@ -225,9 +227,11 @@ const WicketRushScene = Object.assign({}, PitchScene, {
   // The reticle is pulled gently toward the chosen delivery's length zone.
   _snapped() {
     const t = this._type();
+    // Aim assist (setting x difficulty) pulls harder or softer toward the length zone.
+    const snap = Math.min(0.9, t.snap * GameSettings.factor('aimAssist') * (this.isChallenge ? 1 : Difficulty.k('aimAssist')));
     let z = this.aim.z;
-    if (z < t.zone[0]) z += (t.zone[0] - z) * t.snap;
-    else if (z > t.zone[1]) z -= (z - t.zone[1]) * t.snap;
+    if (z < t.zone[0]) z += (t.zone[0] - z) * snap;
+    else if (z > t.zone[1]) z -= (z - t.zone[1]) * snap;
     return { x: this.aim.x, z };
   },
 
@@ -260,11 +264,13 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     }, RNG.stream('bowlAcc'));
     this.del.golden = this.golden;
     this.release = { grade, noBall, type: this._type().id, meter: m };
+    if (typeof TutorialCoach !== 'undefined') TutorialCoach.event('release', grade);
     BowlControls.meterOn = false;
     BowlControls.enabled = false;
     this._setState('delivery');
     this.dT = 0;
     Sound.play('release');
+    Sound.play(this._family().kind === 'spin' ? 'sfx_delivery_spin' : 'sfx_delivery_fast');
     this._showTiming(grade === 'loose' ? 'loose' : grade);
     if (noBall) Effects.text(T('bowl.overstep'), CONFIG.LOGICAL_W / 2, 300, '#ff6b6b', 60);
 
@@ -528,6 +534,11 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     const s = this._snapped();
     const p = View3D.project(s.x, 0.01, s.z);
     if (!p) return;
+    if (Access.on('contrastTarget')) {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, 0.4);
+      R.circle(0, 0, 0.75 * p.s, null, '#000000', 14); R.circle(0, 0, 0.75 * p.s, null, '#fff35c', 7);
+      ctx.restore();
+    }
     const size = 1.3 * p.s;
     const pulse = 1 + Math.sin(this.stateT * 6) * 0.04;
     if (!Sprites.ui('hud_reticle', p.x, p.y - size * 0.06, size * 1.25 * pulse, size * pulse, { scaleY: 0.55 })) {

@@ -21,6 +21,7 @@ const Scenes = {
     this.currentName = name;
     Log.add('scene', name);
     if (next.enter) next.enter(params || {});
+    if (typeof Sound !== 'undefined' && Sound.forScene) Sound.forScene(name);     // the screen's music + crowd (M12)
   },
 
   update(dt, realDt) { if (this.current && this.current.update) this.current.update(dt, realDt); },

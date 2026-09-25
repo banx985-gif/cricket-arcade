@@ -406,6 +406,7 @@ const MyXI = {
     const st = club.stats, rec = club.comps[run.comp];
     rec.played++; if (mine.won) { rec.won++; st.wins++; st.streak++; st.bestStreak = Math.max(st.bestStreak, st.streak); } else st.streak = 0;
     if (mine.won) { save.currencies.coins = (save.currencies.coins || 0) + MYXI_DATA.winRewards.coins; out.coins = MYXI_DATA.winRewards.coins; }
+    if (mine.won && typeof Profile !== 'undefined') Profile.add(save, PROFILE_DATA.xp.myxiWin, 'myxi');
     if (fx.rival && mine.won) { club.rivalsBeaten = club.rivalsBeaten || {}; club.rivalsBeaten[fx.rival] = 1; }
     if (C.kind === 'league') {
       run.results.push({ round: fx.round, a: 'myxi', b: fx.opp, ra: mine.runs, rb: mine.oppRuns, ba: mine.balls || 30, bb: mine.oppBalls || 30, winner: mine.won ? 'myxi' : fx.opp });
@@ -429,6 +430,7 @@ const MyXI = {
     if (!won) return;
     rec.cleared++;
     club.trophies.push(C.id);
+    if (typeof Profile !== 'undefined') Profile.add(save, PROFILE_DATA.xp.myxiTrophy, 'myxi');
     out.trophy = C.trophy;
     if (!club.rewardsTaken[C.id]) {                         // first clear: the competition's reward (plan 15.14)
       club.rewardsTaken[C.id] = new Date().toISOString().slice(0, 10);
@@ -492,7 +494,7 @@ const MyXIMatch = {
     this.tactic = { bat: 'balanced', bowl: 'balanced' }; this.queued = { bat: 'balanced', bowl: 'balanced' };
     CareerMatch.on = false;
     Match.start(fx.fmt, {
-      seed: fx.seed, myxi: true,
+      seed: fx.seed, myxi: true, difficulty: Difficulty.forMyXI(save),
       teams: () => this.teams(save, fx),
       cond: (cr) => ({ stadium: STADIUM_DATA.stadiums[club.stadium] ? club.stadium : STADIUM_DATA.defaultStadium,
         pitch: cr.pick(Object.keys(STADIUM_DATA.pitchTypes)), weather: cr.pick(Object.keys(STADIUM_DATA.weather)) }),
@@ -505,7 +507,7 @@ const MyXIMatch = {
   teams(save, fx) {
     const club = MyXI.club(save), run = club.run, O = run.teams[fx.opp];
     const player = MyXI.teamFor(save);
-    const opp = Teams.generate({ side: 'ai', rating: O.rating, origin: null, rng: RNG.stream('teams') });
+    const opp = Teams.generate({ side: 'ai', rating: O.rating + Difficulty.D(Difficulty.forMyXI(save)).opp, origin: null, rng: RNG.stream('teams') });
     opp.name = O.name;
     if (O.rival) Rivals.inject(opp, O.rival);
     return { player, ai: opp };

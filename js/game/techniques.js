@@ -345,10 +345,10 @@ const TechUI = {
     const s = Display.safe;
     let i = 0;
     for (const id of Tech.triggers(kind, inn)) {
-      this.btns.push({ id, x: s.right - 120 - i * 170, y: s.bottom - 730, r: 70 });
+      this.btns.push({ id, x: ControlPrefs.fromRight(s, 120 + i * 170), y: s.bottom - 730, r: 70 });
       i++;
     }
-    if (Tech.legendReady()) this.btns.push({ id: 'legend', legend: true, x: s.left + 130, y: s.bottom - 580, r: 76 });
+    if (Tech.legendReady()) this.btns.push({ id: 'legend', legend: true, x: ControlPrefs.fromLeft(s, 130), y: s.bottom - 580, r: 76 });
   },
 
   // Returns true if the touch was on one of the buttons.
@@ -356,7 +356,7 @@ const TechUI = {
     for (const b of this.btns) {
       if (Math.hypot(x - b.x, y - b.y) <= Math.max(b.r * 1.15, CONFIG.MIN_TOUCH / 2)) {
         if (!Tech.st || !this.open()) return false;                    // hidden during the ball: the tap goes through
-        if (b.legend ? Tech.st.legendArmed : Tech.st.armed) { Sound.play('edge'); return true; }
+        if (b.legend ? Tech.st.legendArmed : Tech.st.armed) { Sound.play('ui_error'); return true; }
         const ok = b.legend ? Tech.armLegend() : Tech.arm(b.id);
         if (ok && fire) fire(b.id);
         return true;

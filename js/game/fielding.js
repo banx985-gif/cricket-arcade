@@ -63,7 +63,8 @@ const Fielding = {
   // Placement assist (plan 6.1): nudge an aimed shot toward the nearest gap
   // so players don't have to find tiny angles. Returns the adjusted angle.
   gapAssist(dirDeg) {
-    const max = BATTING_DATA.direction.gapAssist;
+    const assist = (typeof GameSettings !== 'undefined' ? GameSettings.factor('aimAssist') : 1) * (typeof Difficulty !== 'undefined' ? Difficulty.k('aimAssist') : 1);
+    const max = BATTING_DATA.direction.gapAssist * assist;
     let nearest = null;
     for (const f of this.fielders()) {
       if (f.keeper || f.z < 3) continue;

@@ -20,6 +20,13 @@ const CareerPreMatchScene = {
       sub: () => { const lo = SkillTree.loadout(c); return T('career.loadoutSub', { a: lo.active.length, p: lo.passive.length }); } });
     this.buttons.add('career.skillTree', cx + 360, 900, 420, 130, go('careertree'), { size: 38, color: '#ffd23f',
       sub: () => T('career.treeSub', { n: c.player.skillTokens }) });
+    // Difficulty (plan 20): only between matches; this match uses it from the first ball.
+    const s = Display.safe;
+    this.buttons.add(() => T('diff.button', { d: T('chal.diff.' + Difficulty.forCareer(c)) }), s.right - 360, s.top + 24, 330, 90, () => {
+      c.diff = Difficulty.next(Difficulty.forCareer(c)); Match.difficulty = c.diff;
+      const last = c.difficulty[c.difficulty.length - 1]; if (last) last.difficulty = c.diff;
+      CareerSave.save(c, CareerMatch.slot);
+    }, { size: 24, color: '#e9eef5' });
     Stadium.setConditions(Match.cond);
   },
   _go() { Scenes.go(Match.startInnings()); },

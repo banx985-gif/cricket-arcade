@@ -85,7 +85,7 @@ const MissionHubScene = {
           disabled: !open, sub: () => (open ? T('mis.catStars', { n: Missions.inCat(c.id).reduce((a, m) => a + Missions.stars(save, m.id), 0), t: Missions.inCat(c.id).length * 3 }) : T('mis.catLocked', { n: c.opensAfter })) });
     });
     for (const c of this._cells()) {
-      const bt = b.add(() => '', c.x, c.y, c.w, c.h, () => { if (Missions.open(save, c.m.id)) { this.sel = c.m.id; this._layout(); } else Sound.play('edge'); });
+      const bt = b.add(() => '', c.x, c.y, c.w, c.h, () => { if (Missions.open(save, c.m.id)) { this.sel = c.m.id; this._layout(); } else Sound.play('ui_error'); });
       bt.invisible = true;
     }
   },

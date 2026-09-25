@@ -138,6 +138,7 @@ const MyXIHomeScene = {
     const b = this.buttons, s = Display.safe, cx = CONFIG.LOGICAL_W / 2, S = Save.data, club = MyXI.club(S);
     b.clear();
     b.add('gear.back', s.left + 20, s.top + 16, 200, 96, () => Scenes.go('title'), { size: 32, color: '#e9eef5' });
+    b.add(() => T('diff.button', { d: T('chal.diff.' + Difficulty.forMyXI(S)) }), s.left + 20, s.top + 128, 300, 88, () => { club.difficulty = Difficulty.next(Difficulty.forMyXI(S)); Save.write(); }, { size: 22, color: '#e9eef5' });
     b.add('myxi.squad', s.right - 520, 150, 490, 120, () => Scenes.go('myxisquad'), { size: 38, color: '#9be7ff', sub: () => T('myxi.squadSub', { a: club.active.length, n: club.library.length }) });
     b.add('myxi.lineup', s.right - 520, 290, 490, 120, () => Scenes.go('myxilineup'), { size: 38, color: '#ffd23f',
       sub: () => { const v = MyXI.validate(S, (MyXI.next(S) || {}).fmt); return v.ok ? T('myxi.lineupOk') : T('myxi.lineupBad'); } });
@@ -158,7 +159,7 @@ const MyXIHomeScene = {
   _comp(id) {
     const S = Save.data, club = MyXI.club(S);
     if (club.run && club.run.status === 'active' && club.run.comp === id) return;
-    if (club.run && club.run.status === 'active') { this.flash = { text: T('myxi.finishFirst'), t: 0 }; Sound.play('edge'); return; }
+    if (club.run && club.run.status === 'active') { this.flash = { text: T('myxi.finishFirst'), t: 0 }; Sound.play('ui_error'); return; }
     MyXI.startComp(S, id);
     Save.write();
     Sound.play('fanfare');
@@ -166,7 +167,7 @@ const MyXIHomeScene = {
   },
   _play() {
     const S = Save.data, v = MyXI.validate(S, MyXI.next(S).fmt);
-    if (!v.ok) { this.flash = { text: T('myxi.fixLineup'), t: 0 }; Sound.play('edge'); Scenes.go('myxilineup'); return; }
+    if (!v.ok) { this.flash = { text: T('myxi.fixLineup'), t: 0 }; Sound.play('ui_error'); Scenes.go('myxilineup'); return; }
     const scene = MyXIMatch.start(S);
     if (scene) Scenes.go('toss', { keep: true });
   },

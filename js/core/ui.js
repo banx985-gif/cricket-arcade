@@ -12,7 +12,8 @@ class ButtonList {
       textColor: o.textColor || CONFIG.COLOR.ink, size: o.size || 46, pressed: false, id: null,
       icon: o.icon || null,             // sprite id drawn on the left
       disabled: o.disabled || false,    // true or a function: greyed, and a tap does nothing
-      sub: o.sub || null };             // small second line (string key or function)
+      sub: o.sub || null,               // small second line (string key or function)
+      onLocked: o.onLocked || null };   // tapped while disabled (e.g. show what unlocks it)
     // enforce the minimum touch size (plan 6)
     if (b.h < CONFIG.MIN_TOUCH) { b.y -= (CONFIG.MIN_TOUCH - b.h) / 2; b.h = CONFIG.MIN_TOUCH; }
     if (b.w < CONFIG.MIN_TOUCH) { b.x -= (CONFIG.MIN_TOUCH - b.w) / 2; b.w = CONFIG.MIN_TOUCH; }
@@ -50,9 +51,10 @@ class ButtonList {
       const fire = b.pressed;
       b.id = null;
       b.pressed = false;
-      if (fire && this.isDisabled(b)) { Sound.play('edge'); return true; }
+      if (fire && this.isDisabled(b)) { Sound.play('ui_error'); if (b.onLocked) b.onLocked(); return true; }
       if (fire) {
-        Sound.play('uiTap');
+        const key = typeof b.label === 'string' ? b.label : '';
+        Sound.play(b.sound || (/back|close|cancel/i.test(key) ? 'ui_back' : /play|next|confirm|start|create|sign/i.test(key) ? 'ui_confirm' : 'uiTap'));
         b.cb();
         return true;
       }
@@ -90,3 +92,36 @@ class ButtonList {
     }
   }
 }
+
+// Control settings (plan 34): the left-handed layout mirrors the match controls
+// (aim on the right thumb, buttons on the left), and Control size scales them.
+const ControlPrefs = {
+  k() { return typeof GameSettings !== 'undefined' ? GameSettings.factor('controlSize') : 1; },
+  left() { return typeof GameSettings !== 'undefined' && !!GameSettings.get('leftHanded'); },
+  // x for something placed dx in from the right edge (from the left, mirrored)
+  fromRight(s, dx) { return this.left() ? s.left + dx : s.right - dx; },
+  fromLeft(s, dx) { return this.left() ? s.right - dx : s.left + dx; },
+  // is x on the aiming thumb's side of the screen?
+  aimSide(s, x, share) { return this.left() ? x > s.right - (s.right - s.left) * share : x < s.left + (s.right - s.left) * share; },
+  // a copy of a layout table with every size and offset scaled (not dead zones or timings)
+  scaled(base) {
+    const k = this.k(), keep = { deadZone: 1, aimMemory: 1 };
+    const walk = (o) => {
+      if (Array.isArray(o)) return o.map(walk);
+      if (o && typeof o === 'object') { const out = {}; for (const [key, v] of Object.entries(o)) out[key] = keep[key] ? v : walk(v); return out; }
+      return typeof o === 'number' ? o * k : o;
+    };
+    return walk(base);
+  },
+};
+
+// Accessibility settings (plan 34) used while drawing a match.
+const Access = {
+  on(key) { return typeof GameSettings !== 'undefined' && !!GameSettings.get(key); },
+  // The batting timing ring: colours (colour-safe: blue / yellow, never red-green) and widths.
+  ring(perfect, good) {
+    const safe = this.on('colourSafe'), big = this.on('contrastTarget');
+    const col = perfect ? (safe ? '#ffe14d' : '#ffd23f') : good ? (safe ? '#4da3ff' : '#9cff6a') : 'rgba(255,255,255,0.85)';
+    return { col, w: big ? 9 : 5, outline: big ? 15 : 9, label: safe && (perfect || good) };
+  },
+};

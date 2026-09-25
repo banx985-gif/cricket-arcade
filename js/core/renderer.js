@@ -2,6 +2,7 @@
 // All coords are logical units.
 
 const R = {
+  textScale: 1,            // Settings > Text size (plan 34): small text only
   ctx: null,
   init(ctx) { this.ctx = ctx; },
 
@@ -79,6 +80,7 @@ const R = {
   // Chunky outlined text.
   text(str, x, y, size, color, align, outline) {
     const c = this.ctx;
+    if (size <= 30 && this.textScale !== 1) size = Math.round(size * this.textScale);
     c.font = `900 ${size}px ${CONFIG.FONT}`;
     c.textAlign = align || 'center';
     c.textBaseline = 'middle';

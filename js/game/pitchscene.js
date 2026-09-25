@@ -54,11 +54,12 @@ const PitchScene = {
     b.add('pause.resume', cx - 260, 330, 520, 110, () => this.setPaused(false), { size: 48 });
     if (typeof MissionMatch !== 'undefined' && MissionMatch.on) {
       // Missions (M11): try again from the start, or back to the Mission Hub.
-      b.add('pause.restart', cx - 260, 460, 520, 110, () => Scenes.go(MissionMatch.start(MissionMatch.m.id)), { size: 48, color: '#e9eef5' });
+      b.add('pause.restart', cx - 260, 460, 520, 110, () => Scenes.go(MissionMatch.startDef(MissionMatch.m)), { size: 48, color: '#e9eef5' });
       b.add(() => T(Sound.muted ? 'common.soundOff' : 'common.soundOn'), cx - 260, 590, 520, 110, () => {
         Sound.setMuted(!Sound.muted); Save.setMuted(Sound.muted);
       }, { size: 44, color: '#e9eef5' });
-      b.add('mis.toHub', cx - 260, 720, 520, 110, () => { MissionMatch.leave(); Scenes.go('missions'); }, { size: 44, color: '#ffb3b3' });
+      if (MissionMatch.m.tutorial) b.add('tut.skip', cx - 260, 720, 520, 110, () => { MissionMatch.leave(); TutorialScene.skipAll(); }, { size: 44, color: '#ffb3b3' });
+      else b.add('mis.toHub', cx - 260, 720, 520, 110, () => { MissionMatch.leave(); Scenes.go('missions'); }, { size: 44, color: '#ffb3b3' });
       return;
     }
     if (typeof CareerMatch !== 'undefined' && CareerMatch.on) {
@@ -232,7 +233,7 @@ const PitchScene = {
   _outcomeFeel(key) {
     const F = BATTING_DATA.feel;
     if (key === 'six') {
-      Sound.play('crowdRoar');
+      Sound.play('sfx_six_crowd');
       Sound.play('six');
       Stadium.cheer(1);
       Effects.shake(10, 0.3);
@@ -240,9 +241,14 @@ const PitchScene = {
       Sound.play('crowdCheer');
       Sound.play('four');
       Stadium.cheer(0.7);
+    } else if (key === 'miss' || key === 'leave') {
+      Sound.play('sfx_glove', { gain: 0.7 });           // into the keeper's gloves
     } else if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') {
       Sound.play(key === 'bowled' ? 'stumps' : key === 'lbw' || key === 'hitwicket' ? 'wicket' : 'catchIt');
+      if (key === 'bowled' || key === 'hitwicket') Sound.play('sfx_bails');
+      if (key === 'lbw' || key === 'caught') Sound.play('sfx_appeal');
       Sound.play('wicket');
+      Sound.play('crowd_wicket', { gain: 0.8 });
       Effects.shake(F.wicketShake.amp, F.wicketShake.dur);
       Platform.haptic('wicket');
     }
@@ -517,6 +523,10 @@ const PitchScene = {
         }
       }
       Sprites.draw(it.id, it.p.x, it.p.y, it.p.s, it.opts);
+      if (it === ballItem && Access.on('contrastBall')) {
+        R.circle(it.p.x, it.p.y, it.opts.r + 5, null, '#000000', 5);
+        R.circle(it.p.x, it.p.y, it.opts.r + 10, null, '#fff35c', 4);
+      }
       if (it === batterItem && Sprites.has('batter')) this._drawSwoosh(ctx, it.p, swing);
     }
     if (!ballItem) this._drawTrail(ctx);

@@ -175,6 +175,7 @@ const SixSmashScene = Object.assign({}, PitchScene, {
           this._setState('delivery');
           BatControls.enabled = true;
           Sound.play('release');
+          Sound.play(this.del.kind === 'spin' ? 'sfx_delivery_spin' : 'sfx_delivery_fast');
         }
         break;
       case 'delivery':
@@ -410,11 +411,12 @@ const SixSmashScene = Object.assign({}, PitchScene, {
     const r = 26 + Math.max(0, left) * 260;
     const perfect = Math.abs(left) <= w.perfect;
     const good = Math.abs(left) <= w.good;
-    const col = perfect ? '#ffd23f' : good ? '#9cff6a' : 'rgba(255,255,255,0.85)';
+    const A = Access.ring(perfect, good), col = A.col;           // colour-safe / high-contrast targeting (Settings)
     const a = Math.min(1, (0.75 - left) / 0.25);
     ctx.globalAlpha = Math.max(0, a);
-    R.circle(p.x, p.y, r, null, CONFIG.COLOR.ink, 9);
-    R.circle(p.x, p.y, r, null, col, 5);
+    R.circle(p.x, p.y, r, null, CONFIG.COLOR.ink, A.outline);
+    R.circle(p.x, p.y, r, null, col, A.w);
+    if (A.label) R.text(T(perfect ? 'timing.perfect' : 'timing.good'), p.x, p.y - r - 26, 24, col);
     R.circle(p.x, p.y, 22, null, 'rgba(255,255,255,0.5)', 3);
     ctx.globalAlpha = 1;
   },

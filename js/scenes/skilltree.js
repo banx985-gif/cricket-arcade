@@ -131,7 +131,7 @@ const CareerTreeScene = {
 
   _unlock(id) {
     const c = this.career, r = SkillTree.unlock(c, id);
-    if (!r.ok) { Sound.play('edge'); return; }
+    if (!r.ok) { Sound.play('ui_error'); return; }
     const n = SkillTree.node(id);
     let text = T('tree.unlocked');
     if (r.discovered) {
@@ -151,7 +151,7 @@ const CareerTreeScene = {
   },
   _equip(techId) {
     const c = this.career;
-    if (!SkillTree.toggle(c, techId)) { this.flash = { text: T('tree.slotsFull'), t: 0, color: '#ff9d7a' }; Sound.play('edge'); return; }
+    if (!SkillTree.toggle(c, techId)) { this.flash = { text: T('tree.slotsFull'), t: 0, color: '#ff9d7a' }; Sound.play('ui_error'); return; }
     this._save();
   },
 
@@ -508,7 +508,7 @@ const CareerLoadoutScene = {
     const card = this.cards.find((k) => x >= k.x && x <= k.x + k.w && y >= k.y && y <= k.y + k.h);
     if (!card) return false;
     if (SkillTree.toggle(this.career, card.id)) { Sound.play('uiTap'); this.msg = null; }
-    else { Sound.play('edge'); this.msg = T('tree.slotsFull'); }
+    else { Sound.play('ui_error'); this.msg = T('tree.slotsFull'); }
     return true;
   },
 
