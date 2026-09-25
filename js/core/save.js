@@ -35,6 +35,7 @@ const Save = {
       globalLevel: { level: 1, xp: 0 },
       unlocks: {},
       collection: {},
+      locker: {},                // the Global Locker: gear id -> { got, src } (M07, plan 12.8)
       myXI: null,
       hallOfFame: [],
       records: {},
@@ -66,6 +67,7 @@ const Save = {
     if (!isObj(doc.challenges)) p.push('challenges missing');
     if (!isObj(doc.matches)) p.push('matches missing');
     if (!Array.isArray(doc.careerSlots) || doc.careerSlots.length !== this.CAREER_SLOTS) p.push('careerSlots invalid');
+    if (doc.locker !== undefined && !isObj(doc.locker)) p.push('locker invalid');
     for (const [id, rec] of Object.entries(isObj(doc.challenges) ? doc.challenges : {})) {
       if (!isObj(rec) || typeof rec.score !== 'number' || rec.score < 0) p.push('challenge ' + id + ' invalid');
     }
@@ -134,6 +136,7 @@ const Save = {
     if (!doc && main === null && legacy !== null) doc = this._parse(legacy);   // old M01–M03 save
     if (!doc) doc = this.defaults();
     this.data = doc;
+    if (typeof Gear !== 'undefined') Gear.ensure(this.data);     // the starter kit is always in the Locker
     this._applySettings();
     // Write it back in the current format (repairs a bad main from the backup,
     // finishes a migration, and drops the old key).
@@ -253,6 +256,7 @@ const Save = {
     for (const k of keys) entries[k] = undefined;
     await Store.setMany(entries);
     this.data = this.defaults();
+    if (typeof Gear !== 'undefined') Gear.ensure(this.data);
     this._applySettings();
     this.recovered = null;
     Log.add('save', 'full data reset');

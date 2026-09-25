@@ -210,7 +210,11 @@ const CareerMatch = {
   finish() {
     const c = this.career, fx = this.fixture;
     const perf = this.performance();
+    const stageId = c.stage;                        // (a final can promote the career, so note the stage first)
     const summary = Career.finishMatch(c, fx, perf);
+    // Match drops (plan 12.7): sometimes a league match, the Local Final when you win.
+    // Duplicates reroll, then turn into Coins (Gear.resolveDrop).
+    summary.drop = Gear.matchDrop(c, Save.data, stageId, fx, summary.grade, summary.won);
     summary.perf = perf;
     summary.opp = fx.opp;
     // Techniques used this match count toward their mastery (plan 11.4).
@@ -264,6 +268,6 @@ const CareerMatch = {
 // in the global save for the Career Select screen.
 const CareerSave = {
   save(c, slot) { return Save.saveCareer(slot, c, Career.summary(c)); },
-  load(slot) { return Save.loadCareer(slot).then((c) => { if (c) SkillTree.ensure(c); return c; }); },
+  load(slot) { return Save.loadCareer(slot).then((c) => { if (c) { SkillTree.ensure(c); Gear.ensureCareer(c); } return c; }); },
   remove(slot) { return Save.saveCareer(slot, null, null); },
 };

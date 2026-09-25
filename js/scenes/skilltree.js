@@ -9,33 +9,24 @@
 
 const TreeLayout = {
   _pos: null,
-  // Tree-space position and radius of every node, worked out from SKILL_TREE_DATA.layout.
+  // Tree space: the painted background (SKILL_TREE_DATA.layout.bg) scaled up,
+  // x centred on the middle stump, y down from the top of the picture.
+  bg() { const B = SKILL_TREE_DATA.layout.bg; return { x: -B.centreX * B.scale, y: 0, w: B.w * B.scale, h: B.h * B.scale }; },
+  toTree(px, py) { const B = SKILL_TREE_DATA.layout.bg; return { x: (px - B.centreX) * B.scale, y: py * B.scale }; },
+  // Tree-space position and radius of every node (hand-placed on the painted branches).
   pos() {
     if (this._pos) return this._pos;
     const L = SKILL_TREE_DATA.layout, out = {};
-    for (const b of SKILL_TREE_DATA.branches) {
-      for (let t = 1; t <= 4; t++) {
-        const cx = L.branchX[b] + L.lean[b] * (t - 1), y = L.tierY[t - 1];
-        const big = SkillTree.nodes(b).filter((n) => n.tier === t && n.type !== 'minor');
-        // tier 4: the two keystones either side of the technique
-        const order = t === 4 ? [big.find((n) => n.type === 'keystone'), big.find((n) => n.type === 'technique'), big.filter((n) => n.type === 'keystone')[1]].filter(Boolean) : big;
-        const gap = t === 4 ? L.techGap * 1.15 : L.techGap;
-        order.forEach((n, i) => { out[n.id] = { x: cx + (i - (order.length - 1) / 2) * gap, y, r: L.radius[n.type] }; });
-        const perks = SkillTree.nodes(b).filter((n) => n.tier === t && n.type === 'minor');
-        perks.forEach((n, i) => { out[n.id] = { x: cx + (i - (perks.length - 1) / 2) * L.perkGap * 1.6, y: y + L.perkRow, r: L.radius.minor }; });
-      }
+    for (const n of SKILL_TREE_DATA.nodes) {
+      const p = L.pos[n.id], t = this.toTree(p[0], p[1]);
+      out[n.id] = { x: t.x, y: t.y, r: L.radius[n.type] };
     }
-    const cap = SkillTree.nodes('bails')[0];
-    out[cap.id] = { x: 0, y: L.capstoneY, r: L.radius.capstone };
     this._pos = out;
     return out;
   },
-  // The branch's spine point at a tier (where the vines join).
-  spine(b, t) {
-    const L = SKILL_TREE_DATA.layout;
-    return { x: L.branchX[b] + L.lean[b] * (t - 1), y: L.tierY[t - 1] + L.perkRow * 0.55 };
-  },
-  stumpX(b) { return { batting: -120, mindbody: 0, bowling: 120 }[b]; },
+  // Where a closed tier's label goes (open sky beside the tier).
+  tierLabel(b, t) { const p = SKILL_TREE_DATA.layout.tierLabels[b][t - 2]; return this.toTree(p[0], p[1]); },
+  emblem(b) { const e = SKILL_TREE_DATA.layout.emblem[b]; return this.toTree(e[0], e[1]); },
 };
 
 const CareerTreeScene = {
@@ -58,7 +49,7 @@ const CareerTreeScene = {
     this.from = params.from || 'home';
     SkillTree.ensure(this.career);
     this.sel = null; this.popup = null; this.flash = null; this._t = 0; this.ptrs = {}; this.pinch = null;
-    this._fit();
+    this._fitCam();
     this._layout();
     this._wheel = (e) => {
       e.preventDefault();
@@ -75,11 +66,13 @@ const CareerTreeScene = {
 
   // ---- camera ----
   _view() { const v = Display.viewRect(); return { x: v.x, y: v.y + 130, w: v.w, h: v.h - 130 }; },
-  _limits() { return { min: 0.3, max: 1.6 }; },
-  _fit() {
-    const L = SKILL_TREE_DATA.layout, v = this._view();
-    this.cam.zoom = Math.min(v.w / L.size.w, v.h / L.size.h) * 0.98;
-    this.cam.x = 0; this.cam.y = L.size.h / 2;
+  // Fully zoomed out, the picture still fills the screen (no empty edges).
+  _limits() { const v = this._view(), B = TreeLayout.bg(); return { min: Math.max(v.w / B.w, v.h / B.h), max: 1.6 }; },
+  _fitCam() {
+    const v = this._view();
+    this.cam.zoom = this._limits().min;
+    this.cam.x = 0; this.cam.y = v.h / 2 / this.cam.zoom;       // the top of the tree (tier 4 and the tips)
+    this._clampCam();
     this._fitZoom = this.cam.zoom;
   },
   toScreen(wx, wy) { const v = this._view(); return { x: v.x + v.w / 2 + (wx - this.cam.x) * this.cam.zoom, y: v.y + v.h / 2 + (wy - this.cam.y) * this.cam.zoom }; },
@@ -91,10 +84,12 @@ const CareerTreeScene = {
     this.cam.x += before.x - after.x; this.cam.y += before.y - after.y;
     this._clampCam();
   },
+  // Keep the view inside the picture.
   _clampCam() {
-    const L = SKILL_TREE_DATA.layout;
-    this.cam.x = Math.max(-L.size.w / 2, Math.min(L.size.w / 2, this.cam.x));
-    this.cam.y = Math.max(0, Math.min(L.size.h, this.cam.y));
+    const v = this._view(), B = TreeLayout.bg(), z = this.cam.zoom;
+    const hw = v.w / 2 / z, hh = v.h / 2 / z;
+    this.cam.x = hw * 2 >= B.w ? B.x + B.w / 2 : Math.max(B.x + hw, Math.min(B.x + B.w - hw, this.cam.x));
+    this.cam.y = hh * 2 >= B.h ? B.y + B.h / 2 : Math.max(B.y + hh, Math.min(B.y + B.h - hh, this.cam.y));
   },
 
   // ---- buttons ----
@@ -271,7 +266,7 @@ const CareerTreeScene = {
   // ---------------------------------------------------------------- drawing
   render(ctx) {
     const c = this.career, v = Display.viewRect();
-    TreeArt.background(ctx, v);
+    TreeArt.background(ctx, v, true);
     if (!c) return;
     const vw = this._view();
     ctx.save();
@@ -280,6 +275,7 @@ const CareerTreeScene = {
     this._drawTrunk(ctx);
     this._drawVines(ctx);
     this._drawNodes(ctx);
+    this._drawTierLabels(ctx);
     ctx.restore();
     this._drawHud(ctx);
     if (this.sel) this._drawCard(ctx);
@@ -293,122 +289,96 @@ const CareerTreeScene = {
     }
   },
 
-  _lit(b) { return SkillTree.branchSpent(this.career, b) > 0; },
-
+  // The painted tree (tree_bg) in tree space, so it pans and zooms with the
+  // nodes. Branch emblems on the stumps; a label on each tier that isn't open yet.
   _drawTrunk(ctx) {
-    const L = SKILL_TREE_DATA.layout, c = this.career;
-    // the pitch strip at the foot
-    R.roundRect(-420, L.groundY - 30, 840, 120, 40, '#3d6b2e');
-    R.roundRect(-160, L.groundY - 30, 320, 120, 20, '#c9b27a');
-    const labels = [];
+    const c = this.career, L = SKILL_TREE_DATA.layout;
+    TreeArt.treeBackground(ctx, TreeLayout.bg());
     for (const b of SKILL_TREE_DATA.branches) {
-      const x = TreeLayout.stumpX(b), col = SKILL_TREE_DATA.colours[b], lit = this._lit(b);
-      // the stump
-      R.roundRect(x - 26, L.trunkTop, 52, L.groundY - L.trunkTop + 20, 18, '#efe3c2', lit ? col : '#8a8170', 6);
-      // the branch: from the top of the stump up through each tier's spine
-      const pts = [{ x, y: L.trunkTop }];
-      for (let t = 1; t <= 4; t++) pts.push(TreeLayout.spine(b, t));
-      ctx.save();
-      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      for (let i = 1; i < pts.length; i++) {
-        const open = i === 1 || SkillTree.tierOpen(c, b, i);
-        const a = pts[i - 1], z = pts[i];
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.bezierCurveTo(a.x, a.y - 120, z.x, z.y + 120, z.x, z.y);
-        ctx.strokeStyle = '#3a2a18'; ctx.lineWidth = 44; ctx.stroke();
-        if (open && lit) { ctx.strokeStyle = col + '33'; ctx.lineWidth = 46; ctx.stroke(); }      // glow (cheap: no blur, phones)
-        ctx.strokeStyle = open ? col + (lit ? 'cc' : '55') : '#4d4538'; ctx.lineWidth = 22;
-        ctx.stroke();
-      }
-      ctx.restore();
-      // the emblem at the foot of the branch
-      const e = TreeLayout.spine(b, 1), ex = (x + e.x) / 2, ey = b === 'mindbody' ? L.trunkTop - 70 : (L.trunkTop + e.y) / 2 + 30;
-      labels.push(() => {
-        TreeArt.draw(SKILL_TREE_DATA.art.branch[b], ex, ey, 120);
-        R.text(T('tree.branch.' + b), ex, ey + (b === 'mindbody' ? 96 : 88), 30, col);
-      });
-      // tier gates: a label beside each closed tier
+      const e = TreeLayout.emblem(b), col = SKILL_TREE_DATA.colours[b], sz = L.emblemSize * L.bg.scale;
+      TreeArt.draw(SKILL_TREE_DATA.art.branch[b], e.x, e.y, sz);
+      R.roundRect(e.x - 120, e.y + sz * 0.5, 240, 46, 22, 'rgba(3,8,16,0.72)');
+      R.text(T('tree.branch.' + b), e.x, e.y + sz * 0.5 + 24, 26, col);
+    }
+  },
+  // Closed tiers say what opens them (drawn over the nodes, in open sky).
+  _drawTierLabels(ctx) {
+    const c = this.career;
+    for (const b of SKILL_TREE_DATA.branches) {
+      const col = SKILL_TREE_DATA.colours[b];
       for (let t = 2; t <= 4; t++) {
         if (SkillTree.tierOpen(c, b, t)) continue;
-        const sp = TreeLayout.spine(b, t), capped = t > SkillTree.roleCap(c, b);
+        const sp = TreeLayout.tierLabel(b, t), capped = t > SkillTree.roleCap(c, b);
         const txt = capped ? T('tree.tierCapped') : T('tree.tierOpensAt', { t, n: SKILL_TREE_DATA.tierGates[t - 1] });
-        R.roundRect(sp.x - 190, sp.y - 26, 380, 52, 24, 'rgba(0,0,0,0.6)');
-        R.text(txt, sp.x, sp.y, 22, capped ? '#ff9d7a' : '#d8e4f0', 'center', false);
+        R.roundRect(sp.x - 170, sp.y - 22, 340, 44, 20, 'rgba(3,8,16,0.8)', col, 3);
+        R.text(txt, sp.x, sp.y, 20, capped ? '#ff9d7a' : '#ffffff', 'center', false);
       }
     }
-    labels.forEach((f) => f());                  // emblems and names on top of all three stumps
-    // the tops of the branches reach up to the bails
-    const cap = TreeLayout.pos().capstone_legends_bails;
-    ctx.save(); ctx.lineCap = 'round';
-    for (const b of SKILL_TREE_DATA.branches) {
-      const s = TreeLayout.spine(b, 4);
-      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.bezierCurveTo(s.x, s.y - 200, cap.x, cap.y + 200, cap.x, cap.y + 60);
-      ctx.strokeStyle = SkillTree.tierOpen(c, b, 4) ? '#ffe28a88' : 'rgba(255,255,255,0.08)'; ctx.lineWidth = 10; ctx.stroke();
-    }
-    ctx.restore();
   },
 
-  // Vines: each node to its branch's spine. Glowing when the node is unlocked.
+  // Owned nodes glow in their branch colour (a soft breathing halo behind them).
   _drawVines(ctx) {
     const c = this.career, pos = TreeLayout.pos();
-    ctx.save(); ctx.lineCap = 'round';
+    ctx.save();
     for (const n of SKILL_TREE_DATA.nodes) {
-      if (n.type === 'capstone') continue;
-      const p = pos[n.id], s = TreeLayout.spine(n.branch, n.tier), on = SkillTree.owned(c, n.id);
-      const col = SKILL_TREE_DATA.colours[n.branch];
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.quadraticCurveTo((s.x + p.x) / 2, s.y + (p.y > s.y ? 40 : -40), p.x, p.y);
-      if (on) {
-        // a glowing vine: a wide soft stroke that breathes, then the bright core
-        const pulse = 0.65 + 0.35 * Math.sin(this._t * 3 + p.x * 0.01);
-        ctx.globalAlpha = 0.25 * pulse; ctx.strokeStyle = col; ctx.lineWidth = 30; ctx.stroke();
-        ctx.globalAlpha = 1; ctx.lineWidth = 10; ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 3; ctx.stroke();
-      } else {
-        ctx.strokeStyle = 'rgba(160,170,180,0.28)'; ctx.lineWidth = 6; ctx.stroke();
-      }
+      if (!SkillTree.owned(c, n.id)) continue;
+      const p = pos[n.id], col = SKILL_TREE_DATA.colours[n.branch] || SKILL_TREE_DATA.colours.bails;
+      const pulse = 0.65 + 0.35 * Math.sin(this._t * 3 + p.x * 0.01);
+      ctx.globalAlpha = 0.3 * pulse; R.circle(p.x, p.y, p.r * 1.45, col);
+      ctx.globalAlpha = 0.25 * pulse; R.circle(p.x, p.y, p.r * 1.2, '#ffffff');
     }
     ctx.restore();
   },
 
+  // Ring frames (node_*) are drawn so the icon sits in the frame's hole
+  // (TreeArt.frame); minor perks are whole badges.
   _drawNodes(ctx) {
-    const c = this.career, pos = TreeLayout.pos(), A = SKILL_TREE_DATA.art;
+    const c = this.career, pos = TreeLayout.pos(), A = SKILL_TREE_DATA.art, hole = SKILL_TREE_DATA.layout.hole;
     for (const n of SKILL_TREE_DATA.nodes) {
       const p = pos[n.id], st = SkillTree.state(c, n.id), col = SKILL_TREE_DATA.colours[n.branch];
-      const d = p.r * 2, sel = this.sel === n.id;
+      const d = p.r * 2, h = p.r * hole, sel = this.sel === n.id;
       ctx.save();
       if (st === 'available') {                          // glowing edge
         const pulse = 0.5 + 0.5 * Math.sin(this._t * 4);
         ctx.shadowColor = '#9be7ff'; ctx.shadowBlur = 20 + 20 * pulse;
       } else if (st === 'mastered') { ctx.shadowColor = '#ffd23f'; ctx.shadowBlur = 26; }
-      if (sel) R.circle(p.x, p.y, p.r + 18, null, '#ffffff', 6);
+      if (sel) R.circle(p.x, p.y, p.r + 16, null, '#ffffff', 6);
       const dim = st === 'locked' || st === 'excluded';
+      let lockDrawn = false;
       if (n.type === 'minor') {
-        TreeArt.draw(n.id, p.x, p.y, d, { alpha: dim ? 0.4 : 1 });
+        TreeArt.draw(n.id, p.x, p.y, d, { alpha: dim ? 0.45 : 1 });
         ctx.shadowBlur = 0;
-        if (st === 'available') R.circle(p.x, p.y, p.r + 4, null, '#9be7ff', 5);
+        if (st === 'available') R.circle(p.x, p.y, p.r + 3, null, '#9be7ff', 5);
         // rank pips
         const R0 = SkillTree.rank(c, n.id);
-        for (let i = 0; i < SkillTree.ranks(n); i++) TreeArt.draw(A.perkPip, p.x + (i - 1) * 24, p.y + p.r + 18, 18, { on: i < R0, colour: col });
+        for (let i = 0; i < SkillTree.ranks(n); i++) TreeArt.pip(p.x + (i - 1) * 26, p.y + p.r + 16, 20, i < R0, col);
       } else if (n.type === 'keystone') {
-        TreeArt.draw(A.node.keystone, p.x, p.y, d, { colour: st === 'unlocked' ? col : st === 'available' ? '#9be7ff' : '#56606b' });
+        const glow = ctx.shadowBlur; ctx.shadowBlur = 0;
+        TreeArt.holeBack(p.x, p.y, h);
+        TreeArt.draw(n.id, p.x, p.y, h * 1.04, { alpha: dim ? 0.4 : 1 });
+        ctx.shadowBlur = glow;
+        TreeArt.frame(A.node.keystone, p.x, p.y, h, { colour: st === 'unlocked' ? col : st === 'available' ? '#9be7ff' : '#56606b' });
         ctx.shadowBlur = 0;
-        TreeArt.draw(n.id, p.x, p.y, d * 0.72, { alpha: dim ? 0.35 : 1 });
       } else {
         const frame = st === 'mastered' ? A.node.mastered : st === 'unlocked' ? A.node.unlocked : st === 'available' ? A.node.available : A.node.locked;
-        TreeArt.draw(frame, p.x, p.y, d, { colour: col });
+        const glow = ctx.shadowBlur; ctx.shadowBlur = 0;
+        TreeArt.holeBack(p.x, p.y, h);
+        TreeArt.draw(TreeArt.iconOf(n.id), p.x, p.y, h * 1.02, { alpha: dim ? 0.4 : 1 });
+        ctx.shadowBlur = glow;
+        TreeArt.frame(frame, p.x, p.y, h, { colour: col });
         ctx.shadowBlur = 0;
-        TreeArt.draw(TreeArt.iconOf(n.id), p.x, p.y, d * 0.82, { alpha: dim ? 0.35 : 1 });
-        if (n.type === 'capstone') R.text(T('tree.capstone_legends_bails'), p.x, p.y + p.r + 34, 30, '#ffe28a');
+        lockDrawn = st === 'locked' && TreeArt.hasArt(A.node.locked);   // the locked frame has its own padlock
+        if (n.type === 'capstone') {
+          R.roundRect(p.x - 150, p.y + p.r + 10, 300, 48, 22, 'rgba(3,8,16,0.72)');
+          R.text(T('tree.capstone_legends_bails'), p.x, p.y + p.r + 34, 28, '#ffe28a');
+        }
         if (dim && n.tech && SkillTree.discovered(Save.data, n.tech)) {
-          R.roundRect(p.x - 70, p.y + p.r - 6, 140, 30, 14, 'rgba(20,30,40,0.9)', '#9aa4b5', 2);
-          R.text(T('tree.discovered'), p.x, p.y + p.r + 9, 16, '#c9d0d6', 'center', false);
+          R.roundRect(p.x - 70, p.y - p.r - 30, 140, 30, 14, 'rgba(20,30,40,0.9)', '#9aa4b5', 2);
+          R.text(T('tree.discovered'), p.x, p.y - p.r - 15, 16, '#c9d0d6', 'center', false);
         }
         if (n.tech && SkillTree.owned(c, n.id) && SkillTree.equipped(c, n.tech)) R.circle(p.x + p.r * 0.72, p.y - p.r * 0.72, 14, '#9cff6a', CONFIG.COLOR.ink, 3);
       }
-      if (dim && n.type !== 'minor') this._lock(p.x, p.y + (n.type === 'keystone' ? 0 : p.r * 0.1), p.r * 0.36, st === 'excluded');
+      if (dim && n.type !== 'minor' && !lockDrawn) this._lock(p.x, p.y, p.r * 0.34, st === 'excluded');
       ctx.restore();
     }
   },

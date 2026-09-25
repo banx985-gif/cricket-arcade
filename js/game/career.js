@@ -70,6 +70,7 @@ const Career = {
     };
     c.player.stats = this.roll(c, (r) => this.startStats(o.role, o.archetype, r));
     SkillTree.ensure(c);                         // role point + archetype perk rank
+    Gear.ensureCareer(c);                        // the starter kit in every slot
     return c;
   },
 
@@ -386,11 +387,13 @@ const Career = {
 };
 
 // Stat bonuses from things that aren't base stats: the Wicket Tree's minor
-// perks (M06). Equipment will add here too.
+// perks (M06) and equipment with its set bonuses (M07).
 const CareerStats = {
   bonus(c) {
     const out = {};
-    if (typeof SkillTree !== 'undefined' && SkillTree.statBonus) Object.assign(out, SkillTree.statBonus(c));
+    const add = (b) => { for (const [k, v] of Object.entries(b)) out[k] = (out[k] || 0) + v; };
+    if (typeof SkillTree !== 'undefined' && SkillTree.statBonus) add(SkillTree.statBonus(c));
+    if (typeof Gear !== 'undefined') add(Gear.statBonus(c));
     return out;
   },
 };

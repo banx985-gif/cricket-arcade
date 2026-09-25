@@ -38,6 +38,8 @@ const TitleScene = {
     this.topBtns.clear();
     this.topBtns.add('settings.title', s.right - 400, s.top + 24, 370, 96, () => Scenes.go('settings'),
       { size: 34, color: '#e9eef5' });
+    this.topBtns.add('title.collection', s.left + 24, s.top + 24, 330, 96, () => Scenes.go('collection', { back: 'title' }),
+      { size: 28, color: '#9be7ff', icon: 'icon_collection' });
     this.resumeBtns.clear();
     this.resumeBtns.add('resume.resume', cx - 430, 640, 420, 120, () => this._resume(), { size: 38 });
     this.resumeBtns.add('resume.abandon', cx + 10, 640, 420, 120, () => this._abandon(), { size: 40, color: '#e9eef5' });
@@ -116,6 +118,7 @@ const TitleScene = {
     if (code === 'Digit3') { Sound.unlock(); Scenes.go('toss'); }
     if (code === 'Digit4') { Sound.unlock(); Scenes.go('wicketrush'); }
     if (code === 'KeyO') Scenes.go('settings');
+    if (code === 'KeyC') Scenes.go('collection', { back: 'title' });
   },
 
   render(ctx) {

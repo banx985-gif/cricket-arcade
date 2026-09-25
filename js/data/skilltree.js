@@ -184,7 +184,7 @@ const SKILL_TREE_DATA = {
     crowd_favourite:    { kind: 'passive', icon: 'trait_crowd_favourite', perMoment: 2, max: 6 },
     field_general:      { kind: 'passive', icon: 'trait_field_general', catchBonus: 0.06, stopBonus: 0.06 },
     comeback_specialist:{ kind: 'passive', icon: 'trait_comeback_specialist', reqRate: 10, defend: 6, stats: { timing: 6, power: 4, accuracy: 6, deception: 4 } },
-    gear_mastery:       { kind: 'passive', icon: 'trait_gear_mastery', stats: { power: 3, timing: 3, delivery: 3, accuracy: 3 } },
+    gear_mastery:       { kind: 'passive', icon: 'trait_gear_mastery' },   // equipment stats +30% (EQUIPMENT_DATA.gearMasteryBoost)
     tournament_player:  { kind: 'passive', icon: 'trait_tournament_player', stats: 5 },
     treasure_sense:     { kind: 'passive', icon: 'trait_treasure_sense', coins: 0.5 },
     rival_slayer:       { kind: 'passive', icon: 'trait_rival_slayer', stats: 4 },
@@ -197,19 +197,62 @@ const SKILL_TREE_DATA = {
     perkPip: 'perk_pip',
     branch: { batting: 'branch_batting', mindbody: 'branch_mindbody', bowling: 'branch_bowling' },
     token: 'icon_skill_token', respec: 'icon_respec', legend: 'icon_legend_bails',
+    // Where the icon goes inside each frame picture: [hole centre x, centre y, hole width]
+    // in the picture's own pixels (the frames aren't centred: crowns, padlocks).
+    frameHole: {
+      node_available: [201, 207, 250], node_locked: [193, 203, 248], node_unlocked: [192, 208, 248],
+      node_mastered: [232, 274, 262], node_keystone: [237, 283, 276], perk_pip: [129, 157, 157],
+    },
   },
   colours: { batting: '#ffc53d', mindbody: '#5fe08a', bowling: '#ff5a6e', bails: '#ffe28a' },
 
-  // ---- the tree picture: where nodes sit (tree space, drawn by TreeScene) ------------------------
+  // ---- the tree picture: where nodes sit ----------------------------------------------------------
+  // The nodes sit on the painted branches of tree_bg (1672 x 941). pos = picture
+  // pixels; tree space = picture pixels x scale, centred on the middle stump.
+  // Tier 1 is nearest the stumps, tier 4 out at the tips; Legend's Bails sits on
+  // the painted bails. radius = tree-space size of each node type.
   layout: {
-    size: { w: 2700, h: 1900 },
-    branchX: { batting: -760, mindbody: 0, bowling: 760 },
-    lean: { batting: -70, mindbody: 0, bowling: 70 },    // each tier leans out this much more
-    tierY: [1300, 980, 660, 340],                         // tier 1..4 (techniques row)
-    perkRow: 150,                                         // perks sit this far below their tier's techniques
-    techGap: 170, perkGap: 150,
-    capstoneY: 115,
-    trunkTop: 1660, groundY: 1820,
-    radius: { technique: 62, minor: 36, keystone: 74, capstone: 90 },
+    bg: { w: 1672, h: 941, scale: 2, centreX: 836 },
+    radius: { technique: 54, minor: 34, keystone: 62, capstone: 74 },
+    // The icon hole of a ring frame (node_*) is this x the node radius across.
+    hole: 1.3,
+    // Branch emblems on the three stumps, and the fill colour around the picture.
+    emblem: { batting: [728, 545], mindbody: [835, 470], bowling: [944, 545] },
+    // 'Tier N opens at …' labels for closed tiers, in open sky beside each tier (tiers 2, 3, 4).
+    tierLabels: {
+      batting: [[420, 336], [190, 306], [95, 200]],
+      mindbody: [[560, 192], [1120, 128], [505, 40]],
+      bowling: [[1250, 362], [1470, 356], [1570, 118]],
+    },
+    emblemSize: 66,
+    edge: '#07101f',
+    pos: {
+      // Batting (gold, out to the left)
+      perk_clean_strike: [505, 398], perk_sharp_eye: [545, 238],
+      tech_perfect_window: [668, 360], tech_anchor: [598, 322], tech_cover_drive_mastery: [530, 294],
+      perk_soft_hands: [497, 222], perk_gap_finder: [300, 290],
+      tech_pull_specialist: [458, 264], tech_sweep_specialist: [392, 243], tech_late_cut_mastery: [398, 172], tech_fast_hands: [325, 226],
+      perk_quick_singles: [318, 165], perk_cool_head: [440, 140],
+      tech_power_surge: [392, 100], tech_counter_spin: [240, 222], tech_boundary_hunter: [172, 160], tech_finisher: [150, 252],
+      tech_last_stand: [70, 120], keystone_boundary_king: [132, 45], keystone_unbreakable: [42, 262],
+      // Mind & Body (green, straight up)
+      tech_quick_starter: [835, 222], tech_fitness_freak: [772, 196], tech_fast_learner: [898, 188],
+      perk_safe_hands: [752, 245], perk_study_tape: [932, 228],
+      tech_iron_focus: [738, 146], tech_pressure_proof: [832, 155], tech_crowd_favourite: [950, 142], tech_field_general: [655, 152],
+      perk_recovery: [1020, 160], perk_rocket_arm: [596, 148],
+      tech_comeback_specialist: [690, 92], tech_gear_mastery: [815, 94], tech_tournament_player: [992, 92], tech_treasure_sense: [1090, 92],
+      perk_crowd_energy: [560, 88], perk_steel_nerve: [905, 110],
+      tech_rival_slayer: [818, 36], keystone_big_stage: [645, 40], keystone_iron_engine: [1030, 42],
+      // Bowling (red, out to the right)
+      tech_deadeye_yorker: [1003, 352], tech_pressure_builder: [1075, 325], tech_bouncer_trap: [1145, 305],
+      perk_pace_kick: [1135, 228], perk_extra_rip: [1090, 392],
+      tech_late_swing: [1225, 300], tech_spin_burst: [1300, 246], tech_heavy_ball: [1298, 172], tech_wicket_hunter: [1378, 228],
+      perk_steady_runup: [1212, 240], perk_true_line: [1372, 292],
+      tech_heat_ball: [1312, 102], tech_googly_mastery: [1458, 222], tech_reverse_break: [1540, 160], tech_closer: [1568, 258],
+      perk_disguise: [1428, 158], perk_long_spell: [1582, 326],
+      tech_unplayable: [1598, 78], keystone_strike_force: [1435, 48], keystone_choke_hold: [1636, 262],
+      // Legend's Bails, on the painted bails
+      capstone_legends_bails: [835, 300],
+    },
   },
 };

@@ -169,6 +169,53 @@ const Validate = {
       for (const id of [D.art.bg, D.art.perkPip, D.art.token, D.art.respec, D.art.legend].concat(Object.values(D.art.node))) cart(id, 'tree art');
     }
 
+    // Equipment (M07): items, perks, sets, drop pools, names and pictures
+    if (typeof EQUIPMENT_DATA !== 'undefined') {
+      const E = EQUIPMENT_DATA, ids = dupes('equipment items', E.items, 'id');
+      const srcs = ['starter', 'shop', 'drop', 'final', 'rival', 'tournament', 'evolution', 'legacy'];
+      const perkIds = new Set(Object.keys(E.perks).concat(Object.keys(E.setPerks)));
+      const perSlot = {};
+      for (const s of E.slots) { str('gear.slot.' + s, 'slot'); cart(E.slotArt[s], 'slot art'); }
+      for (const [r, R] of Object.entries(E.rarities)) { str('gear.rarity.' + r, 'rarity'); cart(R.frame, 'rarity frame'); }
+      cart(E.signatureFrame, 'signature frame');
+      for (const id of Object.values(E.shop.art)) cart(id, 'shop art');
+      for (const it of E.items) {
+        const w = 'item "' + it.id + '"';
+        if (!E.slots.includes(it.slot)) p.push(w + ' has unknown slot "' + it.slot + '"');
+        if (!E.rarities[it.rarity]) p.push(w + ' has unknown rarity "' + it.rarity + '"');
+        if (!(it.tier >= 1 && it.tier <= 8)) p.push(w + ' needs a career tier 1–8');
+        for (const k of Object.keys(it.stats || {})) if (!statKeys.has(k)) p.push(w + ' raises unknown stat "' + k + '"');
+        if (E.cosmetic.includes(it.slot) && (Object.keys(it.stats || {}).length || it.set || it.perk)) p.push(w + ' is cosmetic: no stats, set or perk');
+        if (it.perk && !E.perks[it.perk]) p.push(w + ' has unknown perk "' + it.perk + '"');
+        if (it.set && !E.sets[it.set]) p.push(w + ' names unknown set "' + it.set + '"');
+        if (!Array.isArray(it.src) || !it.src.length || it.src.some((x) => !srcs.includes(x))) p.push(w + ' needs a known source');
+        cart(it.art, w); str('gear.' + it.id, w);
+        for (const x of it.src) { str('gear.src.' + x, w); str('gear.hint.' + x, w); }
+        perSlot[it.slot] = (perSlot[it.slot] || 0) + 1;
+      }
+      for (const [s, n] of Object.entries(perSlot)) if (n > E.caps[s]) p.push('too many ' + s + ' items (' + n + ', cap ' + E.caps[s] + ')');
+      for (const s of E.slots) if (E.items.filter((it) => it.slot === s && it.src.includes('starter')).length !== 1) p.push('slot "' + s + '" needs exactly one starter item');
+      for (const k of Object.keys(E.perks)) { str('gear.perk.' + k, 'perk'); str('gear.perk.' + k + '.desc', 'perk'); }
+      const setIds = Object.keys(E.sets);
+      if (setIds.length < 8) p.push('at least 8 named gear lines need set bonuses (plan 12.9)');
+      for (const [sid, S] of Object.entries(E.sets)) {
+        str('gear.setName.' + sid, 'set');
+        const slots = new Set(E.items.filter((it) => it.set === sid).map((it) => it.slot));
+        const th = Object.keys(S).filter((k) => /^\d+$/.test(k)).map(Number);
+        if (!th.includes(2) || !th.includes(3) || !th.includes(slots.size)) p.push('set "' + sid + '" needs 2-piece, 3-piece and full-set (' + slots.size + ') bonuses');
+        for (const t of th) {
+          if (S[t].perk && !perkIds.has(S[t].perk)) p.push('set "' + sid + '" has unknown perk "' + S[t].perk + '"');
+          for (const k of Object.keys(S[t].stats || {})) if (!statKeys.has(k)) p.push('set "' + sid + '" raises unknown stat "' + k + '"');
+        }
+      }
+      for (const k of Object.keys(E.setPerks)) { str('gear.perk.' + k, 'set effect'); str('gear.perk.' + k + '.desc', 'set effect'); }
+      for (const [pid, pool] of Object.entries(E.drops.pools)) for (const id of pool) if (!ids.has(id)) p.push('drop pool "' + pid + '" lists unknown item "' + id + '"');
+      for (const [st, by] of Object.entries(E.drops.byStage)) {
+        if (!CAREER_DATA.stages.find((x) => x.id === st)) p.push('drops for unknown stage "' + st + '"');
+        for (const pl of Object.values(by)) if (!E.drops.pools[pl]) p.push('stage "' + st + '" uses unknown drop pool "' + pl + '"');
+      }
+    }
+
     // Manifest: every entry needs a file path, every id once (object keys are unique by nature)
     for (const [gname, g] of Object.entries(ASSET_MANIFEST.groups)) {
       for (const [id, e] of Object.entries(g)) if (!e || !e.src) p.push(`asset "${id}" in group ${gname} has no file path`);

@@ -158,6 +158,7 @@ const CareerResultScene = {
   _t: 0,
   enter(params) {
     this.r = params;
+    this._dropFx = false;
     this._t = 0;
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();
@@ -206,6 +207,8 @@ const CareerResultScene = {
     if (used.length) extra.push(T('career.techUsed', { list: used.slice(0, 3).join(', ') + (used.length > 3 ? '…' : '') }));
     extra.forEach((line, i) => R.text(line, cx - 560, 720 + i * 30, 19, '#9be7ff', 'center', false));
     R.text(T('career.energyNow', { n: r.energyAfter }), x + 770, 565, 26, '#ffffff', 'right', false);
+    // A gear drop (M07): new item, or a duplicate turned into Coins.
+    if (r.drop && this._t > 0.9) this._drawDrop(ctx, r.drop);
     // Selection Meter, filling up
     const S = CAREER_DATA.stages.find((st) => st.id === (c.promotedFrom && r.gate && r.gate.result === 'promoted' ? c.promotedFrom : c.stage)) || Career.stage(c);
     const k = Math.min(1, Math.max(0, (this._t - 0.4) / 0.8));
@@ -219,6 +222,35 @@ const CareerResultScene = {
       R.text(T('career.gate.' + g, { n: r.gate.matches || 0 }), cx, 885, 32, '#ffffff');
     }
     this.buttons.draw();
+    Effects.drawParticles(ctx);
+  },
+
+  // Bottom-left: the reward card with the item (or the Coins it turned into).
+  _drawDrop(ctx, d) {
+    const s = Display.safe, x = Math.max(s.left + 20, CONFIG.LOGICAL_W / 2 - 950), y = 700, w = 300, h = 330;
+    const pop = Math.min(1, (this._t - 0.9) / 0.3);
+    if (!this._dropFx) {
+      this._dropFx = true;
+      Effects.sparks(x + w / 2, y + 150, 30, '#ffd23f', 900);
+      Sound.play(d.item ? 'fanfare' : 'four');
+    }
+    ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.scale(0.6 + 0.4 * pop, 0.6 + 0.4 * pop); ctx.translate(-(x + w / 2), -(y + h / 2));
+    R.panel(x, y, w, h, 'rgba(40,24,8,0.96)', '#ffd23f');
+    if (d.item) {
+      const it = Gear.item(d.item);
+      R.text(T(d.final ? 'career.dropFinal' : 'career.dropNew'), x + w / 2, y + 30, 26, '#ffd23f');
+      GearUI.framed(it, x + w / 2, y + 150, 190, 190);
+      CareerTreeScene._fit(T('gear.' + it.id), x + 16, y + 262, w - 32, 24, '#ffffff', true);
+      R.text(GearUI.rarityText(it), x + w / 2, y + 295, 18, Gear.rarity(it).colour, 'center', false);
+    } else {
+      const it = Gear.item(d.dup);
+      R.text(T('career.dropDup'), x + w / 2, y + 30, 24, '#ffd23f');
+      GearUI.framed(it, x + w / 2, y + 140, 150, 150, { alpha: 0.6 });
+      Sprites.ui(d.coins ? 'econ_coin' : 'econ_legacy_mark', x + 70, y + 262, 60, 60);
+      R.text(d.coins ? T('career.coinsGain', { n: d.coins }) : T('career.dropMark'), x + 190, y + 262, 26, '#ffe28a');
+      R.text(T('career.dropDupSub'), x + w / 2, y + 302, 16, '#d8e4f0', 'center', false);
+    }
+    ctx.restore();
   },
 };
 

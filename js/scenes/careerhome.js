@@ -7,7 +7,8 @@
 //   result    what training / rest did
 //   player    stats, level, XP; spend Growth Points (plan 10)
 // SKILL TREE opens the Wicket Tree, LOADOUT the technique loadout (M06).
-// Equipment, Coach and Records are shown greyed out, "coming soon".
+// EQUIPMENT, SHOP and COLLECTION open the gear screens (M07). Coach and Records
+// are shown greyed out, "coming soon".
 
 const CareerHomeScene = {
   career: null,
@@ -19,7 +20,7 @@ const CareerHomeScene = {
   _t: 0,
 
   enter(params) {
-    CareerAssets.ensure();
+    CareerAssets.ensure(); GearAssets.ensure();
     CareerMatch.on = false;
     this.slot = params.slot || this.slot;
     this.career = params.career || this.career;
@@ -54,9 +55,15 @@ const CareerHomeScene = {
     b.add('tree.loadout', s.right - 520, 320, 490, 130, () => Scenes.go('careerloadout', { slot: this.slot, career: c }), {
       size: 40, color: '#9be7ff', sub: () => { const lo = SkillTree.loadout(c); return T('career.loadoutSub', { a: lo.active.length, p: lo.passive.length }); },
     });
+    // Equipment, the shop and the Collection Book (M07)
+    b.add('career.equipment', s.right - 520, 470, 490, 124, () => Scenes.go('careergear', { slot: this.slot, career: c }), {
+      size: 40, color: '#ffb36b', icon: 'slot_bat', sub: () => T('career.equipmentSub', { n: Gear.ownedCount(Save.data) }),
+    });
+    b.add('career.shop', s.right - 520, 612, 240, 104, () => Scenes.go('careershop', { slot: this.slot, career: c }), { size: 28, color: '#ffd23f', icon: 'shop_sign' });
+    b.add('career.collection', s.right - 270, 612, 240, 104, () => Scenes.go('collection', { back: 'careerhome', slot: this.slot, career: c }), { size: 18, color: '#9be7ff', icon: 'icon_collection' });
     // Greyed "coming soon" (their systems arrive in later milestones).
-    const soon = [['career.equipment', 'slot_bat'], ['career.coach', 'meta_coach'], ['career.records', 'meta_records']];
-    soon.forEach(([k, icon], i) => b.add(k, s.right - 520 + (i % 2) * 250, 610 + Math.floor(i / 2) * 110, 240, 96, () => {}, { size: 22, icon, disabled: true, sub: 'career.comingSoon' }));
+    const soon = [['career.coach', 'meta_coach'], ['career.records', 'meta_records']];
+    soon.forEach(([k, icon], i) => b.add(k, s.right - 520 + i * 250, 734, 240, 90, () => {}, { size: 22, icon, disabled: true, sub: 'career.comingSoon' }));
     // tap the portrait area for the player panel
     b.add(() => '', s.left + 40, 150, 470, 470, () => this._open('player'), { color: 'rgba(0,0,0,0)' });
     b.items[b.items.length - 1].invisible = true;
@@ -134,6 +141,7 @@ const CareerHomeScene = {
     if (code === 'KeyT') this._open('train');
     if (code === 'KeyR') this._rest();
     if (code === 'KeyK') Scenes.go('careertree', { slot: this.slot, career: this.career });
+    if (code === 'KeyE') Scenes.go('careergear', { slot: this.slot, career: this.career });
   },
 
   // ---------------------------------------------------------------- drawing
@@ -196,8 +204,6 @@ const CareerHomeScene = {
       R.text(T('career.lowEnergyTip'), x0 + w / 2, 760, 24, '#ff9d7a', 'center', false);
     }
 
-    // ---- right: coming soon ----
-    R.text(T('career.comingLater'), s.right - 270, 580, 22, '#b8c6d6', 'center', false);
     this.buttons.items.forEach((bt) => { if (bt.invisible) bt._skip = true; });
     this._drawButtons();
 

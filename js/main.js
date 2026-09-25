@@ -83,6 +83,9 @@ const Main = {
     Scenes.register('careerpromoted', CareerPromotedScene);
     Scenes.register('careertree', CareerTreeScene);
     Scenes.register('careerloadout', CareerLoadoutScene);
+    Scenes.register('careergear', CareerGearScene);
+    Scenes.register('careershop', CareerShopScene);
+    Scenes.register('collection', CollectionScene);
     Scenes.go('boot');
 
     this._lastT = performance.now();

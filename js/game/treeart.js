@@ -49,6 +49,33 @@ const TreeArt = {
     ctx.restore();
   },
 
+  hasArt(id) { return !!Sprites.images[id]; },
+
+  // A ring frame (node_*), drawn so its icon hole is 'hole' across and centred
+  // on (x, y). The frame pictures aren't centred (crowns, padlocks), so each
+  // one's hole is listed in SKILL_TREE_DATA.art.frameHole.
+  frame(id, x, y, hole, opts) {
+    const art = Sprites.images[id], H = SKILL_TREE_DATA.art.frameHole[id], o = opts || {};
+    if (art && H) {
+      const k = hole / H[2], ctx = R.ctx;
+      ctx.save();
+      if (o.alpha !== undefined) ctx.globalAlpha *= o.alpha;
+      ctx.drawImage(art.img, x - H[0] * k, y - H[1] * k, art.img.width * k, art.img.height * k);
+      ctx.restore();
+      return;
+    }
+    this.draw(id, x, y, hole * 1.55, o);            // placeholder: a ring around the hole
+  },
+  // A dark disc behind an icon, so the painted tree doesn't show through the hole.
+  holeBack(x, y, hole) { R.circle(x, y, hole * 0.53, 'rgba(8,16,30,0.92)'); },
+  // A rank pip: the pip ring with a coloured dot inside when the rank is owned.
+  pip(x, y, size, on, colour) {
+    if (!this.hasArt(SKILL_TREE_DATA.art.perkPip)) { this.draw(SKILL_TREE_DATA.art.perkPip, x, y, size, { on, colour }); return; }
+    const hole = size * 0.62;
+    R.circle(x, y, hole * 0.55, on ? (colour || '#ffd23f') : 'rgba(8,16,30,0.85)');
+    this.frame(SKILL_TREE_DATA.art.perkPip, x, y, hole, { alpha: on ? 1 : 0.6 });
+  },
+
   // Placeholders by id pattern.
   _generic(id) {
     if (id.startsWith('perk_') && id !== 'perk_pip') return (ctx, x, y, s) => this._perk(id, x, y, s);
@@ -138,8 +165,14 @@ const TreeArt = {
 
   // Full-screen tree background (tree_bg): night sky, a glow behind the tree,
   // the pitch at the foot of the stumps. Drawn in screen space.
-  background(ctx, v) {
-    if (Sprites.images[SKILL_TREE_DATA.art.bg]) { Sprites.ui(SKILL_TREE_DATA.art.bg, v.x + v.w / 2, v.y + v.h / 2, v.w, v.h); return; }
+  // plain: just the fill (the tree screen draws the picture itself, in tree space).
+  background(ctx, v, plain) {
+    if (Sprites.images[SKILL_TREE_DATA.art.bg]) {
+      ctx.fillStyle = SKILL_TREE_DATA.layout.edge;
+      ctx.fillRect(v.x, v.y, v.w, v.h);
+      if (!plain) this._cover(ctx, v);
+      return;
+    }
     const g = ctx.createLinearGradient(0, v.y, 0, v.y + v.h);
     g.addColorStop(0, '#07101f'); g.addColorStop(0.65, '#0d2236'); g.addColorStop(1, '#10301c');
     ctx.fillStyle = g;
@@ -153,5 +186,23 @@ const TreeArt = {
       const sx = v.x + ((i * 733) % 1000) / 1000 * v.w, sy = v.y + ((i * 379) % 1000) / 1000 * v.h * 0.6;
       R.circle(sx, sy, 1 + (i % 3), 'rgba(255,255,255,' + (0.15 + (i % 5) * 0.08) + ')');
     }
+  },
+  // The picture filling a screen rect (cropped, never stretched), dimmed.
+  _cover(ctx, v) {
+    const img = Sprites.images[SKILL_TREE_DATA.art.bg].img, k = Math.max(v.w / img.width, v.h / img.height);
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    ctx.drawImage(img, v.x + (v.w - img.width * k) / 2, v.y + (v.h - img.height * k) / 2, img.width * k, img.height * k);
+    ctx.restore();
+  },
+  // The painted tree in tree space (rect = TreeLayout.bg()). Without the art: a
+  // plain night-sky gradient the same size.
+  treeBackground(ctx, rect) {
+    const art = Sprites.images[SKILL_TREE_DATA.art.bg];
+    if (art) { ctx.drawImage(art.img, rect.x, rect.y, rect.w, rect.h); return; }
+    const g = ctx.createLinearGradient(0, rect.y, 0, rect.y + rect.h);
+    g.addColorStop(0, '#07101f'); g.addColorStop(0.7, '#0d2236'); g.addColorStop(1, '#10301c');
+    ctx.fillStyle = g;
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
   },
 };

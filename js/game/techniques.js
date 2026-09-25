@@ -27,7 +27,7 @@ const Tech = {
     this.chips = [];
     const TD = SKILL_TREE_DATA.techniques, lo = SkillTree.loadout(c);
     const charges = {};
-    for (const id of lo.active) if (TD[id].mode === 'trigger') charges[id] = TD[id].charges;
+    for (const id of lo.active) if (TD[id].mode === 'trigger') charges[id] = TD[id].charges + (this.m.techCharges || 0);   // gear can add charges
     this.st = saved ? JSON.parse(JSON.stringify(saved)) : {
       charges, armed: null, legendLeft: this.m.flags.legend ? SKILL_TREE_DATA.legend.usesPerMatch : 0, legendArmed: false,
       stacks: { anchor: 0, boundary: 0, pressure: 0 }, dots: 0, hunter: 0, strike: false, faced: 0, bowled: 0,

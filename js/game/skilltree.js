@@ -229,9 +229,10 @@ const SkillTree = {
   //   goodWindow / perfectBand / throwZone  x size        edge / fatigue / pressure  x
   //   chasePressure  x pressure in a chase                catchBonus / stopBonus  +
   //   composureFloor Composure never counts below this    xp / restEnergy / coins / energy
+  //   techCharges    extra charges on trigger techniques (gear)
   mods(c) {
     const m = { goodWindow: 1, perfectBand: 1, throwZone: 1, edge: 1, fatigue: 1, pressure: 1, chasePressure: 1,
-      catchBonus: 0, stopBonus: 0, composureFloor: 0, comboBoost: 1, xp: 0, restEnergy: 0, coins: 0, energy: 1, flags: {} };
+      catchBonus: 0, stopBonus: 0, composureFloor: 0, comboBoost: 1, xp: 0, restEnergy: 0, coins: 0, energy: 1, techCharges: 0, flags: {} };
     const t = this.ensure(c);
     for (const [id, r] of Object.entries(t.nodes)) {
       const n = this.node(id);
@@ -251,12 +252,14 @@ const SkillTree = {
     if (P.includes('treasure_sense')) m.coins += TD.treasure_sense.coins * boost('treasure_sense');
     if (P.includes('field_general')) { m.catchBonus += TD.field_general.catchBonus * boost('field_general'); m.stopBonus += TD.field_general.stopBonus * boost('field_general'); }
     if (m.flags.ironEngine) m.energy *= SKILL_TREE_DATA.keystones.ironEngine.energy;
+    if (typeof Gear !== 'undefined') Gear.applyMods(c, m);       // equipment perks and set effects (M07)
     return m;
   },
 
   // Whole-match stat changes for the career player's match entity: the
   // Composure floor, Big Stage (finals / knockouts), Tournament Player,
-  // Rival Slayer (a stronger opponent, until rivals exist) and Gear Mastery.
+  // Rival Slayer (a stronger opponent, until rivals exist). (Gear Mastery boosts
+  // equipment stats: see Gear.statBonus.)
   // Returns { stats, notes: [techId | keystone id that applied] }.
   matchStats(c, stats, fixture, clubRating) {
     const out = Object.assign({}, stats), notes = [];
@@ -268,7 +271,7 @@ const SkillTree = {
     if (knockout && m.flags.bigStage) { const B = SKILL_TREE_DATA.keystones.bigStage; add('composure', B.composure); add('control', B.control); notes.push('keystone_big_stage'); }
     if (knockout && P.includes('tournament_player')) { addAll(TD.tournament_player.stats); notes.push('tournament_player'); }
     if (fixture && fixture.opp && clubRating && fixture.opp.rating > clubRating && P.includes('rival_slayer')) { addAll(TD.rival_slayer.stats); notes.push('rival_slayer'); }
-    if (P.includes('gear_mastery')) { for (const [k, v] of Object.entries(TD.gear_mastery.stats)) add(k, v); notes.push('gear_mastery'); }
+    if (P.includes('gear_mastery') && typeof Gear !== 'undefined' && Gear.masteryBoost(c) > 1) notes.push('gear_mastery');   // (its boost is in Gear.statBonus)
     return { stats: out, notes };
   },
 

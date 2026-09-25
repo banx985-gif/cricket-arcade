@@ -189,8 +189,10 @@ const CAREER_DATA = {
   // ---- Hooks for later milestones (named so they're easy to find) ----------------
   // The Wicket Tree (M06) is in data/skilltree.js + game/skilltree.js: player.tree
   //   holds it, player.skillTokens the points; CareerStats.bonus() adds its perks.
-  // equipment / coach / records / sponsors / rivals / events: buttons are on
+  // Equipment (M07) is in data/equipment.js + game/gear.js: player.equipment
+  //   holds what's worn; CareerStats.bonus() adds its stats, SkillTree.mods() its perks.
+  // coach / records / sponsors / rivals / events: buttons are on
   //   Career Home, greyed "coming soon"; career.hooks keeps their save space.
   //   Rivals: call SkillTree.rivalWin(c) when one is beaten (+1 Skill Token).
-  comingSoon: ['equipment', 'coach', 'records'],
+  comingSoon: ['coach', 'records'],
 };
