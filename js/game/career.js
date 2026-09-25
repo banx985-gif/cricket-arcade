@@ -1,0 +1,377 @@
+// Cricket Arcade — Career Mode rules (M05). Pure: no drawing, no scenes.
+// A career is one plain object (saved whole in a career slot, see Save):
+//   player      the created cricketer: look, hands, role, stats, level, XP,
+//               growth points, skill tokens (+ hooks: tree, techniques, gear)
+//   origin      cricket origin id (ORIGIN_PACKS)          club: the signed club
+//   stage       the stage id ('local', …)                 fixtures: this stage's matches
+//   block       the schedule block: prep actions used before the next match
+//   energy, form, selection                               history: finished matches
+// All numbers come from CAREER_DATA. All randomness from the career's own
+// seeded stream (its position is saved, so reloading never re-rolls).
+
+const Career = {
+  VERSION: 1,
+
+  // ---- seeded randomness that survives save/load ----
+  rng(c) {
+    const r = makeRng(c.seed);
+    r.setState(c.rngState >>> 0);
+    const save = () => { c.rngState = r.getState(); };
+    return { r, save };
+  },
+  roll(c, fn) {
+    const { r, save } = this.rng(c);
+    try { return fn(r); } finally { save(); }
+  },
+
+  stage(c) { return CAREER_DATA.stages.find((s) => s.id === c.stage) || CAREER_DATA.stages[0]; },
+  role(c) { return CAREER_DATA.roles[c.player.role]; },
+  archetype(role, id) { return CAREER_DATA.roles[role].archetypes.find((a) => a.id === id) || CAREER_DATA.roles[role].archetypes[0]; },
+  bats(c) { return true; },
+  bowls(c) { return CAREER_DATA.roles[c.player.role].bowls; },
+
+  // ---- creating a player (plan 5.5, 8.2, 9.4) ----
+  // o: { name, presentation, look, facial, skin, hairColour, batHand, bowlHand,
+  //      role, archetype, batRole, family }
+  startStats(role, archetypeId, rng) {
+    const R = CAREER_DATA.startRanges, A = this.archetype(role, archetypeId);
+    const stats = {};
+    for (const g of Object.values(PLAYER_DATA.stats)) {
+      for (const k of g) {
+        const band = A.key.includes(k) ? R.key : A.weak.includes(k) ? R.weak : R.neutral;
+        stats[k] = Math.round(rng.rangeOf(band));
+      }
+    }
+    return stats;
+  },
+
+  create(o, seed) {
+    const c = {
+      v: this.VERSION, seed: seed >>> 0, rngState: seed >>> 0,
+      created: new Date().toISOString(),
+      player: {
+        name: o.name, presentation: o.presentation, look: o.look, facial: o.facial || 'none',
+        skin: o.skin, hairColour: o.hairColour, batHand: o.batHand, bowlHand: o.bowlHand,
+        role: o.role, archetype: o.archetype, batRole: o.batRole || 'top',
+        family: CAREER_DATA.roles[o.role].bowls ? (o.family || 'fast') : null,
+        stats: null, level: 1, xp: 0, growthPoints: 0, skillTokens: 0,
+        // ---- hooks for later milestones ----
+        tree: { nodes: {}, keystones: {} },      // Skill Tree (docs/SKILL_TREE_v1.md)
+        techniques: [], equipment: {},
+      },
+      origin: o.origin || null,
+      club: null, offers: null,
+      stage: CAREER_DATA.stages[0].id,
+      fixtures: [], block: { preps: 0, log: [] },
+      energy: CAREER_DATA.energy.start, form: CAREER_DATA.form.start, selection: 0,
+      phase: 'create',                           // create -> club -> season -> promoted
+      history: [], difficulty: [], matchInProgress: null,
+      hooks: { rivals: {}, sponsors: {}, events: {}, coach: null },
+    };
+    c.player.stats = this.roll(c, (r) => this.startStats(o.role, o.archetype, r));
+    return c;
+  },
+
+  // ---- overall / effective stats ----
+  overall(c) {
+    const p = Object.assign({ role: c.player.role === 'batter' ? 'bat' : c.player.role === 'bowler' ? 'bowl' : 'all' }, { stats: c.player.stats });
+    return Teams.overall(p);
+  },
+  // What the player actually plays with: base + form + low-energy penalty +
+  // later bonuses (Skill Tree perks, equipment) through CareerStats.bonus().
+  effectiveStats(c) {
+    const out = {};
+    const form = CAREER_DATA.form.statBonus[c.form] || 0;
+    const low = c.energy < CAREER_DATA.energy.low ? -CAREER_DATA.energy.lowStatPenalty : 0;
+    const extra = CareerStats.bonus(c);
+    for (const [k, v] of Object.entries(c.player.stats)) out[k] = Math.max(1, Math.min(120, v + form + low + (extra[k] || 0)));
+    return out;
+  },
+
+  // ---- XP, levels, growth (plan 10) ----
+  addXp(c, xp) {
+    const L = CAREER_DATA.levels, p = c.player;
+    p.xp += xp;
+    let ups = 0;
+    while (p.level < L.max && p.xp >= L.xpFor(p.level)) {
+      p.xp -= L.xpFor(p.level);
+      p.level++;
+      p.growthPoints += L.growthPerLevel;
+      p.skillTokens += L.skillTokensPerLevel;
+      ups++;
+    }
+    return ups;
+  },
+  growthCost(c, stat) {
+    const v = c.player.stats[stat];
+    const tier = CAREER_DATA.growthCost.find((t) => v < t.below) || CAREER_DATA.growthCost[CAREER_DATA.growthCost.length - 1];
+    const pref = this.archetype(c.player.role, c.player.archetype).grow.concat(this.role(c).grow);
+    return Math.max(1, tier.cost - (pref.includes(stat) ? CAREER_DATA.growthDiscountStats : 0));
+  },
+  spendGrowth(c, stat) {
+    const cost = this.growthCost(c, stat);
+    if (c.player.growthPoints < cost || c.player.stats[stat] >= CAREER_DATA.statMax) return false;
+    c.player.growthPoints -= cost;
+    c.player.stats[stat]++;
+    return true;
+  },
+
+  // ---- clubs (plan 5.5B, 8.8) ----
+  _clubColours(pack, r) {
+    const C = CAREER_DATA.clubs.colours;
+    const combo = r.pick(pack.colourPool).split('_');
+    return [C[combo[0]] || '#1d4ed8', C[combo[1]] || '#e8b21c'];
+  },
+  makeCrest(r, colours) {
+    const K = CAREER_DATA.clubs;
+    if (r.chance(K.framedChance)) return { shield: null, emblem: r.pick(K.framedEmblems), colours };
+    return { shield: r.pick(K.shields), emblem: r.pick(K.animalEmblems), colours };
+  },
+  _clubName(pack, r, used) {
+    for (let i = 0; i < 20; i++) {
+      const n = r.pick(pack.clubFragments) + ' ' + r.pick(ORIGIN_PACKS.clubSuffixes);
+      if (!used.has(n)) { used.add(n); return n; }
+    }
+    return r.pick(pack.clubFragments) + ' CC';
+  },
+  // Three offers. Differences stay small: the batting slot / bowling spell
+  // you'd get, the training emphasis and the venue theme.
+  clubOffers(c) {
+    return this.roll(c, (r) => {
+      const pack = ORIGIN_PACKS.origins[c.origin], K = CAREER_DATA.clubs, used = new Set();
+      const bowls = this.bowls(c), p = c.player;
+      const home = CAREER_DATA.battingRoles[p.batRole] || 3;
+      const batSlots = c.player.role === 'bowler' ? [CAREER_DATA.bowlerBatsAt, CAREER_DATA.bowlerBatsAt, CAREER_DATA.bowlerBatsAt - 1]
+        : [home, Math.max(1, home - 1), Math.min(6, home + 1)];
+      const spells = Object.keys(K.bowlSpells);
+      const emph = K.emphases.slice();
+      const offers = [];
+      for (let i = 0; i < K.offers; i++) {
+        const colours = this._clubColours(pack, r);
+        offers.push({
+          id: 'club' + i, name: this._clubName(pack, r, used), colours, crest: this.makeCrest(r, colours),
+          venue: r.pick(K.venues), emphasis: emph.splice(r.int(0, emph.length - 1), 1)[0] || 'balanced',
+          batPos: batSlots[i], spell: bowls ? spells[i % spells.length] : null,
+        });
+      }
+      return offers;
+    });
+  },
+
+  signClub(c, club) {
+    c.club = club;
+    c.offers = null;
+    c.phase = 'season';
+    this.startStage(c, c.stage);
+  },
+
+  // ---- fixtures ----
+  _opponent(c, rating, final) {
+    return this.roll(c, (r) => {
+      const pack = ORIGIN_PACKS.origins[c.origin], used = new Set([c.club.name]);
+      const town = c.club.name.split(' ')[0];
+      pack.clubFragments.forEach((f) => { if (f === town) for (const sfx of ORIGIN_PACKS.clubSuffixes) used.add(f + ' ' + sfx); });
+      const colours = this._clubColours(pack, r);
+      return { name: this._clubName(pack, r, used), colours, crest: this.makeCrest(r, colours), rating: Math.round(rating), final: !!final };
+    });
+  },
+  _fixture(c, kind, rating) {
+    const n = c.fixtures.length + 1;
+    const f = { n, kind, opp: this._opponent(c, rating, kind === 'final'), played: false, seed: 0 };
+    f.seed = this.roll(c, (r) => r.int(1, 999999999));
+    f.objective = this.objectiveFor(c, f);
+    return f;
+  },
+  startStage(c, stageId) {
+    const S = CAREER_DATA.stages.find((s) => s.id === stageId);
+    c.stage = stageId;
+    c.fixtures = [];
+    c.selection = 0;
+    c.block = { preps: 0, log: [] };
+    if (S.comingSoon) return;
+    for (let i = 0; i < S.matches; i++) {
+      const last = i === S.matches - 1;
+      const rating = last ? S.finalOpponentRating : S.opponentRating[0] + (S.opponentRating[1] - S.opponentRating[0]) * i / Math.max(1, S.matches - 2);
+      c.fixtures.push(this._fixture(c, last ? 'final' : 'league', rating));
+    }
+  },
+  next(c) { return c.fixtures.find((f) => !f.played) || null; },
+
+  objectiveFor(c, f) {
+    const O = CAREER_DATA.objectives;
+    if (f.kind === 'final' || f.kind === 'qualifier') return Object.assign({}, O.final);
+    return this.roll(c, (r) => {
+      const pool = c.player.role === 'batter' ? O.bat : c.player.role === 'bowler' ? O.bowl : r.chance(0.5) ? O.bat : O.bowl;
+      return Object.assign({}, r.pick(pool));
+    });
+  },
+  objectiveMet(obj, perf) {
+    switch (obj.id) {
+      case 'runs': return perf.bat.runs >= obj.n;
+      case 'notOut': return perf.bat.batted && !perf.bat.out;
+      case 'boundaries': return perf.bat.fours + perf.bat.sixes >= obj.n;
+      case 'wickets': return perf.bowl.wkts >= obj.n;
+      case 'economy': return perf.bowl.balls >= 6 && perf.bowl.runs / perf.bowl.balls * 6 <= obj.n;
+      case 'dots': return perf.bowl.dots >= obj.n;
+      case 'win': return !!perf.won;
+      default: return false;
+    }
+  },
+
+  // ---- the schedule loop (plan 8.13) ----
+  prepsLeft(c) { return Math.max(0, CAREER_DATA.prepPerBlock - c.block.preps); },
+
+  // Train: small stat gain, costs energy, gives XP. Returns what happened.
+  train(c, drillId) {
+    const D = CAREER_DATA.training.find((t) => t.id === drillId);
+    if (!D || this.prepsLeft(c) <= 0) return null;
+    const res = { drill: D.id, stat: D.stat, gain: D.gain, xp: D.xp, energy: -D.energy, levels: 0, emphasis: false };
+    this.roll(c, (r) => {
+      if (D.emphasis && c.club && (c.club.emphasis === D.emphasis || c.club.emphasis === 'balanced')) {
+        res.emphasis = true;
+        res.xp += CAREER_DATA.emphasisBonus.xp;
+        if (c.club.emphasis === D.emphasis && r.chance(CAREER_DATA.emphasisBonus.extraStatChance)) res.gain++;
+      }
+    });
+    // Tired training still helps, but less.
+    if (c.energy < CAREER_DATA.energy.low) res.gain = Math.max(0, res.gain - 1);
+    c.player.stats[D.stat] = Math.min(CAREER_DATA.statMax, c.player.stats[D.stat] + res.gain);
+    c.energy = Math.max(0, c.energy - D.energy);
+    res.levels = this.addXp(c, res.xp);
+    c.block.preps++;
+    c.block.log.push('train:' + D.id);
+    return res;
+  },
+
+  rest(c) {
+    if (this.prepsLeft(c) <= 0) return null;
+    const R = CAREER_DATA.rest;
+    const before = c.energy;
+    c.energy = Math.min(CAREER_DATA.energy.max, c.energy + R.energy);
+    let formUp = false;
+    if (R.formUpFromPoor && c.form === 'poor') { c.form = 'normal'; formUp = true; }
+    c.block.preps++;
+    c.block.log.push('rest');
+    return { energy: c.energy - before, formUp };
+  },
+
+  // ---- the match grade (plan 8.24) ----
+  // perf: { bat: { batted, runs, balls, out, fours, sixes }, bowl: { bowled, balls, runs, wkts, dots, extras }, won }
+  gradeMatch(c, perf, objective) {
+    const G = CAREER_DATA.grade, role = c.player.role;
+    const b = perf.bat, w = perf.bowl;
+    let batScore = G.bat.didNotBat;
+    if (b.batted) {
+      const sr = b.balls ? b.runs / b.balls * 100 : 0;
+      batScore = b.runs * G.bat.perRun + (b.balls >= 4 ? (sr - G.bat.srBase) * G.bat.perSrPoint : 0) + (!b.out ? G.bat.notOut : 0) + (b.out && b.runs === 0 ? G.bat.duck : 0);
+    }
+    let bowlScore = G.bowl.didNotBowl;
+    if (w.bowled) {
+      const econ = w.balls ? w.runs / w.balls * 6 : 12;
+      bowlScore = w.wkts * G.bowl.perWicket + (G.bowl.econBase - econ) * G.bowl.perEconPoint + w.dots * G.bowl.perDot + w.extras * G.bowl.perExtra;
+    }
+    let score = role === 'batter' ? batScore : role === 'bowler' ? bowlScore
+      : batScore * G.allWeights.bat + bowlScore * G.allWeights.bowl;
+    if (perf.won) score += G.won;
+    const objectiveMet = objective ? this.objectiveMet(objective, perf) : false;
+    if (objectiveMet) score += G.objective;
+    const grade = G.thresholds.find((t) => score >= t.min).g;
+    return { score: Math.round(score), grade, objectiveMet, batScore: Math.round(batScore), bowlScore: Math.round(bowlScore) };
+  },
+  gradeAtLeast(g, min) { const o = CAREER_DATA.gradeOrder; return o.indexOf(g) >= o.indexOf(min); },
+
+  // A finished match: grade it and apply everything (energy, form, XP,
+  // Selection Meter, the fixture, the next block). Returns the summary shown
+  // on the career result screen.
+  finishMatch(c, fixture, perf) {
+    const G = this.gradeMatch(c, perf, fixture.objective);
+    const S = CAREER_DATA.selection, F = CAREER_DATA.form;
+    const lowEnergy = c.energy < CAREER_DATA.energy.low;
+    c.energy = Math.max(0, c.energy - CAREER_DATA.energy.match);
+    // Selection Meter
+    let sel = S.fromGrade[G.grade] + (G.objectiveMet ? S.objective : 0);
+    if (fixture.kind === 'final') sel *= S.finalMult;
+    sel = Math.round(sel);
+    const selBefore = c.selection;
+    c.selection = Math.min(S.max, c.selection + sel);
+    // Form
+    const formBefore = c.form;
+    let step = F.fromGrade[G.grade];
+    if (lowEnergy && this.roll(c, (r) => r.chance(CAREER_DATA.energy.slumpChance))) step -= 1;
+    const i = F.levels.indexOf(c.form);
+    c.form = F.levels[Math.max(0, Math.min(F.levels.length - 1, i + step))];
+    // XP
+    const xp = CAREER_DATA.grade.xp[G.grade] + (G.objectiveMet ? 20 : 0);
+    const levels = this.addXp(c, xp);
+    // The fixture and the schedule
+    fixture.played = true;
+    fixture.grade = G.grade;
+    fixture.won = !!perf.won;
+    fixture.score = perf.scoreLine || '';
+    fixture.objectiveMet = G.objectiveMet;
+    c.block = { preps: 0, log: [] };
+    c.matchInProgress = null;
+    const rec = { stage: c.stage, n: fixture.n, kind: fixture.kind, opp: fixture.opp.name, grade: G.grade, won: !!perf.won,
+      bat: perf.bat, bowl: perf.bowl, selection: sel, xp };
+    c.history.push(rec);
+    const out = Object.assign({}, G, { xp, levels, selection: sel, selBefore, selAfter: c.selection, formBefore, formAfter: c.form,
+      energyAfter: c.energy, objective: fixture.objective, kind: fixture.kind, won: !!perf.won });
+    // Stage gate after the last fixture of the block.
+    if (!this.next(c)) out.gate = this.gate(c, fixture);
+    return out;
+  },
+
+  // ---- the stage gate (plan 8.7) ----
+  // threshold + key objective = promoted; near miss = one qualifier match;
+  // bigger miss = a short extra block, then another look. Never a dead end.
+  gate(c, last) {
+    const S = this.stage(c), G = S.gate;
+    const finalFx = c.fixtures.filter((f) => f.kind === 'final' || f.kind === 'qualifier').pop();
+    const keyMet = !!finalFx && this.gradeAtLeast(finalFx.grade || 'D', G.keyObjective.finalGrade);
+    if (last && last.kind === 'qualifier') {
+      if (this.gradeAtLeast(last.grade, S.qualifier.passGrade)) return this.promote(c);
+      return this._extraBlock(c);
+    }
+    if (c.selection >= G.threshold && keyMet) return this.promote(c);
+    if (c.selection >= G.nearMiss) {
+      c.fixtures.push(this._fixture(c, 'qualifier', S.finalOpponentRating));
+      return { result: 'qualifier' };
+    }
+    return this._extraBlock(c);
+  },
+  _extraBlock(c) {
+    const S = this.stage(c);
+    for (let i = 0; i < S.extraBlock.matches; i++) c.fixtures.push(this._fixture(c, i === S.extraBlock.matches - 1 ? 'final' : 'extra', S.opponentRating[1]));
+    return { result: 'extra', matches: S.extraBlock.matches };
+  },
+  promote(c) {
+    const S = this.stage(c);
+    c.player.skillTokens += CAREER_DATA.levels.skillTokensPerPromotion;
+    c.promotedFrom = S.id;
+    c.stage = S.next;
+    c.phase = 'promoted';
+    c.fixtures = [];
+    return { result: 'promoted', to: S.next };
+  },
+
+  // What the Career Select slot shows.
+  summary(c) {
+    const S = this.stage(c), nx = this.next(c);
+    return {
+      name: c.player.name, role: c.player.role, look: c.player.look, facial: c.player.facial, skin: c.player.skin, hairColour: c.player.hairColour,
+      overall: this.overall(c), level: c.player.level, stage: S.id, stageN: S.n,
+      fixture: nx ? nx.n : null, fixtures: c.fixtures.length, club: c.club ? c.club.name : null, origin: c.origin,
+      phase: c.phase, savedAt: new Date().toISOString(),
+    };
+  },
+};
+
+// Stat bonuses from things that aren't base stats. Today: nothing. The Skill
+// Tree (next milestone) adds its minor perks here; equipment will too.
+const CareerStats = {
+  bonus(c) {
+    const out = {};
+    if (typeof SkillTree !== 'undefined' && SkillTree.statBonus) Object.assign(out, SkillTree.statBonus(c));
+    return out;
+  },
+};

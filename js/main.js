@@ -73,6 +73,14 @@ const Main = {
     Scenes.register('matchbowl', MatchBowlScene);
     Scenes.register('matchbreak', MatchBreakScene);
     Scenes.register('matchresult', MatchResultScene);
+    Scenes.register('careerselect', CareerSelectScene);
+    Scenes.register('careercreate', CareerCreateScene);
+    Scenes.register('careersign', CareerSignScene);
+    Scenes.register('careerhome', CareerHomeScene);
+    Scenes.register('careerprematch', CareerPreMatchScene);
+    Scenes.register('careersim', CareerSimScene);
+    Scenes.register('careerresult', CareerResultScene);
+    Scenes.register('careerpromoted', CareerPromotedScene);
     Scenes.go('boot');
 
     this._lastT = performance.now();

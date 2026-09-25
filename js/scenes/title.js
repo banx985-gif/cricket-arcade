@@ -17,17 +17,20 @@ const TitleScene = {
 
   _layout() {
     const cx = CONFIG.LOGICAL_W / 2;
-    const w = 570, h = 610, gap = 34, y = 320;
-    const x0 = cx - (w * 3 + gap * 2) / 2;
+    const w = 436, h = 610, gap = 22, y = 320;
+    const x0 = cx - (w * 4 + gap * 3) / 2;
     const card = (i, o) => Object.assign({ x: x0 + i * (w + gap), y, w, h, id: null, pressed: false }, o);
     this.cards = [
-      card(0, { mode: 'sixsmash', saveId: SIX_SMASH_DATA.classic.id, title: 'title.mode', sub: 'title.sixSub',
+      card(0, { mode: 'careerselect', title: 'title.modeCareer', sub: 'title.careerSub', career: true,
+        icon: 'stage_local', heroes: ['hero_allrounder'], color: '#9b5cff',
+        strip: ['grade_s', 'career_form_hot', 'train_timing_cage', 'badge_india'] }),
+      card(1, { mode: 'sixsmash', saveId: SIX_SMASH_DATA.classic.id, title: 'title.mode', sub: 'title.sixSub',
         icon: 'icon_six_smash', heroes: ['batter'], color: '#ff5a1f',
         strip: ['kit_bat', 'kit_helmet', 'kit_gloves', 'kit_pads'] }),
-      card(1, { mode: 'toss', saveId: MATCH_DATA.defaultFormat, title: 'title.modeMatch', sub: 'title.matchSub',
+      card(2, { mode: 'toss', saveId: MATCH_DATA.defaultFormat, title: 'title.modeMatch', sub: 'title.matchSub',
         icon: 'icon_quick_match', heroes: ['batter', 'bowler'], color: '#ffb400', match: true,
         strip: ['icon_run', 'marker_six', 'marker_four', 'marker_wicket'] }),
-      card(2, { mode: 'wicketrush', saveId: WICKET_RUSH_DATA.classic.id, title: 'title.modeWicket', sub: 'title.wicketSub',
+      card(3, { mode: 'wicketrush', saveId: WICKET_RUSH_DATA.classic.id, title: 'title.modeWicket', sub: 'title.wicketSub',
         icon: 'icon_wicket_rush', heroes: ['bowler'], color: '#1f8a4c',
         strip: BOWLING_DATA.deliveries.map(d => d.icon) }),
     ];
@@ -43,7 +46,16 @@ const TitleScene = {
   _resume() {
     const cp = this.resume.checkpoint;
     this.resume = BootScene.pendingResume = null;
+    if (cp.career) {
+      // A career match: reload the career, then pick up the match.
+      CareerMatch.resumeFrom(cp).then(([scene, params]) => Scenes.go(scene, params)).catch((e) => {
+        Log.add('error', 'career resume failed: ' + e.message);
+        Save.clearResume();
+      });
+      return;
+    }
     try {
+      CareerMatch.on = false;
       const [scene, params] = Match.restore(cp);
       Scenes.go(scene, params);
     } catch (e) {
@@ -99,9 +111,10 @@ const TitleScene = {
       if (code === 'Escape') this._abandon();
       return;
     }
-    if (code === 'Digit1' || code === 'Enter') { Sound.unlock(); Scenes.go('sixsmash'); }
-    if (code === 'Digit2') { Sound.unlock(); Scenes.go('toss'); }
-    if (code === 'Digit3') { Sound.unlock(); Scenes.go('wicketrush'); }
+    if (code === 'Digit1' || code === 'Enter') { Sound.unlock(); Scenes.go('careerselect'); }
+    if (code === 'Digit2') { Sound.unlock(); Scenes.go('sixsmash'); }
+    if (code === 'Digit3') { Sound.unlock(); Scenes.go('toss'); }
+    if (code === 'Digit4') { Sound.unlock(); Scenes.go('wicketrush'); }
     if (code === 'KeyO') Scenes.go('settings');
   },
 
@@ -142,7 +155,7 @@ const TitleScene = {
     Sprites.ui('icon_quick_match', cx, 340, 220, 150);
     R.text(T('resume.title'), cx, 450, 60, '#ffffff');
     const s = this.resume.checkpoint.summary;
-    const team = T(MATCH_DATA.teams[s.battingSide].nameKey);
+    const team = this.resume.checkpoint.career ? this.resume.checkpoint.teams[s.battingSide].name || T(MATCH_DATA.teams[s.battingSide].nameKey) : T(MATCH_DATA.teams[s.battingSide].nameKey);
     let line = T('resume.score', { team, runs: s.runs, wkts: s.wickets, overs: s.overs });
     if (s.target) line += '  ·  ' + T('match.targetN', { n: s.target });
     if (s.isSuper) line = T('match.superOver') + '  ·  ' + line;
@@ -170,22 +183,25 @@ const TitleScene = {
     // hero art on the left (two smaller figures on the match card)
     c.heroes.forEach((hero, i) => {
       const two = c.heroes.length > 1;
-      const hx = two ? x + 95 + i * 135 : x + 150, hy = two ? y + 255 + i * 12 : y + 250;
-      if (!Sprites.ui(hero, hx, hy, two ? 200 : 270, two ? 330 : 400)) Sprites.draw(hero, hx, y + 420, 170, {});
+      const hx = two ? x + 80 + i * 110 : x + 120, hy = two ? y + 255 + i * 12 : y + 250;
+      if (!Sprites.ui(hero, hx, hy, two ? 170 : 230, two ? 300 : 380)) Sprites.draw(hero, hx, y + 420, 150, {});
     });
     ctx.restore();
-    Sprites.ui(c.icon, x + w - 145, y + 135, 230, 190);
+    Sprites.ui(c.icon, x + w - 115, y + 125, 190, 160);
     // 2x2 strip: starting kit / delivery balls / match markers
     c.strip.forEach((k, i) => {
-      const kx = x + w - 195 + (i % 2) * 100, ky = y + 290 + Math.floor(i / 2) * 92;
-      R.roundRect(kx - 42, ky - 42, 84, 84, 16, 'rgba(255,255,255,0.12)');
-      Sprites.ui(k, kx, ky, 72, 66);
+      const kx = x + w - 160 + (i % 2) * 86, ky = y + 280 + Math.floor(i / 2) * 82;
+      R.roundRect(kx - 37, ky - 37, 74, 74, 14, 'rgba(255,255,255,0.12)');
+      Sprites.ui(k, kx, ky, 64, 58);
     });
-    R.text(T(c.title), x + w / 2, y + 470, 56, '#ffffff');
-    R.text(T(c.sub), x + w / 2, y + 520, 25, '#d8e4f0', 'center', false);
-    const best = Save.data && Save.best(c.saveId);
+    R.text(T(c.title), x + w / 2, y + 470, 46, '#ffffff');
+    R.text(T(c.sub), x + w / 2, y + 520, 22, '#d8e4f0', 'center', false);
+    const best = c.saveId && Save.data && Save.best(c.saveId);
     let line;
-    if (c.match) line = best ? T('title.matchRecord', { won: best.won || 0, played: best.played || 0 }) : T('title.noMatches');
+    if (c.career) {
+      const n = Save.data ? Save.data.careerSlots.filter(Boolean).length : 0;
+      line = n ? T('title.careersActive', { n }) : T('title.noCareer');
+    } else if (c.match) line = best ? T('title.matchRecord', { won: best.won || 0, played: best.played || 0 }) : T('title.noMatches');
     else line = best ? T('title.best', { score: formatNumber(best.score) }) : T('title.noBest');
     R.text(line, x + w / 2, y + 566, 30, '#ffd23f');
   },

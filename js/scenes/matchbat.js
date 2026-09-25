@@ -45,6 +45,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
 
   // ---- the computer's bowling ----
   _startBall() {
+    if (CareerMatch.route('matchbat')) return;   // career: only your balls are played live
     Match.overStart();                       // resume checkpoint at the start of each over
     const inn = this.inn;
     const prevBatter = this.batterP;
@@ -403,8 +404,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
 const MatchScoreHud = {
   draw(ctx, scene, playerBatting) {
     const s = Display.safe, inn = scene.inn;
-    const side = MATCH_DATA.teams[inn.battingSide];
-    const h = MatchHud.scoreboard(ctx, s.left + 16, s.top + 12, 470, inn, T(side.shortKey));
+    const h = MatchHud.scoreboard(ctx, s.left + 16, s.top + 12, 470, inn, CareerMatch.teamShort(inn.battingSide));
     MatchHud.thisOver(ctx, s.left + 34, s.top + 12 + h + 30, inn);
     const b = inn.bat(inn.striker), bp = Match.batter(inn);
     R.text(T('match.batterLine', { name: bp ? bp.short : b.no, r: b.runs, b: b.balls }), s.left + 34, s.top + 12 + h + 78, 24, '#ffffff', 'left');

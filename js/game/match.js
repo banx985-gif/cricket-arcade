@@ -67,8 +67,8 @@ class Innings {
     if (kind === 'noball') { this.extras.noBalls++; this.freeHit = true; res.freeHitNext = true; pressure += PR.extra; }
     if (kind === 'legal') { this.legal++; this.freeHit = false; st.balls++; }
     if (kind !== 'wide') st.runs += batRuns + boundary;
-    if (boundary === 4) this.fours++;
-    if (boundary === 6) this.sixes++;
+    if (boundary === 4) { this.fours++; st.fours = (st.fours || 0) + 1; }
+    if (boundary === 6) { this.sixes++; st.sixes = (st.sixes || 0) + 1; }
     if (boundary) pressure += PR.boundary;
     else if (batRuns) pressure += PR.perRun * batRuns;
     else if (kind === 'legal' && !b.wicket) { this.dots++; pressure += PR.dot; }
@@ -76,8 +76,10 @@ class Innings {
     // The bowler's figures (run outs aren't the bowler's wicket).
     const bid = this.overBowlers[this.overBowlers.length - 1];
     if (bid) {
-      const f = this.bowlerFigs[bid] || (this.bowlerFigs[bid] = { balls: 0, runs: 0, wkts: 0 });
+      const f = this.bowlerFigs[bid] || (this.bowlerFigs[bid] = { balls: 0, runs: 0, wkts: 0, dots: 0, extras: 0 });
       if (kind === 'legal') f.balls++;
+      else f.extras = (f.extras || 0) + 1;
+      if (kind === 'legal' && res.runs === 0) f.dots = (f.dots || 0) + 1;
       f.runs += res.runs;
     }
 
@@ -151,19 +153,24 @@ const Match = {
   cond: null,          // { pitch, weather }
   fatigue: {},         // bowler id -> 0..1 (plan 7.15)
 
-  start(formatId) {
+  // opts (career matches): { seed, teams(match) -> {player, ai}, cond(rng) -> {…}, career: true }
+  start(formatId, opts) {
+    const o = opts || {};
     this.fmt = MATCH_DATA.formats[formatId || MATCH_DATA.defaultFormat];
-    this.seed = RNG.begin(Dev.nextSeed());
+    this.seed = RNG.begin(o.seed !== undefined ? o.seed : Dev.nextSeed());
+    this.isCareer = !!o.career;
     this.innings = [];
     this.superOvers = 0;
     this.over = false;
     this.result = null;
     this.toss = null;
     this._lastCp = null;
-    this.teams = Teams.forMatch(Dev.difficulty || PLAYER_DATA.quickMatchDifficulty);
+    this.teams = o.teams ? o.teams(this) : Teams.forMatch(Dev.difficulty || PLAYER_DATA.quickMatchDifficulty);
     const cr = RNG.stream('conditions'), Q = STADIUM_DATA.quickMatch;
     const pick = (w) => cr.weighted(Object.entries(w).map(([id, weight]) => ({ id, weight }))).id;
-    this.cond = { stadium: STADIUM_DATA.defaultStadium, pitch: Dev.pitch || pick(Q.pitchWeights), weather: Dev.weather || pick(Q.weatherWeights) };
+    this.cond = o.cond ? o.cond(cr) : { stadium: STADIUM_DATA.defaultStadium, pitch: pick(Q.pitchWeights), weather: pick(Q.weatherWeights) };
+    if (Dev.pitch) this.cond.pitch = Dev.pitch;
+    if (Dev.weather) this.cond.weather = Dev.weather;
     this.fatigue = {};
     Log.add('match', `start ${this.fmt.id} seed ${this.seed} pitch ${this.cond.pitch} weather ${this.cond.weather}`);
   },
@@ -224,6 +231,7 @@ const Match = {
       fmt: this.fmt.id, seed: this.seed, toss: this.toss, mainBattedFirst: this.mainBattedFirst,
       superOvers: this.superOvers,
       teams: this.teams, cond: this.cond, fatigue: this.fatigue,
+      career: typeof CareerMatch !== 'undefined' ? CareerMatch.ctx() : null,
       innings: this.innings.map((i) => i.toJSON()),
       rng: RNG.snapshot(),
       summary: { battingSide: inn.battingSide, runs: inn.runs, wickets: inn.wickets, overs: inn.overs,
@@ -255,6 +263,7 @@ const Match = {
     this.teams = cp.teams || Teams.forMatch();
     this.cond = cp.cond || { stadium: STADIUM_DATA.defaultStadium, pitch: 'balanced', weather: 'clear' };
     this.fatigue = cp.fatigue || {};
+    this.isCareer = !!cp.career;
     for (const inn of this.innings) { if (!inn.overBowlers) inn.overBowlers = []; if (!inn.bowlerFigs) inn.bowlerFigs = {}; }
     this.over = false;
     this.result = null;
@@ -292,6 +301,7 @@ const Match = {
     });
     this.innings.push(inn);
     Log.add('match', `innings ${n + 1}: ${batting} bats${target ? ', target ' + target : ''}${isSuper ? ' (super over)' : ''}`);
+    if (this.isCareer && typeof CareerMatch !== 'undefined' && CareerMatch.on) return CareerMatch.sceneFor(inn);
     return batting === 'player' ? 'matchbat' : 'matchbowl';
   },
 

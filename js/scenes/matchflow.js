@@ -16,7 +16,7 @@ function drawMatchBackdrop(ctx, t, dim) {
 
 function inningsLine(inn) {
   const side = MATCH_DATA.teams[inn.battingSide];
-  return T('match.inningsLine', { team: T(side.nameKey), runs: inn.runs, wkts: inn.wickets, overs: inn.overs });
+  return T('match.inningsLine', { team: CareerMatch.teamName(inn.battingSide), runs: inn.runs, wkts: inn.wickets, overs: inn.overs });
 }
 
 const TossScene = {
@@ -26,6 +26,7 @@ const TossScene = {
 
   enter(params) {
     Save.clearResume();                      // a new match replaces any unfinished one
+    CareerMatch.on = false;
     Match.start((params && params.format) || Dev.matchFormat || MATCH_DATA.defaultFormat);
     Match.flipToss();
     Stadium.setConditions(Match.cond);
@@ -92,9 +93,11 @@ const TossScene = {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(Math.max(0.06, w), 1);
-    R.circle(0, 0, 110, '#ffcf33', '#a87400', 10);
-    R.circle(0, 0, 84, null, 'rgba(168,116,0,0.6)', 5);
-    R.text(T('match.coin.' + face), 0, 4, 34, '#8a5a00', 'center', false);
+    if (!Sprites.ui('result_toss_coin_' + face, 0, 0, 250, 250)) {
+      R.circle(0, 0, 110, '#ffcf33', '#a87400', 10);
+      R.circle(0, 0, 84, null, 'rgba(168,116,0,0.6)', 5);
+      R.text(T('match.coin.' + face), 0, 4, 34, '#8a5a00', 'center', false);
+    }
     ctx.restore();
 
     if (this.phase === 'result') {
@@ -178,12 +181,19 @@ const MatchResultScene = {
     const r = Match.result;
     this.won = r.winner === 'player';
     Save.clearResume();
+    const cx = CONFIG.LOGICAL_W / 2;
+    this.buttons.clear();
+    this.unlocked = [];
+    if (CareerMatch.on) {
+      // Career: the result is graded on the career screen, not the Quick Match record.
+      this.buttons.add('career.seeGrade', cx - 280, 880, 560, 130, () => Scenes.go('careerresult', CareerMatch.finish()), { size: 50 });
+      if (this.won) { Sound.play('fanfare'); Sound.play('crowdRoar'); } else Sound.play('crowdGroan');
+      return;
+    }
     Save.recordMatch(Match.fmt.id, this.won);
     // Anything earned by this result (e.g. field settings at Quick Match win milestones).
     this.unlocked = Unlocks.check();
     if (this.unlocked.length) Save.write();
-    const cx = CONFIG.LOGICAL_W / 2;
-    this.buttons.clear();
     this.buttons.add('match.playAgain', cx - 440, 880, 400, 130, () => Scenes.go('toss'), { size: 50 });
     this.buttons.add('result.title_btn', cx + 40, 880, 400, 130, () => Scenes.go('title'), { size: 54, color: '#e9eef5' });
     if (this.won) { Sound.play('fanfare'); Sound.play('crowdRoar'); }
@@ -219,10 +229,12 @@ const MatchResultScene = {
     Sprites.ui(this.won ? 'bowler' : 'marker_wicket', cx + 650, 330, 300, 380, { alpha: 0.95 });
 
     const pop = Math.min(1, this._t / 0.3);
-    ctx.save(); ctx.translate(cx, 150); ctx.scale(0.6 + 0.4 * pop, 0.6 + 0.4 * pop);
-    R.text(T(this.won ? 'match.youWon' : 'match.youLost'), 0, 0, 120, this.won ? '#ffd23f' : '#ff8f8f');
+    ctx.save(); ctx.translate(cx, 140); ctx.scale(0.6 + 0.4 * pop, 0.6 + 0.4 * pop);
+    if (!Sprites.ui(this.won ? 'result_banner_you_win' : 'result_banner_you_lose', 0, 0, 440, 210)) {
+      R.text(T(this.won ? 'match.youWon' : 'match.youLost'), 0, 0, 120, this.won ? '#ffd23f' : '#ff8f8f');
+    }
     ctx.restore();
-    const winnerName = T(MATCH_DATA.teams[r.winner].nameKey);
+    const winnerName = CareerMatch.teamName(r.winner);
     R.text(T(r.marginKey, { team: winnerName, n: r.margin, balls: r.ballsLeft }), cx, 270, 44, '#ffffff');
 
     // Rows shrink if Super Overs add more innings, so everything fits above the buttons.
@@ -244,7 +256,7 @@ const MatchResultScene = {
       R.text(T('unlock.newField', { f: T('field.' + u.id) }), cx + 40, 815, 38, '#ffd23f');
     }
     const rec = Save.best(Match.fmt.id);
-    if (rec && !(this.unlocked && this.unlocked.length)) R.text(T('match.record', { won: rec.won || 0, played: rec.played || 0 }), cx, 840, 30, '#d8e4f0', 'center', false);
+    if (rec && !CareerMatch.on && !(this.unlocked && this.unlocked.length)) R.text(T('match.record', { won: rec.won || 0, played: rec.played || 0 }), cx, 840, 30, '#d8e4f0', 'center', false);
 
     this.buttons.draw();
     Effects.drawParticles(ctx);

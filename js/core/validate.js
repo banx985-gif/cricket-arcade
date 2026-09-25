@@ -104,6 +104,38 @@ const Validate = {
     for (const r of ['chased', 'allOut', 'overs']) str('match.inningsEnd.' + r, 'innings end');
     for (const r of ['safe', 'risky', 'danger', 'none']) str('run.risk.' + r, 'run button');
 
+    // Career (M05)
+    const allArt = Object.assign({}, ...Object.values(ASSET_MANIFEST.groups));
+    const cart = (id, where) => { if (!allArt[id]) p.push(`sprite id "${id}" (${where}) is not in the asset manifest`); };
+    const statKeys = new Set([].concat(...Object.values(PLAYER_DATA.stats)));
+    for (const [rid, role] of Object.entries(CAREER_DATA.roles)) {
+      str(role.nameKey, 'career role'); str('career.role.' + rid, 'career role');
+      for (const a of role.archetypes) {
+        str('create.arch.' + a.id, 'archetype'); str('create.archDesc.' + a.id, 'archetype');
+        for (const k of a.key.concat(a.weak, a.grow)) if (!statKeys.has(k)) p.push(`archetype "${a.id}" names unknown stat "${k}"`);
+        if (a.family && !BOWLING_DATA.families[a.family]) p.push(`archetype "${a.id}" has unknown family "${a.family}"`);
+      }
+    }
+    for (const r of Object.keys(CAREER_DATA.battingRoles)) str('create.batRole.' + r, 'batting role');
+    for (const pres of Object.keys(CAREER_DATA.looks)) for (const id of CAREER_DATA.looks[pres]) { cart(id, 'look'); cart('mask_' + id + '_skin', 'look mask'); cart('mask_' + id + '_hair', 'look mask'); }
+    for (const id of CAREER_DATA.facialHair) if (id !== 'none') { cart(id, 'facial hair'); cart('mask_' + id + '_skin', 'look mask'); }
+    for (const d of CAREER_DATA.training) { cart(d.icon, 'training'); str('train.' + d.id, 'training'); if (!statKeys.has(d.stat)) p.push(`training "${d.id}" raises unknown stat "${d.stat}"`); }
+    for (const id of CAREER_DATA.clubs.shields.concat(CAREER_DATA.clubs.animalEmblems, CAREER_DATA.clubs.framedEmblems)) cart(id, 'club crest');
+    for (const v of CAREER_DATA.clubs.venues) str('venue.' + v, 'club venue');
+    for (const e of CAREER_DATA.clubs.emphases) str('emphasis.' + e, 'club emphasis');
+    for (const k of Object.keys(CAREER_DATA.clubs.bowlSpells)) str('spell.' + k, 'bowling spell');
+    for (const o of Object.values(ORIGIN_PACKS.origins)) {
+      cart('badge_' + o.id, 'origin badge');
+      for (const c of o.colourPool) for (const w of c.split('_')) if (!CAREER_DATA.clubs.colours[w]) p.push(`origin "${o.id}" colour "${w}" has no colour value`);
+      for (const k of Object.keys(o.pitchWeights)) if (!STADIUM_DATA.pitchTypes[k]) p.push(`origin "${o.id}" pitch "${k}" isn't a pitch type`);
+      for (const k of Object.keys(o.weatherWeights)) if (!STADIUM_DATA.weather[k]) p.push(`origin "${o.id}" weather "${k}" isn't a weather type`);
+      if (o.pathwayLabels.length !== 8) p.push(`origin "${o.id}" needs 8 pathway labels`);
+    }
+    for (const lv of CAREER_DATA.form.levels) { cart('career_form_' + lv, 'form'); str('career.formLevel.' + lv, 'form'); }
+    for (const g of CAREER_DATA.gradeOrder) cart('grade_' + g.toLowerCase(), 'grade');
+    for (const st of CAREER_DATA.stages) { str(st.nameKey, 'stage'); cart(st.art, 'stage'); if (!st.comingSoon && !MATCH_DATA.formats[st.format]) p.push(`stage "${st.id}" uses unknown format`); }
+    for (const pool of Object.values(CAREER_DATA.objectives)) for (const o of [].concat(pool)) str('objective.' + o.id, 'objective');
+
     // Manifest: every entry needs a file path, every id once (object keys are unique by nature)
     for (const [gname, g] of Object.entries(ASSET_MANIFEST.groups)) {
       for (const [id, e] of Object.entries(g)) if (!e || !e.src) p.push(`asset "${id}" in group ${gname} has no file path`);

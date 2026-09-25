@@ -63,7 +63,7 @@ const Dev = {
   _state(on) { return on ? T('dev.on') : T('dev.off'); },
 
   _inMatch() {
-    return (Scenes.currentName === 'matchbat' || Scenes.currentName === 'matchbowl') && Match.current();
+    return (Scenes.currentName === 'matchbat' || Scenes.currentName === 'matchbowl' || Scenes.currentName === 'careersim') && Match.current();
   },
 
   _layout() {
@@ -111,6 +111,12 @@ const Dev = {
       add(0, 2, () => T('dev.match.forceLbw'), () => { this.forceFate = 'lbw'; this.say(T('dev.done')); });
       add(0, 3, () => T('dev.match.forceHitWicket'), () => { this.forceFate = 'hitwicket'; this.say(T('dev.done')); });
       add(0, 4, () => T('dev.match.forceLegNotOut'), () => { this.forceFate = 'padLeg'; this.say(T('dev.done')); });
+      add(1, 3, () => T('dev.match.careerSim'), () => {
+        if (!CareerMatch.on) { this.say(T('dev.match.careerOnly')); return; }
+        this.hide();
+        CareerMatch.autoPlay();
+        Scenes.go('careerresult', CareerMatch.finish());
+      });
       add(1, 2, () => T('dev.match.checkpoint'), () => this._matchDo(() => { Match.checkpoint('over'); this.say(T('dev.done')); }));
     } else if (this.tab === 'save') {
       add(0, 3, () => T('dev.save.print'), () => { console.log('[save]', JSON.stringify(Save.data, null, 2)); this.say(T('dev.save.printed')); });

@@ -45,6 +45,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
   _pressure() { return Math.max(this.inn.pressure, Duel.pressure(this.inn)); },
 
   _startBall() {
+    if (CareerMatch.route('matchbowl')) return;  // career: only your overs are bowled live
     Match.overStart();                       // resume checkpoint at the start of each over
     this._setState('aim');
     this._resetBall();
