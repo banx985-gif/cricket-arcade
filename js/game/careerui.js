@@ -99,6 +99,8 @@ const Portrait = {
 const Crest = {
   draw(ctx, crest, cx, cy, size) {
     if (!crest) return;
+    // a franchise crest is a finished picture (M08)
+    if (crest.image) { if (!Sprites.ui(crest.image, cx, cy, size, size)) R.circle(cx, cy, size * 0.45, crest.colours[0], crest.colours[1], 6); return; }
     const [c0, c1] = crest.colours;
     if (!crest.shield) {
       const t = Tint.of(crest.emblem, [c0, c1]);

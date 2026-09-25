@@ -130,6 +130,28 @@ const Dev = {
       add(0, 0, () => T('dev.career.tokens'), withCareer((c) => SkillTree.earn(c, 'level', 10)));
       add(0, 1, () => T('dev.career.coins'), () => { Save.data.currencies.coins = (Save.data.currencies.coins || 0) + 500; Save.write(); this.say(T('dev.done')); });
       add(1, 0, () => T('dev.career.between'), withCareer((c) => { if (c.phase === 'season') c.phase = 'promoted'; else if (c.phase === 'promoted' && c.fixtures.length) c.phase = 'season'; }));
+      // M08: jump to a stage (ready to start it, with stats raised to that level), play a whole
+      // match instantly, force an event / a sponsor offer, promote now.
+      const home = () => { if (Scenes.currentName === 'careerhome') { CareerHomeScene._layout(); CareerHomeScene._checkEvent(); } };
+      ['regional', 'domestic', 'franchise'].forEach((id, i) => add(1, 1 + i, () => T('dev.career.jump', { n: i + 2 }), withCareer((c) => { this._jumpStage(c, id); this.hide(); home(); })));
+      add(1, 4, () => T('dev.career.promote'), withCareer((c) => {
+        if (c.phase !== 'season') return;
+        Career.promote(c); const got = Coaches.unlockForStage(Save.data, Career.stage(c).n); Save.write();
+        this.hide(); Scenes.go('careerpromoted', { slot: CareerHomeScene.slot, career: c, coaches: got });
+      }));
+      add(0, 2, () => T('dev.career.simMatch'), () => {
+        const c = Scenes.currentName === 'careerhome' && CareerHomeScene.career;
+        if (!c || c.phase !== 'season' || !Career.next(c)) { this.say(T('dev.career.none')); return; }
+        this.hide();
+        c.pendingEvent = null;
+        CareerMatch.start(c, CareerHomeScene.slot);
+        CareerMatch.autoPlay();
+        Scenes.go('careerresult', CareerMatch.finish());
+      });
+      add(0, 3, () => T('dev.career.event'), withCareer((c) => { c.pendingEvent = null; Events.roll(c, true); this.hide(); home(); }));
+      add(0, 4, () => T('dev.career.sponsor'), withCareer((c) => {
+        c.pendingEvent = { id: 'sponsor_offer', offer: Career.roll(c, (r) => Sponsors.pick(c, r)) }; c.sponsor = null; this.hide(); home();
+      }));
     } else if (this.tab === 'save') {
       add(0, 3, () => T('dev.save.print'), () => { console.log('[save]', JSON.stringify(Save.data, null, 2)); this.say(T('dev.save.printed')); });
       add(1, 3, () => T('dev.save.corrupt'), () => {
@@ -145,6 +167,19 @@ const Dev = {
   },
 
   // ---- MATCH tab ----
+  // Put a career at the start of a stage (between stages: START STAGE on Career
+  // Home), with its stats raised to that stage's level so the matches are fair.
+  _jumpStage(c, id) {
+    const S = CAREER_DATA.stages.find((s) => s.id === id), prev = CAREER_DATA.stages.find((s) => s.next === id);
+    Object.assign(c, { stage: id, phase: 'promoted', fixtures: [], selection: 0, team: null, tour: null, contract: null, offers: null,
+      pendingEvent: null, sponsor: null, matchInProgress: null, promotedFrom: prev ? prev.id : null, promotedSelection: 85 });
+    if (!c.club) c.club = Career.clubOffers(c)[0];
+    const floor = S.teamRating - 4;
+    for (const k of Object.keys(c.player.stats)) c.player.stats[k] = Math.max(c.player.stats[k], floor);
+    Coaches.unlockForStage(Save.data, S.n);
+    Save.write();
+  },
+
   _matchDo(fn) {
     const inn = this._inMatch();
     if (!inn) { this.say(T('dev.match.notInMatch')); return null; }

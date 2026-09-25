@@ -253,6 +253,7 @@ const SkillTree = {
     if (P.includes('field_general')) { m.catchBonus += TD.field_general.catchBonus * boost('field_general'); m.stopBonus += TD.field_general.stopBonus * boost('field_general'); }
     if (m.flags.ironEngine) m.energy *= SKILL_TREE_DATA.keystones.ironEngine.energy;
     if (typeof Gear !== 'undefined') Gear.applyMods(c, m);       // equipment perks and set effects (M07)
+    if (typeof Coaches !== 'undefined') Coaches.applyMods(c, m); // the coach's passive (M08)
     return m;
   },
 

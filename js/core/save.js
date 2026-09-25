@@ -35,6 +35,7 @@ const Save = {
       globalLevel: { level: 1, xp: 0 },
       unlocks: {},
       collection: {},
+      coaches: { unlocked: {}, mastery: {} },   // coaches: unlocked + mastery, account-wide (M08, plan 13)
       locker: {},                // the Global Locker: gear id -> { got, src } (M07, plan 12.8)
       myXI: null,
       hallOfFame: [],
@@ -137,6 +138,7 @@ const Save = {
     if (!doc) doc = this.defaults();
     this.data = doc;
     if (typeof Gear !== 'undefined') Gear.ensure(this.data);     // the starter kit is always in the Locker
+    if (typeof Coaches !== 'undefined') Coaches.ensure(this.data); // and the starting coaches
     this._applySettings();
     // Write it back in the current format (repairs a bad main from the backup,
     // finishes a migration, and drops the old key).
@@ -257,6 +259,7 @@ const Save = {
     await Store.setMany(entries);
     this.data = this.defaults();
     if (typeof Gear !== 'undefined') Gear.ensure(this.data);
+    if (typeof Coaches !== 'undefined') Coaches.ensure(this.data);
     this._applySettings();
     this.recovered = null;
     Log.add('save', 'full data reset');

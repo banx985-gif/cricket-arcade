@@ -141,6 +141,14 @@ const CAREER_DATA = {
     finalMult: 1.5,                            // the local final counts extra
     max: 100,
   },
+  // Each stage: matches (the last is its final), team / opponent ratings, the
+  // gate (plan 8.7: threshold + key objective = promoted; near miss = one
+  // qualifier; bigger miss = a short extra block), and what's special:
+  //   team         the side you play for: 'club' (your local club) | 'stage' (a
+  //                generated representative side, teamSuffix) | 'franchise' (a contract)
+  //   sponsors / scouts / rival    sponsor offers can appear / "scouts watching" / a boss match
+  //   tournament   the Stage 4 format (CAREER_DATA.franchise): groups, then knockouts
+  //   milestone    art shown on the promotion screen into this stage
   stages: [
     {
       id: 'local', n: 1, nameKey: 'career.stage.local', art: 'stage_local', format: 'quick5',
@@ -149,12 +157,92 @@ const CAREER_DATA = {
       gate: { threshold: 70, nearMiss: 52, keyObjective: { finalGrade: 'C' } },
       qualifier: { passGrade: 'B' },
       extraBlock: { matches: 2 },
+      team: 'club', milestone: 'milestone_local_club_signing',
       next: 'regional',
     },
     {
-      id: 'regional', n: 2, nameKey: 'career.stage.regional', art: 'stage_regional', comingSoon: true,
+      id: 'regional', n: 2, nameKey: 'career.stage.regional', art: 'stage_regional', format: 'quick5',
+      matches: 4,                               // the 4th is the regional final
+      teamRating: 40, opponentRating: [37, 45], finalOpponentRating: 48,
+      gate: { threshold: 70, nearMiss: 52, keyObjective: { finalGrade: 'C' } },
+      qualifier: { passGrade: 'B' },
+      extraBlock: { matches: 2 },
+      team: 'stage', teamSuffix: 'Pathway XI', sponsors: true, rival: { n: 2, id: 'prodigy' },
+      milestone: 'milestone_domestic_promotion',
+      next: 'domestic',
+    },
+    {
+      id: 'domestic', n: 3, nameKey: 'career.stage.domestic', art: 'stage_top_domestic', format: 'quick5',
+      matches: 5,                               // the 5th is the domestic final
+      teamRating: 50, opponentRating: [47, 56], finalOpponentRating: 59,
+      gate: { threshold: 72, nearMiss: 54, keyObjective: { finalGrade: 'C' } },
+      qualifier: { passGrade: 'B' },
+      extraBlock: { matches: 2 },
+      team: 'stage', teamSuffix: 'domestic', sponsors: true, scouts: true, rival: [{ n: 2, id: 'wall' }, { n: 4, id: 'finisher' }],
+      milestone: 'milestone_domestic_promotion',
+      next: 'franchise',
+    },
+    {
+      id: 'franchise', n: 4, nameKey: 'career.stage.franchise', art: 'stage_global_franchise', format: 'quick5',
+      matches: 5,                               // 3 group matches + semi + final (when you go all the way)
+      teamRating: 60, opponentRating: [57, 66], finalOpponentRating: 68,
+      // Key objective: reach the semi-finals (win your group).
+      gate: { threshold: 70, nearMiss: 52, keyObjective: { reach: 'semi' } },
+      qualifier: { passGrade: 'B' },
+      extraBlock: { matches: 2 },
+      team: 'franchise', tournament: true, sponsors: true, scouts: true, rival: { n: 3, id: 'cannon' },
+      milestone: 'milestone_franchise_signing',
+      next: 'national',
+    },
+    {
+      id: 'national', n: 5, nameKey: 'career.stage.national', art: 'stage_national_development', comingSoon: true,
+      milestone: 'milestone_national_callup',
     },
   ],
+  // Names for generated representative sides (team: 'stage'): a town from the
+  // origin pack + the stage's teamSuffix; 'domestic' picks one of these.
+  domesticSuffixes: ['Titans', 'Royals', 'Strikers', 'Stallions', 'Hawks', 'Knights', 'Warriors'],
+
+  // ---- Stage 4: Global Franchise (plan 5.5C, 8.10, 8.6) ------------------------------
+  // 16 fixed fictional franchises (crest = art id). 4 groups of 4; the group
+  // winners play the semi-finals (A v B, C v D), then the final. Win = 2 points,
+  // ties on points split by net run rate.
+  franchise: {
+    groups: 4, perGroup: 4, pointsWin: 2,
+    teams: [
+      { id: 'crown_lions',      crest: 'franchise_crest_01', colours: ['#b0122a', '#e8b21c'], rating: 63 },
+      { id: 'blue_eagles',       crest: 'franchise_crest_02', colours: ['#1d4ed8', '#e8b21c'], rating: 61 },
+      { id: 'thunder_tigers',   crest: 'franchise_crest_03', colours: ['#f07a1a', '#1b1b1b'], rating: 64 },
+      { id: 'bay_sharks',       crest: 'franchise_crest_04', colours: ['#139a9a', '#f2f2f2'], rating: 58 },
+      { id: 'iron_spartans',    crest: 'franchise_crest_05', colours: ['#c8202f', '#b0703a'], rating: 62 },
+      { id: 'emerald_dragons',  crest: 'franchise_crest_06', colours: ['#0f9d58', '#e8b21c'], rating: 60 },
+      { id: 'desert_warriors',  crest: 'franchise_desert_warriors', colours: ['#7a1f2b', '#e8b21c'], rating: 65 },
+      { id: 'jungle_rangers',   crest: 'franchise_jungle_rangers', colours: ['#1f8a4c', '#f5d020'], rating: 59 },
+      { id: 'ocean_titans',     crest: 'franchise_ocean_titans', colours: ['#2447b8', '#56b4f0'], rating: 66 },
+      { id: 'phoenix_strikers', crest: 'franchise_phoenix_strikers', colours: ['#f07a1a', '#b0122a'], rating: 62 },
+      { id: 'royal_kings',      crest: 'franchise_royal_kings', colours: ['#16325c', '#e8b21c'], rating: 67 },
+      { id: 'stellar_chargers', crest: 'franchise_stellar_chargers', colours: ['#6a3ab8', '#e8b21c'], rating: 61 },
+      { id: 'golden_prides',    crest: 'franchise_crest_13', colours: ['#16325c', '#f5d020'], rating: 63 },
+      { id: 'blaze_riders',     crest: 'franchise_crest_14', colours: ['#c8202f', '#f39c12'], rating: 59 },
+      { id: 'reef_hunters',     crest: 'franchise_crest_15', colours: ['#56b4f0', '#16325c'], rating: 60 },
+      { id: 'night_gladiators', crest: 'franchise_crest_16', colours: ['#1b1b1b', '#c8202f'], rating: 64 },
+    ],
+    // Quick results for the matches you're not in (seeded): runs around this,
+    // plus this many per rating point of difference.
+    simRuns: { base: 48, spread: 14, perRating: 0.9 },
+    // Contract offers (plan 5.5C, 8.10): 2, or 3 when you came up with a high
+    // Selection Meter or have beaten a rival.
+    offers: {
+      base: 2, bonusAt: 80,
+      salary: [40, 55, 70],                     // Coins per completed franchise match (by offer strength)
+      objectives: [
+        { id: 'reachSemi' }, { id: 'tourRuns', n: 60 }, { id: 'tourWickets', n: 5 }, { id: 'tourSixes', n: 4 }, { id: 'tourGradeA', n: 2 },
+      ],
+      objectiveBonus: 200,                      // Coins when the contract objective is met (plus the reward route)
+      coaches: ['power', 'technique', 'pace', 'swing', 'spin', 'fitness', 'fielding', 'mental', 'allrounder', 'gear'],
+      rewards: ['uniform_global_franchise', 'bat_premier_pro', 'acc_clutch_band', 'acc_focus_charm', 'bat_ember_strike'],
+    },
+  },
   // Opponent club strength by fixture number within the stage (added to the range).
   gradeOrder: ['D', 'C', 'B', 'A', 'S'],
 

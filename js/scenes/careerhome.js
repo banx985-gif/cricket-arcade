@@ -32,6 +32,14 @@ const CareerHomeScene = {
     }
     if (this.career && this.career.phase === 'promoted' && !params.stay) { Scenes.go('careerpromoted', { slot: this.slot, career: this.career }); return; }
     this._layout();
+    this._checkEvent();
+  },
+  // A pending event (or a rival's build-up before a boss match) opens its panel.
+  _checkEvent() {
+    const c = this.career;
+    if (!c || c.phase !== 'season') return;
+    if (!c.pendingEvent) Rivals.pendingFor(c);
+    if (c.pendingEvent) EventPanel.open(c, this.slot, () => this._layout());
   },
 
   _save() { return CareerSave.save(this.career, this.slot); },
@@ -44,10 +52,15 @@ const CareerHomeScene = {
     const promoted = c.phase === 'promoted';
     const noPrep = () => promoted || Career.prepsLeft(c) <= 0;
     const y = s.bottom - 170;
-    b.add('career.schedule', s.left + 30, y, 330, 140, () => this._open('schedule'), { size: 34, color: '#e9eef5', icon: 'stage_selection_meter' });
+    b.add('career.schedule', s.left + 30, y, 330, 140, () => (c.tour ? Scenes.go('careertable', { slot: this.slot, career: c }) : this._open('schedule')), { size: 34, color: '#e9eef5', icon: 'stage_selection_meter' });
     b.add('career.train', s.left + 380, y, 330, 140, () => this._open('train'), { size: 38, icon: 'train_timing_cage', disabled: noPrep, sub: () => T('career.prepLeft', { n: Career.prepsLeft(c) }) });
     b.add('career.rest', s.left + 730, y, 330, 140, () => this._rest(), { size: 38, color: '#9be7ff', icon: 'career_rest', disabled: noPrep, sub: 'career.restSub' });
-    b.add('career.playNext', s.right - 520, y - 10, 490, 160, () => this._play(), { size: 54, color: '#9cff6a', disabled: () => promoted || !Career.next(c) });
+    b.add('career.playNext', s.right - 520, y - 10, 490, 160, () => this._play(), { size: 54, color: '#9cff6a', disabled: () => c.phase !== 'season' || !Career.next(c) });
+    // Between stages: start the next one (Stage 4: see the contract offers first).
+    const S = Career.stage(c);
+    if (promoted && !S.comingSoon) b.add('career.startStage', s.right - 520, y - 10, 490, 160, () => this._startStage(), { size: 40, color: '#ffd23f',
+      sub: () => CareerUI.pathwayLabel(c) });
+    if (c.phase === 'offers') b.add('career.seeOffers', s.right - 520, y - 10, 490, 160, () => Scenes.go('careeroffers', { slot: this.slot, career: c }), { size: 40, color: '#ffd23f', icon: 'stage_contract_offer' });
     // The Wicket Tree and the technique loadout (M06)
     b.add('career.skillTree', s.right - 520, 130, 490, 170, () => Scenes.go('careertree', { slot: this.slot, career: c }), {
       size: 44, color: '#ffd23f', icon: 'train_technique_practice', sub: () => T('career.treeSub', { n: c.player.skillTokens }),
@@ -61,9 +74,10 @@ const CareerHomeScene = {
     });
     b.add('career.shop', s.right - 520, 612, 240, 104, () => Scenes.go('careershop', { slot: this.slot, career: c }), { size: 28, color: '#ffd23f', icon: 'shop_sign' });
     b.add('career.collection', s.right - 270, 612, 240, 104, () => Scenes.go('collection', { back: 'careerhome', slot: this.slot, career: c }), { size: 18, color: '#9be7ff', icon: 'icon_collection' });
-    // Greyed "coming soon" (their systems arrive in later milestones).
-    const soon = [['career.coach', 'meta_coach'], ['career.records', 'meta_records']];
-    soon.forEach(([k, icon], i) => b.add(k, s.right - 520 + i * 250, 734, 240, 90, () => {}, { size: 22, icon, disabled: true, sub: 'career.comingSoon' }));
+    // The coach (M08); Records is still to come.
+    b.add('career.coach', s.right - 520, 734, 240, 90, () => Scenes.go('careercoach', { slot: this.slot, career: c }), { size: 24, color: '#c9b3ff', icon: 'meta_coach',
+      sub: () => (Coaches.active(c) ? T('coach.' + Coaches.active(c)) : T('coach.noneShort')) });
+    b.add('career.records', s.right - 270, 734, 240, 90, () => {}, { size: 22, icon: 'meta_records', disabled: true, sub: 'career.comingSoon' });
     // tap the portrait area for the player panel
     b.add(() => '', s.left + 40, 150, 470, 470, () => this._open('player'), { color: 'rgba(0,0,0,0)' });
     b.items[b.items.length - 1].invisible = true;
@@ -112,6 +126,15 @@ const CareerHomeScene = {
     this._open('result');
   },
 
+  // Start the stage the career was promoted into.
+  _startStage() {
+    const c = this.career, r = Career.beginStage(c);
+    if (!r) return;
+    this._save();
+    if (r === 'offers') Scenes.go('careeroffers', { slot: this.slot, career: c });
+    else Scenes.go('careerjoin', { slot: this.slot, career: c });
+  },
+
   _play() {
     const c = this.career;
     const go = (scene) => { this.panel = null; Scenes.go(scene); };
@@ -128,13 +151,14 @@ const CareerHomeScene = {
     go(CareerMatch.start(c, this.slot));
   },
 
-  update(dt) { this._t += dt; },
+  update(dt) { this._t += dt; if (EventPanel.isOpen()) EventPanel.update(dt); },
 
-  _list() { return this.panel ? this.panelBtns : this.buttons; },
+  _list() { return EventPanel.isOpen() && EventPanel.career === this.career ? EventPanel.buttons : this.panel ? this.panelBtns : this.buttons; },
   pointerDown(id, x, y) { if (Dev.pointerDown(id, x, y)) return; Sound.unlock(); this._list().down(id, x, y); },
   pointerMove(id, x, y) { if (!Dev.pointerMove(id, x, y)) this._list().move(id, x, y); },
   pointerUp(id) { if (!Dev.pointerUp(id)) this._list().up(id); },
   keyDown(code) {
+    if (EventPanel.isOpen()) return;
     if (code === 'Escape') { if (this.panel) this.panel = null; else Scenes.go('careerselect'); }
     if (this.panel) return;
     if (code === 'Enter' || code === 'Space') this._play();
@@ -166,8 +190,9 @@ const CareerHomeScene = {
       R.text(T('career.growthReady', { n: p.growthPoints }), s.left + 280, 728, 26 * pulse, '#ffffff', 'center', false);
     } else R.text(T('career.tapForStats'), s.left + 280, 728, 22, '#b8c6d6', 'center', false);
     R.text(T('career.skillTokens', { n: p.skillTokens }), s.left + 280, 772, 20, '#ffd23f', 'center', false);
-    Crest.draw(ctx, c.club.crest, s.left + 110, 830, 90);
-    R.text(c.club.name, s.left + 170, 830, 26, '#ffffff', 'left', false);
+    const tm = Career.team(c);
+    Crest.draw(ctx, tm.crest, s.left + 110, 830, 90);
+    CareerTreeScene._fit(tm.name, s.left + 170, 830, 270, 26, '#ffffff');
     Sprites.ui('badge_' + c.origin, s.left + 470, 830, 70, 70);
 
     // ---- centre: the stage, Selection Meter, next fixture ----
@@ -186,28 +211,61 @@ const CareerHomeScene = {
     R.panel(x0, 400, w, 330, 'rgba(10,22,40,0.9)', nx && nx.kind === 'final' ? '#ffd23f' : 'rgba(255,255,255,0.35)');
     if (nx) {
       R.text(T('career.nextFixture'), x0 + 30, 432, 24, '#b8c6d6', 'left', false);
-      R.text(T('career.fixtureKind.' + nx.kind, { n: nx.n, total: S.matches }), x0 + w - 30, 432, 26, nx.kind === 'final' ? '#ffd23f' : '#ffffff', 'right');
-      Crest.draw(ctx, c.club.crest, x0 + 210, 525, 110);
+      R.text(T('career.fixtureKind.' + nx.kind, { n: nx.n, total: S.matches }), x0 + w - 30, 432, 26, nx.kind === 'final' || nx.kind === 'semi' ? '#ffd23f' : '#ffffff', 'right');
+      Crest.draw(ctx, tm.crest, x0 + 210, 525, 110);
       R.text(T('career.vs'), x0 + w / 2, 530, 40, '#ffffff');
       Crest.draw(ctx, nx.opp.crest, x0 + w - 210, 525, 110);
-      R.text(c.club.name, x0 + 210, 598, 24, '#ffffff', 'center', false);
+      R.text(tm.name, x0 + 210, 598, 24, '#ffffff', 'center', false);
+      if (nx.rival) {
+        R.roundRect(x0 + w / 2 - 140, 452, 280, 44, 20, '#b0122a', '#ffd23f', 3);
+        R.text(T('career.bossMatch'), x0 + w / 2, 474, 24, '#ffffff');
+        Sprites.ui(Rivals.rival(nx.rival).art, x0 + w - 70, 530, 120, 150);
+      }
       R.text(nx.opp.name, x0 + w - 210, 598, 24, '#ffffff', 'center', false);
       R.text(T('career.oppRating', { n: nx.opp.rating }), x0 + w / 2, 575, 18, '#b8c6d6', 'center', false);
       R.text(T('career.objective') + ' ' + CareerText.objective(nx.objective), x0 + w / 2, 648, 26, '#9cff6a', 'center', false);
       const dots = CAREER_DATA.prepPerBlock;
       for (let i = 0; i < dots; i++) R.circle(x0 + w / 2 - 30 + i * 60, 695, 16, i < c.block.preps ? '#ffd23f' : 'rgba(255,255,255,0.2)', '#ffffff', 3);
       R.text(T('career.prepDots'), x0 + w / 2 + 70, 695, 20, '#b8c6d6', 'left', false);
+    } else if (c.phase === 'promoted' && S.comingSoon) {
+      Sprites.ui(S.art, x0 + w / 2, 530, 200, 180);
+      R.text(T('career.nextComing', { stage: CareerUI.pathwayLabel(c) }), x0 + w / 2, 660, 32, '#ffd23f');
     } else if (c.phase === 'promoted') {
-      R.text(T('career.stage2Soon'), x0 + w / 2, 560, 36, '#ffd23f');
+      Sprites.ui(S.art, x0 + w / 2, 530, 200, 180);
+      R.text(T('career.readyForStage', { n: S.n, stage: CareerUI.pathwayLabel(c) }), x0 + w / 2, 660, 30, '#ffd23f');
+    } else if (c.phase === 'offers') {
+      Sprites.ui('stage_contract_offer', x0 + w / 2, 530, 200, 180);
+      R.text(T('career.offersWaiting'), x0 + w / 2, 660, 30, '#ffd23f');
     }
+    this._drawExtras(ctx, x0, w);
     if (c.player.growthPoints === 0 && c.energy < CAREER_DATA.energy.low) {
-      R.text(T('career.lowEnergyTip'), x0 + w / 2, 760, 24, '#ff9d7a', 'center', false);
+      R.text(T('career.lowEnergyTip'), x0 + w / 2, 880, 24, '#ff9d7a', 'center', false);
     }
 
     this.buttons.items.forEach((bt) => { if (bt.invisible) bt._skip = true; });
     this._drawButtons();
 
     if (this.panel) this._drawPanel(ctx);
+    if (EventPanel.isOpen() && EventPanel.career === c) EventPanel.draw(ctx);
+  },
+
+  // Under the fixture: the sponsor deal, the contract, and 'scouts watching' (M08).
+  _drawExtras(ctx, x0, w) {
+    const c = this.career, S = Career.stage(c);
+    let y = 770;
+    if (c.sponsor) {
+      const P = Sponsors.sponsor(c.sponsor.id);
+      R.panel(x0, y - 36, w, 72, 'rgba(10,22,40,0.9)', '#ffd23f');
+      Sprites.ui(P.logo, x0 + 50, y, 80, 64);
+      R.text(T('sponsor.active', { name: T('sponsor.' + P.id), goal: EventText.goal(P) }), x0 + 100, y - 12, 20, '#ffffff', 'left', false);
+      R.text(T('sponsor.progress', { have: c.sponsor.have, need: c.sponsor.need, left: c.sponsor.left, reward: EventText.reward(P.reward) }), x0 + 100, y + 16, 18, '#9cff6a', 'left', false);
+      y += 84;
+    }
+    if (c.contract && c.phase === 'season' && S.team === 'franchise') {
+      R.text(T('career.contractLine', { n: c.contract.salary, obj: EventText.contract(c.contract.objective) }), x0 + w / 2, y, 20, '#ffe28a', 'center', false);
+      y += 34;
+    }
+    if (S.scouts && c.phase === 'season') R.text(T('career.scouts'), x0 + w / 2, y, 22, '#9be7ff', 'center');
   },
 
   _drawButtons() {

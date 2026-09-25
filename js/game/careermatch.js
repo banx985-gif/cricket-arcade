@@ -18,12 +18,12 @@ const CareerMatch = {
   ticker: [],          // recent simulated balls (for the fast-sim screen)
 
   teamName(side) {
-    if (this.on && this.career) return side === 'player' ? this.career.club.name : this.fixture.opp.name;
+    if (this.on && this.career) return side === 'player' ? Career.team(this.career).name : this.fixture.opp.name;
     return T(MATCH_DATA.teams[side].nameKey);
   },
   teamShort(side) {
     if (this.on && this.career) {
-      const n = side === 'player' ? this.career.club.name : this.fixture.opp.name;
+      const n = side === 'player' ? Career.team(this.career).name : this.fixture.opp.name;
       return n.split(' ')[0].slice(0, 3).toUpperCase();
     }
     return T(MATCH_DATA.teams[side].shortKey);
@@ -34,8 +34,13 @@ const CareerMatch = {
   // (Duel.perk), so they work in the simulated balls too.
   _playerEntity(c, pos) {
     const p = c.player;
-    const ms = SkillTree.matchStats(c, Career.effectiveStats(c), this.fixture, Career.stage(c).teamRating);
+    const ms = SkillTree.matchStats(c, Career.effectiveStats(c), this.fixture, Career.teamRating(c));
     this.matchNotes = ms.notes;
+    // One-match boosts: a rival build-up choice (c.matchBuff) and the Rival coach in a boss match.
+    const add = (k, v) => { if (ms.stats[k] !== undefined) ms.stats[k] = Math.min(120, ms.stats[k] + v); };
+    if (c.matchBuff) { for (const [k, v] of Object.entries(c.matchBuff.stats || {})) add(k, v); this.matchNotes.push('matchBuff'); }
+    const rb = Coaches.matchBoost(c, this.fixture);
+    if (rb) { for (const k of Object.keys(ms.stats)) add(k, rb); this.matchNotes.push('coach_rival'); }
     return {
       id: 'player' + pos, no: pos, name: p.name, short: p.name.split(' ').length > 1 ? p.name[0] + '. ' + p.name.split(' ').slice(1).join(' ') : p.name,
       role: p.role === 'batter' ? 'bat' : p.role === 'bowler' ? 'bowl' : 'all', keeper: false,
@@ -45,18 +50,20 @@ const CareerMatch = {
   },
 
   batPos(c) {
-    if (c.club && c.club.batPos) return Math.min(c.player.role === 'batter' ? 5 : 11, c.club.batPos);
+    const tm = Career.team(c);
+    if (tm && tm.batPos) return Math.min(c.player.role === 'batter' ? 5 : 11, tm.batPos);
     return c.player.role === 'bowler' ? CAREER_DATA.bowlerBatsAt : (CAREER_DATA.battingRoles[c.player.batRole] || 3);
   },
 
   // Build both sides for a fixture (from the match's seeded 'teams' stream).
   teams(c, fixture) {
-    const S = Career.stage(c), rng = RNG.stream('teams');
-    const club = Teams.generate({ side: 'player', rating: S.teamRating, origin: c.origin, rng });
+    const rng = RNG.stream('teams');
+    const club = Teams.generate({ side: 'player', rating: Career.teamRating(c), origin: c.origin, rng });
     const opp = Teams.generate({ side: 'ai', rating: fixture.opp.rating, origin: c.origin, rng });
     const pos = this.batPos(c);
     club.players[pos - 1] = this._playerEntity(c, pos);
-    club.name = c.club.name; opp.name = fixture.opp.name;
+    club.name = Career.team(c).name; opp.name = fixture.opp.name;
+    if (fixture.rival) Rivals.inject(opp, fixture.rival);           // the boss joins their XI (plan 14)
     return { player: club, ai: opp };
   },
 
@@ -110,7 +117,7 @@ const CareerMatch = {
   _assign(c) {
     this.assigned = [];
     if (!Career.bowls(c)) return;
-    const f = Match.fmt, spell = CAREER_DATA.clubs.bowlSpells[(c.club && c.club.spell) || 'newBall'];
+    const f = Match.fmt, spell = CAREER_DATA.clubs.bowlSpells[(Career.team(c) && Career.team(c).spell) || 'newBall'];
     for (const o of spell) if (o < f.overs && this.assigned.length < f.maxOvers) this.assigned.push(o);
     if (!this.assigned.length) this.assigned.push(0);
   },
@@ -203,6 +210,11 @@ const CareerMatch = {
     }
     const a = Match.innings[0], b = Match.innings[1];
     out.scoreLine = a && b ? `${a.runs}/${a.wickets} v ${b.runs}/${b.wickets}` : '';
+    // Team totals (the tournament table's net run rate): the main innings only.
+    for (const inn of [a, b]) {
+      if (!inn) continue;
+      if (inn.battingSide === 'player') { out.teamRuns = inn.runs; out.teamBalls = inn.legal; } else { out.oppRuns = inn.runs; out.oppBalls = inn.legal; }
+    }
     return out;
   },
 
@@ -215,6 +227,8 @@ const CareerMatch = {
     // Match drops (plan 12.7): sometimes a league match, the Local Final when you win.
     // Duplicates reroll, then turn into Coins (Gear.resolveDrop).
     summary.drop = Gear.matchDrop(c, Save.data, stageId, fx, summary.grade, summary.won);
+    // Salary, contract, sponsor, rival, coach mastery, coach unlocks, events (M08).
+    summary.life = CareerLife.afterMatch(c, Save.data, fx, summary, perf, stageId);
     summary.perf = perf;
     summary.opp = fx.opp;
     // Techniques used this match count toward their mastery (plan 11.4).

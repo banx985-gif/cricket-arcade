@@ -12,7 +12,8 @@ const CareerAssets = {
     this.loaded = true;
     Sprites.loadGroup('career');
     Sprites.loadGroup('skilltree');              // technique icons (M06)
-    Sprites.loadGroup('skilltreeArt');           // Wicket Tree art, when it's filed
+    Sprites.loadGroup('skilltreeArt');           // Wicket Tree art
+    Sprites.loadGroup('careerWorld');            // stages 2–4, coaches, rivals, franchises, sponsors (M08)
   },
 };
 

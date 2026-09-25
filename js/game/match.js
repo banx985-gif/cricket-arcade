@@ -270,6 +270,8 @@ const Match = {
     RNG.restore(cp.rng);
     const cur = this.current();
     this._lastCp = cp.phase === "break" ? null : cur.index + ":" + cur.legal;
+    // The score exactly as restored (before any ball is played or simulated after it).
+    this.restoredAt = { label: cp.label, runs: cur.runs, wickets: cur.wickets, overs: cur.overs };
     Log.add('match', 'resumed: ' + cp.label);
     if (cp.phase === 'break') return ['matchbreak', { next: cp.next, resumed: true }];
     return [this.current().battingSide === 'player' ? 'matchbat' : 'matchbowl', { resumed: true }];

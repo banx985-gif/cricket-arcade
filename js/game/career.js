@@ -169,19 +169,43 @@ const Career = {
 
   // ---- fixtures ----
   _opponent(c, rating, final) {
+    // Stage 4: another franchise (not yours).
+    if (Career.stage(c).team === 'franchise') {
+      return this.roll(c, (r) => {
+        const mine = c.team && c.team.franchise;
+        const id = r.pick(CAREER_DATA.franchise.teams.filter((t) => t.id !== mine)).id;
+        const o = Tournament.opp(id, final);
+        return o;
+      });
+    }
     return this.roll(c, (r) => {
-      const pack = ORIGIN_PACKS.origins[c.origin], used = new Set([c.club.name]);
+      const me = this.team(c), pack = ORIGIN_PACKS.origins[c.origin], used = new Set([c.club.name, me.name]);
       const town = c.club.name.split(' ')[0];
       pack.clubFragments.forEach((f) => { if (f === town) for (const sfx of ORIGIN_PACKS.clubSuffixes) used.add(f + ' ' + sfx); });
       const colours = this._clubColours(pack, r);
-      return { name: this._clubName(pack, r, used), colours, crest: this.makeCrest(r, colours), rating: Math.round(rating), final: !!final };
+      const S = Career.stage(c);
+      const name = S.team === 'stage' ? this._stageTeamName(c, pack, r, used) : this._clubName(pack, r, used);
+      return { name, colours, crest: this.makeCrest(r, colours), rating: Math.round(rating), final: !!final };
     });
   },
-  _fixture(c, kind, rating) {
+  // A representative side's name: a town + the stage's suffix.
+  _stageTeamName(c, pack, r, used) {
+    const S = Career.stage(c);
+    for (let i = 0; i < 20; i++) {
+      const sfx = S.teamSuffix === 'domestic' ? r.pick(CAREER_DATA.domesticSuffixes) : S.teamSuffix;
+      const n = r.pick(pack.clubFragments) + ' ' + sfx;
+      if (!used.has(n)) { used.add(n); return n; }
+    }
+    return r.pick(pack.clubFragments) + ' XI';
+  },
+  _fixture(c, kind, rating, opp) {
     const n = c.fixtures.length + 1;
-    const f = { n, kind, opp: this._opponent(c, rating, kind === 'final'), played: false, seed: 0 };
+    const f = { n, kind, opp: opp || this._opponent(c, rating, kind === 'final'), played: false, seed: 0 };
     f.seed = this.roll(c, (r) => r.int(1, 999999999));
-    f.objective = this.objectiveFor(c, f);
+    // A rival boss match (plan 14): only in the stage's main block.
+    const rival = (kind === 'league' || kind === 'group' || kind === 'final') && Rivals.forFixture(this.stage(c), n);
+    if (rival) f.rival = rival;
+    f.objective = rival ? Rivals.objective(c, rival) : this.objectiveFor(c, f);
     return f;
   },
   startStage(c, stageId) {
@@ -191,6 +215,14 @@ const Career = {
     c.selection = 0;
     c.block = { preps: 0, log: [] };
     if (S.comingSoon) return;
+    if (S.tournament) {
+      // Stage 4: your group's first match; the tournament adds the rest as it goes.
+      const t = Tournament.create(c, c.team.franchise), o = Tournament.myOpponents(t)[0];
+      const f = this._fixture(c, 'group', Tournament.team(o).rating, Tournament.opp(o));
+      f.round = 'g1';
+      c.fixtures.push(f);
+      return;
+    }
     for (let i = 0; i < S.matches; i++) {
       const last = i === S.matches - 1;
       const rating = last ? S.finalOpponentRating : S.opponentRating[0] + (S.opponentRating[1] - S.opponentRating[0]) * i / Math.max(1, S.matches - 2);
@@ -199,9 +231,72 @@ const Career = {
   },
   next(c) { return c.fixtures.find((f) => !f.played) || null; },
 
+  // ---- the side you play for (plan 8.6) ----
+  // Stage 1: your local club. Stages 2–3: a representative side (c.team). Stage 4: your franchise.
+  team(c) { return (this.stage(c).team !== 'club' && c.team) || c.club; },
+  teamRating(c) { const t = this.team(c); return (t && t.rating) || this.stage(c).teamRating; },
+  _stageTeam(c) {
+    return this.roll(c, (r) => {
+      const pack = ORIGIN_PACKS.origins[c.origin], colours = this._clubColours(pack, r);
+      const name = this._stageTeamName(c, pack, r, new Set([c.club.name]));
+      return { name, colours, crest: this.makeCrest(r, colours), rating: this.stage(c).teamRating,
+        batPos: c.club.batPos, spell: c.club.spell, emphasis: c.club.emphasis };
+    });
+  },
+  // Between stages (phase 'promoted'): start the stage the career was promoted
+  // into. Returns 'season' | 'offers' (Stage 4: pick a contract first) | null (coming soon).
+  beginStage(c) {
+    const S = this.stage(c);
+    if (S.comingSoon || c.phase !== 'promoted') return null;
+    if (S.team === 'franchise') {
+      c.offers = this.franchiseOffers(c);
+      c.phase = 'offers';
+      return 'offers';
+    }
+    c.team = S.team === 'stage' ? this._stageTeam(c) : null;
+    c.phase = 'season';
+    this.startStage(c, S.id);
+    return 'season';
+  },
+
+  // ---- Stage 4 contract offers (plan 5.5C, 8.10) ----
+  // Up to 3: 2, plus 1 for a strong Selection Meter coming up or a rival beaten.
+  franchiseOffers(c) {
+    const F = CAREER_DATA.franchise, O = F.offers;
+    const rivalBeaten = Object.values((c.hooks && c.hooks.rivals) || {}).some((f) => f.beaten);
+    const n = Math.min(3, O.base + ((c.promotedSelection || 0) >= O.bonusAt || rivalBeaten ? 1 : 0));
+    return this.roll(c, (r) => {
+      const teams = F.teams.slice(), objs = O.objectives.slice(), rewards = O.rewards.slice(), coaches = O.coaches.slice();
+      const take = (list) => list.splice(r.int(0, list.length - 1), 1)[0];
+      const home = CAREER_DATA.battingRoles[c.player.batRole] || 3, bowls = this.bowls(c), spells = Object.keys(CAREER_DATA.clubs.bowlSpells);
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        const t = take(teams);
+        out.push({
+          id: 'offer' + i, franchise: t.id, salary: O.salary[Math.min(i, O.salary.length - 1)],
+          batPos: c.player.role === 'bowler' ? CAREER_DATA.bowlerBatsAt : [home, Math.max(1, home - 1), Math.min(6, home + 1)][i % 3],
+          spell: bowls ? spells[i % spells.length] : null,
+          objective: Object.assign({}, take(objs)), coach: take(coaches), reward: take(rewards),
+        });
+      }
+      return out;
+    });
+  },
+  // Sign a contract: your franchise, its tournament, and the first fixture.
+  signFranchise(c, offer) {
+    const t = Tournament.team(offer.franchise);
+    c.team = { name: Tournament.name(t.id), franchise: t.id, colours: t.colours.slice(), crest: { image: t.crest, colours: t.colours.slice() },
+      rating: t.rating, batPos: offer.batPos, spell: offer.spell || c.club.spell, emphasis: c.club.emphasis };
+    c.contract = { franchise: t.id, salary: offer.salary, objective: offer.objective, coach: offer.coach, reward: offer.reward,
+      progress: { runs: 0, wickets: 0, sixes: 0, gradeA: 0 }, done: false };
+    c.offers = null;
+    c.phase = 'season';
+    this.startStage(c, c.stage);
+  },
+
   objectiveFor(c, f) {
     const O = CAREER_DATA.objectives;
-    if (f.kind === 'final' || f.kind === 'qualifier') return Object.assign({}, O.final);
+    if (f.kind === 'final' || f.kind === 'qualifier' || f.kind === 'semi') return Object.assign({}, O.final);
     return this.roll(c, (r) => {
       const pool = c.player.role === 'batter' ? O.bat : c.player.role === 'bowler' ? O.bowl : r.chance(0.5) ? O.bat : O.bowl;
       return Object.assign({}, r.pick(pool));
@@ -237,6 +332,14 @@ const Career = {
         if (c.club.emphasis === D.emphasis && r.chance(CAREER_DATA.emphasisBonus.extraStatChance)) res.gain++;
       }
     });
+    // Your coach's specialty drills train better (plan 13).
+    const K = typeof Coaches !== 'undefined' && typeof Save !== 'undefined' && Save.data ? Coaches.training(c, Save.data, D.id) : { specialty: false };
+    if (K.specialty) {
+      res.coach = Coaches.active(c);
+      res.xp = Math.round(res.xp * (1 + K.xp));
+      if (this.roll(c, (r) => r.chance(K.extraStat))) res.gain++;
+      Coaches.addUse(Save.data, res.coach, 1);
+    }
     // Tired training still helps, but less.
     if (c.energy < CAREER_DATA.energy.low) res.gain = Math.max(0, res.gain - 1);
     c.player.stats[D.stat] = Math.min(CAREER_DATA.statMax, c.player.stats[D.stat] + res.gain);
@@ -331,11 +434,23 @@ const Career = {
     fixture.objectiveMet = G.objectiveMet;
     c.block = { preps: 0, log: [] };
     c.matchInProgress = null;
+    c.matchBuff = null;                            // a rival build-up boost lasts one match
     const rec = { stage: c.stage, n: fixture.n, kind: fixture.kind, opp: fixture.opp.name, grade: G.grade, won: !!perf.won,
       bat: perf.bat, bowl: perf.bowl, selection: sel, xp };
     c.history.push(rec);
     const out = Object.assign({}, G, { xp, levels, selection: sel, selBefore, selAfter: c.selection, formBefore, formAfter: c.form,
       energyAfter: c.energy, objective: fixture.objective, kind: fixture.kind, won: !!perf.won, coins, crowd, formSaved });
+    // Stage 4: the tournament moves on (it may add your semi-final / final).
+    if (c.tour && c.tour.phase !== 'done' && ['group', 'semi', 'final'].includes(fixture.kind) && fixture.opp.franchise) {
+      const nx = Tournament.afterMatch(c, fixture.kind, fixture.round, fixture.opp.franchise, {
+        won: !!perf.won, runs: perf.teamRuns || 0, balls: perf.teamBalls || 30, oppRuns: perf.oppRuns || 0, oppBalls: perf.oppBalls || 30 });
+      out.tour = { phase: c.tour.phase, best: c.tour.best };
+      if (nx) {
+        const S = this.stage(c), f = this._fixture(c, nx.kind, Tournament.team(nx.opp).rating, Tournament.opp(nx.opp, nx.kind === 'final'));
+        f.round = nx.round;
+        c.fixtures.push(f);
+      }
+    }
     // Stage gate after the last fixture of the block.
     if (!this.next(c)) out.gate = this.gate(c, fixture);
     return out;
@@ -347,7 +462,8 @@ const Career = {
   gate(c, last) {
     const S = this.stage(c), G = S.gate;
     const finalFx = c.fixtures.filter((f) => f.kind === 'final' || f.kind === 'qualifier').pop();
-    const keyMet = !!finalFx && this.gradeAtLeast(finalFx.grade || 'D', G.keyObjective.finalGrade);
+    // key objective: a grade in the final, or how far you got in the tournament
+    const keyMet = G.keyObjective.reach ? Tournament.reached(c.tour, G.keyObjective.reach) : !!finalFx && this.gradeAtLeast(finalFx.grade || 'D', G.keyObjective.finalGrade);
     if (last && last.kind === 'qualifier') {
       if (this.gradeAtLeast(last.grade, S.qualifier.passGrade)) return this.promote(c);
       return this._extraBlock(c);
@@ -368,6 +484,7 @@ const Career = {
     const S = this.stage(c);
     SkillTree.earn(c, 'promotion', CAREER_DATA.levels.skillTokensPerPromotion);
     c.promotedFrom = S.id;
+    c.promotedSelection = c.selection;             // (a strong finish earns an extra contract offer)
     c.stage = S.next;
     c.phase = 'promoted';
     c.fixtures = [];
@@ -380,20 +497,21 @@ const Career = {
     return {
       name: c.player.name, role: c.player.role, look: c.player.look, facial: c.player.facial, skin: c.player.skin, hairColour: c.player.hairColour,
       overall: this.overall(c), level: c.player.level, stage: S.id, stageN: S.n,
-      fixture: nx ? nx.n : null, fixtures: c.fixtures.length, club: c.club ? c.club.name : null, origin: c.origin,
+      fixture: nx ? nx.n : null, fixtures: c.fixtures.length, club: c.club ? this.team(c).name : null, origin: c.origin,
       phase: c.phase, savedAt: new Date().toISOString(),
     };
   },
 };
 
 // Stat bonuses from things that aren't base stats: the Wicket Tree's minor
-// perks (M06) and equipment with its set bonuses (M07).
+// perks (M06), equipment with its set bonuses (M07) and the coach (M08).
 const CareerStats = {
   bonus(c) {
     const out = {};
     const add = (b) => { for (const [k, v] of Object.entries(b)) out[k] = (out[k] || 0) + v; };
     if (typeof SkillTree !== 'undefined' && SkillTree.statBonus) add(SkillTree.statBonus(c));
     if (typeof Gear !== 'undefined') add(Gear.statBonus(c));
+    if (typeof Coaches !== 'undefined') add(Coaches.statBonus(c));   // the coach (M08)
     return out;
   },
 };

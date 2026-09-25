@@ -3,7 +3,7 @@
 //                       stumps, Legend's Bails on top. Drag to pan, pinch (or
 //                       the mouse wheel / + -) to zoom, tap a node for its card.
 //                       Points counter at the top (tap it for where they came
-//                       from), RESPEC (between stages) and LOADOUT buttons.
+//                       from) and LOADOUT. (RESPEC moved to the Coach screen in M08.)
 //   CareerLoadoutScene  equip 2 active + 2 passive unlocked techniques (plan 11).
 // Every picture goes through TreeArt (sprite ids, code placeholders for now).
 
@@ -33,7 +33,7 @@ const CareerTreeScene = {
   career: null, slot: 1, from: 'home',
   cam: { x: 0, y: 950, zoom: 0.5 },
   sel: null,              // selected node id (the card)
-  popup: null,            // null | 'points' | 'respec'
+  popup: null,            // null | 'points'
   flash: null,            // { text, t, color }
   _t: 0,
   ptrs: {},               // pointerId -> { x, y, sx, sy, moved }
@@ -99,10 +99,6 @@ const CareerTreeScene = {
     h.clear();
     h.add('tree.back', s.left + 20, s.top + 16, 200, 96, () => this._back(), { size: 32, color: '#e9eef5' });
     h.add('tree.loadout', s.right - 300, s.top + 16, 280, 96, () => Scenes.go('careerloadout', { slot: this.slot, career: c, from: 'tree', back: this.from }), { size: 32, color: '#9be7ff' });
-    h.add('tree.respec', s.right - 590, s.top + 16, 270, 96, () => this._openRespec(), {
-      size: 30, color: '#ffd9a0', sub: () => T('tree.respecSub', { n: SkillTree.respecCost(c) }),
-      disabled: () => !SkillTree.betweenStages(c),
-    });
     // the points counter (tap for where the points came from)
     const pc = h.add(() => '', s.left + 240, s.top + 16, 330, 96, () => this._openPoints(), { color: 'rgba(0,0,0,0)' });
     pc.invisible = true;
@@ -166,26 +162,6 @@ const CareerTreeScene = {
     b.clear();
     b.add('tree.close', cx - 200, 820, 400, 100, () => { this.popup = null; }, { size: 40, color: '#e9eef5' });
   },
-  _openRespec() {
-    const c = this.career, chk = SkillTree.canRespec(c, Save.data.currencies.coins || 0);
-    if (!chk.ok && chk.reason !== 'coins') { this.flash = { text: T('tree.respec.' + chk.reason), t: 0, color: '#ff9d7a' }; Sound.play('edge'); return; }
-    this.popup = 'respec';
-    const b = this.popBtns, cx = CONFIG.LOGICAL_W / 2;
-    b.clear();
-    b.add('tree.respecYes', cx - 440, 760, 400, 110, () => this._respec(), { size: 44, color: '#ffb36b', disabled: () => !SkillTree.canRespec(c, Save.data.currencies.coins || 0).ok });
-    b.add('tree.respecNo', cx + 40, 760, 400, 110, () => { this.popup = null; }, { size: 44, color: '#e9eef5' });
-  },
-  _respec() {
-    const c = this.career, chk = SkillTree.canRespec(c, Save.data.currencies.coins || 0);
-    if (!chk.ok) return;
-    Save.data.currencies.coins -= SkillTree.respec(c);
-    this._save();
-    this.popup = null;
-    this._select(null);
-    Sound.play('fanfare');
-    this.flash = { text: T('tree.respecDone'), t: 0, color: '#ffd23f' };
-  },
-
   // ---- input ----
   _lists() { return this.popup ? [this.popBtns] : this.sel ? [this.cardBtns, this.hud] : [this.hud]; },
   pointerDown(id, x, y) {
@@ -486,12 +462,6 @@ const CareerTreeScene = {
         R.text((n > 0 && i < rows.length - 1 ? '+' : '') + n, cx + 420, y, 36, last ? '#ffd23f' : n < 0 ? '#ff9d9d' : '#9cff6a', 'right');
       });
       R.text(T('tree.pointsNote'), cx, 790, 22, '#b8c6d6', 'center', false);
-    } else if (this.popup === 'respec') {
-      TreeArt.draw(SKILL_TREE_DATA.art.respec, cx, 300, 140);
-      R.text(T('tree.respecTitle'), cx, 420, 54, '#ffffff');
-      this._wrap(T('tree.respecBody'), cx - 480, 510, 960, 30, '#d8e4f0');
-      const coins = Save.data.currencies.coins || 0, cost = SkillTree.respecCost(c);
-      R.text(T('tree.respecCost', { n: cost, have: coins }), cx, 660, 32, coins >= cost ? '#ffe28a' : '#ff9d7a');
     }
     this.popBtns.draw();
   },

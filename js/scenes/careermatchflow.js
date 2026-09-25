@@ -32,9 +32,16 @@ const CareerPreMatchScene = {
     drawMatchBackdrop(ctx, this._t, 0.6);
     const cx = CONFIG.LOGICAL_W / 2, c = CareerMatch.career, fx = CareerMatch.fixture;
     R.text(T('career.fixtureKind.' + fx.kind, { n: fx.n, total: Career.stage(c).matches }), cx, 90, 56, fx.kind === 'final' ? '#ffd23f' : '#ffffff');
-    Crest.draw(ctx, c.club.crest, cx - 520, 280, 250);
+    const tm = Career.team(c);
+    Crest.draw(ctx, tm.crest, cx - 520, 280, 250);
     Crest.draw(ctx, fx.opp.crest, cx + 520, 280, 250);
-    R.text(c.club.name, cx - 520, 450, 38, '#ffffff');
+    R.text(tm.name, cx - 520, 450, 38, '#ffffff');
+    // a rival boss match (plan 14)
+    if (fx.rival) {
+      Sprites.ui(Rivals.rival(fx.rival).art, cx + 250, 300, 260, 320);
+      R.roundRect(cx + 330, 170, 330, 50, 22, '#b0122a', '#ffd23f', 3);
+      R.text(T('career.bossVs', { name: T('rival.' + fx.rival) }), cx + 495, 195, 24, '#ffffff');
+    }
     R.text(fx.opp.name, cx + 520, 450, 38, '#ffffff');
     R.text(T('career.vs'), cx, 280, 70, '#ffd23f');
     const toss = Match.toss;
@@ -164,7 +171,7 @@ const CareerResultScene = {
     this.buttons.clear();
     const promoted = params.gate && params.gate.result === 'promoted';
     this.buttons.add(promoted ? 'career.seePromotion' : 'career.toHome', cx - 280, 940, 560, 116,
-      () => Scenes.go(promoted ? 'careerpromoted' : 'careerhome', { slot: CareerMatch.slot, career: CareerMatch.career }), { size: 44 });
+      () => Scenes.go(promoted ? 'careerpromoted' : 'careerhome', { slot: CareerMatch.slot, career: CareerMatch.career, coaches: (params.life && params.life.coachesUnlocked) || [] }), { size: 44 });
     Sound.play(this.r.grade === 'S' || this.r.grade === 'A' ? 'fanfare' : 'four');
     if (promoted) Sound.play('crowdRoar');
   },
@@ -206,6 +213,7 @@ const CareerResultScene = {
     const used = Object.keys(r.techUses || {}).filter((id) => SKILL_TREE_DATA.techniques[id]).map((id) => TreeText.name(id));
     if (used.length) extra.push(T('career.techUsed', { list: used.slice(0, 3).join(', ') + (used.length > 3 ? '…' : '') }));
     extra.forEach((line, i) => R.text(line, cx - 560, 720 + i * 30, 19, '#9be7ff', 'center', false));
+    this._drawLife(ctx, r);
     R.text(T('career.energyNow', { n: r.energyAfter }), x + 770, 565, 26, '#ffffff', 'right', false);
     // A gear drop (M07): new item, or a duplicate turned into Coins.
     if (r.drop && this._t > 0.9) this._drawDrop(ctx, r.drop);
@@ -223,6 +231,27 @@ const CareerResultScene = {
     }
     this.buttons.draw();
     Effects.drawParticles(ctx);
+  },
+
+  // Right: what else happened (M08): salary, sponsor, rival, contract, tournament, coaches.
+  _drawLife(ctx, r) {
+    const L = r.life || {}, lines = [];
+    if (L.salary) lines.push([T('career.salaryPaid', { n: L.salary }), '#ffe28a']);
+    if (L.rival) {
+      const R0 = L.rival;
+      lines.push([T(R0.beaten ? 'career.rivalBeaten' : 'career.rivalNot', { name: T('rival.' + R0.id) }), R0.beaten ? '#9cff6a' : '#ff9d9d']);
+      if (R0.token) lines.push([T('career.rivalToken'), '#ffd23f']);
+      if (R0.reward) lines.push([T('career.rivalReward', { what: LifeText.reward(R0.reward) }), '#ffd23f']);
+    }
+    if (L.sponsor) lines.push([L.sponsor.done ? T('career.sponsorDone', { name: T('sponsor.' + L.sponsor.id), what: LifeText.reward(L.sponsor.reward) })
+      : L.sponsor.failed ? T('career.sponsorFailed', { name: T('sponsor.' + L.sponsor.id) }) : T('career.sponsorProgress', { name: T('sponsor.' + L.sponsor.id), have: L.sponsor.have, need: L.sponsor.need }), L.sponsor.failed ? '#ff9d9d' : '#9be7ff']);
+    if (r.tour) lines.push([T('career.tour.' + (r.tour.phase === 'done' ? (r.tour.best === 'champion' ? 'champion' : 'out') : r.tour.phase), { r: T('table.reach.' + r.tour.best) }), '#ffd23f']);
+    if (L.contract) lines.push([L.contract.met ? T('career.contractMet', { n: L.contract.coins, what: LifeText.reward(L.contract.reward) }) : T('career.contractMissed'), L.contract.met ? '#9cff6a' : '#ff9d9d']);
+    for (const id of L.coachesUnlocked || []) lines.push([T('career.coachUnlocked', { name: T('coach.' + id) }), '#c9b3ff']);
+    if (!lines.length) return;
+    const x = CONFIG.LOGICAL_W / 2 + 580, w = Math.min(Display.safe.right - 20 - x, 360);
+    R.panel(x, 230, w, 40 + lines.length * 64, 'rgba(10,22,40,0.92)', '#ffd23f');
+    lines.forEach(([t, col], i) => GearUI.wrap(t, x + 20, 262 + i * 64, w - 40, 19, col));
   },
 
   // Bottom-left: the reward card with the item (or the Coins it turned into).
@@ -259,7 +288,7 @@ const CareerPromotedScene = {
   buttons: new ButtonList(),
   _t: 0,
   enter(params) {
-    this.slot = params.slot; this.career = params.career; this._t = 0;
+    this.slot = params.slot; this.career = params.career; this._t = 0; this.coaches = params.coaches || [];
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();
     this.buttons.add('career.toHome', cx - 260, 930, 520, 116, () => Scenes.go('careerhome', { slot: this.slot, career: this.career, stay: true }), { size: 44 });
@@ -278,17 +307,32 @@ const CareerPromotedScene = {
   render(ctx) {
     const c = this.career, cx = CONFIG.LOGICAL_W / 2;
     CareerUI.bg(ctx, 'bg_scout_room', 0.55);
-    Sprites.ui('milestone_domestic_promotion', cx - 430, 470, 700, 520);
-    Sprites.ui('stage_regional', cx + 450, 440, 480, 400);
+    const S = Career.stage(c);
+    Sprites.ui(S.comingSoon ? 'milestone_national_callup' : 'milestone_domestic_promotion', cx - 430, 470, 700, 520);
+    Sprites.ui(S.art, cx + 450, 440, 480, 400);
     const pop = Math.min(1, this._t / 0.3);
     ctx.save(); ctx.translate(cx, 110); ctx.scale(0.6 + 0.4 * pop, 0.6 + 0.4 * pop);
     R.text(T('career.promoted'), 0, 0, 90, '#ffd23f');
     ctx.restore();
-    R.text(T('career.promotedTo', { stage: CareerUI.pathwayLabel(c, 2) }), cx, 200, 40, '#ffffff');
-    R.text(T('career.stage2Next'), cx + 450, 700, 32, '#9cff6a');
+    R.text(T('career.promotedTo', { stage: CareerUI.pathwayLabel(c, S.n) }), cx, 200, 40, '#ffffff');
+    R.text(T('career.stageN', { n: S.n }), cx + 450, 700, 32, '#9cff6a');
     R.text(T('career.tokensEarned', { n: CAREER_DATA.levels.skillTokensPerPromotion }), cx, 820, 30, '#ffd23f', 'center', false);
-    R.text(T('career.stage2Soon'), cx, 870, 26, '#d8e4f0', 'center', false);
+    R.text(S.comingSoon ? T('career.nextComing', { stage: CareerUI.pathwayLabel(c, S.n) }) : T('career.startWhenReady'), cx, 870, 26, '#d8e4f0', 'center', false);
+    for (const id of (this.coaches || [])) R.text(T('career.coachUnlocked', { name: T('coach.' + id) }), cx, 910, 22, '#c9b3ff', 'center', false);
     this.buttons.draw();
     Effects.drawParticles(ctx);
+  },
+};
+
+// Reward text (rival rewards, sponsor and contract rewards).
+const LifeText = {
+  reward(rw) {
+    if (!rw) return '';
+    if (rw.coach) return T('coach.' + rw.coach) + ' ' + T('career.coachWord');
+    if (rw.item) return T('gear.' + rw.item);
+    if (rw.dup) return T('career.coinsGain', { n: rw.coins });
+    if (rw.technique) return T('tech.' + rw.technique) + ' ' + T('career.techDiscovered');
+    if (rw.coins) return T('career.coinsGain', { n: rw.coins });
+    return '';
   },
 };

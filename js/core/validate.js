@@ -216,6 +216,52 @@ const Validate = {
       }
     }
 
+    // Career stages 2–4, coaches, events, sponsors, rivals, franchises (M08)
+    if (typeof COACH_DATA !== 'undefined' && typeof EVENT_DATA !== 'undefined') {
+      const item = (id, w) => { if (typeof EQUIPMENT_DATA !== 'undefined' && !EQUIPMENT_DATA.items.some((it) => it.id === id)) p.push(w + ' names unknown item "' + id + '"'); };
+      const coachIds = dupes('coaches', COACH_DATA.coaches, 'id');
+      if (coachIds.size !== 12) p.push('there must be 12 coaches (plan 13)');
+      const drills = new Set(CAREER_DATA.training.map((d) => d.id));
+      for (const k of COACH_DATA.coaches) {
+        cart(k.art, 'coach ' + k.id); str('coach.' + k.id, 'coach'); str('coach.cat.' + k.id, 'coach'); str('coach.' + k.id + '.desc', 'coach');
+        for (const d of k.drills) if (!drills.has(d)) p.push('coach "' + k.id + '" has unknown drill "' + d + '"');
+        for (const s of Object.keys(k.stats || {})) if (!statKeys.has(s)) p.push('coach "' + k.id + '" raises unknown stat "' + s + '"');
+        if (!(k.unlock === 'start' || k.unlock === 'rival' || k.unlock === 'hidden' || (k.unlock && k.unlock.stage))) p.push('coach "' + k.id + '" has an unknown unlock');
+      }
+      for (const e of EVENT_DATA.events) {
+        str('event.' + e.id + '.title', 'event'); str('event.' + e.id + '.body', 'event'); str('event.kind.' + e.portrait, 'event');
+        if (e.choices.length !== 2) p.push('event "' + e.id + '" needs 2 choices');
+        for (const ch of e.choices) str('event.' + e.id + '.' + ch.id, 'event choice');
+        if (e.portrait !== 'coach' && e.portrait !== 'sponsor') cart(e.portrait, 'event ' + e.id);
+      }
+      for (const s of EVENT_DATA.sponsors) {
+        cart(s.logo, 'sponsor ' + s.id); str('sponsor.' + s.id, 'sponsor'); str('sponsor.goal.' + s.goal, 'sponsor');
+        if (!(s.fixtures >= 1 && s.fixtures <= 3)) p.push('sponsor "' + s.id + '" should run 1–3 fixtures');
+        if (s.reward.item) item(s.reward.item, 'sponsor ' + s.id);
+      }
+      for (const r of EVENT_DATA.rivals) {
+        cart(r.art, 'rival ' + r.id); str('rival.' + r.id, 'rival'); str('rival.' + r.id + '.short', 'rival'); str('rival.' + r.id + '.intro', 'rival');
+        for (const b of r.buildUp) str('rival.' + r.id + '.' + b.id, 'rival build-up');
+        for (const k of r.stats) if (!statKeys.has(k)) p.push('rival "' + r.id + '" boosts unknown stat "' + k + '"');
+        if (r.reward.item) item(r.reward.item, 'rival ' + r.id);
+        if (r.reward.coach && !coachIds.has(r.reward.coach)) p.push('rival "' + r.id + '" rewards unknown coach');
+        if (r.reward.technique && !SKILL_TREE_DATA.techniques[r.reward.technique]) p.push('rival "' + r.id + '" rewards unknown technique');
+      }
+      for (const st of CAREER_DATA.stages) {
+        if (st.milestone) cart(st.milestone, 'stage ' + st.id);
+        for (const rv of [].concat(st.rival || [])) if (!EVENT_DATA.rivals.find((r) => r.id === rv.id)) p.push('stage "' + st.id + '" names unknown rival "' + rv.id + '"');
+        if (st.next && !CAREER_DATA.stages.find((x) => x.id === st.next)) p.push('stage "' + st.id + '" leads to unknown stage "' + st.next + '"');
+      }
+      const F = CAREER_DATA.franchise;
+      dupes('franchises', F.teams, 'id');
+      if (F.teams.length !== F.groups * F.perGroup) p.push('the franchise tournament needs ' + F.groups * F.perGroup + ' franchises');
+      for (const t of F.teams) { cart(t.crest, 'franchise ' + t.id); str('franchise.' + t.id, 'franchise'); }
+      for (const o of F.offers.objectives) str('offer.obj.' + o.id, 'contract objective');
+      for (const k of F.offers.coaches) if (!coachIds.has(k)) p.push('contract offers name unknown coach "' + k + '"');
+      for (const id of F.offers.rewards) item(id, 'contract reward');
+      for (const r of ['group', 'semi', 'final', 'champion']) str('table.reach.' + r, 'tournament');
+    }
+
     // Manifest: every entry needs a file path, every id once (object keys are unique by nature)
     for (const [gname, g] of Object.entries(ASSET_MANIFEST.groups)) {
       for (const [id, e] of Object.entries(g)) if (!e || !e.src) p.push(`asset "${id}" in group ${gname} has no file path`);
