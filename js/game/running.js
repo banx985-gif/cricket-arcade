@@ -10,10 +10,16 @@
 // If a run is still in progress when the ball arrives, it's a RUN OUT.
 
 class Running {
-  constructor(returnT) {
+  // returnT = when the stumps are broken (Infinity until the throw is known).
+  // riskT = { safe, tight }: the risk colours are judged against a direct hit
+  //   (safe) and a throw to the keeper (tight), not against the real throw, so
+  //   a "TIGHT!" run really can be run out by a direct hit.
+  // runTimeMult = the batters' Running stat (< 1 = quicker).
+  constructor(returnT, riskT, runTimeMult) {
     const R = MATCH_DATA.running;
     this.returnT = returnT;
-    this.runTime = R.runTime;
+    this.riskT = riskT || { safe: returnT, tight: returnT };
+    this.runTime = R.runTime * (runTimeMult || 1);
     this.completed = 0;
     this.cur = null;           // { start, dur, back: bool }
     this.queued = 0;
@@ -36,9 +42,18 @@ class Running {
     if (this.queued >= MATCH_DATA.running.maxQueued) return 'none';
     const f = this._nextFinish(t);
     const m = MATCH_DATA.running.riskMargin;
-    if (f <= this.returnT - m) return 'safe';
-    if (f <= this.returnT + MATCH_DATA.running.runOutGrace) return 'risky';
+    if (this.overthrow) {                         // the ball's gone past the keeper
+      return f <= this.returnT - m ? 'safe' : f <= this.returnT + MATCH_DATA.running.runOutGrace ? 'risky' : 'danger';
+    }
+    if (f <= this.riskT.safe - m) return 'safe';
+    if (f <= this.riskT.tight + MATCH_DATA.running.runOutGrace) return 'risky';
     return 'danger';
+  }
+
+  // The throw is decided: when the stumps get broken.
+  setReturn(returnT, overthrow) {
+    this.returnT = returnT;
+    this.overthrow = !!overthrow;
   }
 
   canCancel() {
@@ -102,11 +117,18 @@ class Running {
   }
 
   // AI batters decide up front: take every safe run, sometimes one risky extra.
-  static aiPlan(returnT, rng) {
+  static aiPlan(returnT, rng, runTime) {
     const R = MATCH_DATA.running;
-    const safe = Math.max(0, Math.floor((returnT - R.startDelay - R.riskMargin) / R.runTime));
+    const safe = Math.max(0, Math.floor((returnT - R.startDelay - R.riskMargin) / (runTime || R.runTime)));
     let n = Math.min(safe, R.maxQueued + 1);
     if (n < R.maxQueued + 1 && rng.chance(MATCH_DATA.aiRunning.riskyRunChance)) n++;
     return n;
+  }
+
+  // AI batters after an overthrow: take one more if it's safe.
+  aiSteal(t) {
+    if (this.done || this.runOut) return false;
+    if (this.risk(t) !== 'safe') return false;
+    return this.run(t);
   }
 }

@@ -136,6 +136,8 @@ const BATTING_DATA = {
   camera: {
     pitch: { pos: [1.3, 7.5, 33], target: [0.1, 0.3, 3.5], focal: 2700 },
     follow: { height: 20, back: 34, focal: 1350, lead: 0.3, cutDelay: 0.18 },
+    // Highlight camera (plan 7.11): low, beside the stumps, for bowled / hit wicket.
+    highlight: { pos: [4.4, 1.2, 5.6], target: [-0.3, 0.5, -0.2], focal: 1600, hold: 1.25 },
     followEase: 3.2,
     resetEase: 5,
     ballDrawScale: 3.8,        // balls are drawn bigger than life so they read on a phone

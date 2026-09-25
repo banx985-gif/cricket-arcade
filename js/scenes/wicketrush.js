@@ -1,9 +1,11 @@
 // Cricket Arcade — Wicket Rush Classic scene (M02 bowling slice, plan 6.2 / 17).
 // You bowl 18 legal deliveries at an AI batter. Per ball:
 //   aim (pick delivery + drag reticle) -> charge (hold BOWL, bowler runs in)
-//   -> delivery (AI plays its shot) -> inplay (if hit) -> outcome -> next
+//   -> delivery (swipe for extra movement, AI plays its shot) -> inplay (if hit)
+//   -> outcome -> next
 // The ball, fielding, cameras and ground are shared with Six Smash
-// (game/pitchscene.js), so a ball behaves identically in both modes.
+// (game/pitchscene.js), so a ball behaves identically in both modes. The
+// Quick Match bowling innings (matchbowl.js) is built from this scene.
 
 const WicketRushScene = Object.assign({}, PitchScene, {
   rules: null,
@@ -18,25 +20,38 @@ const WicketRushScene = Object.assign({}, PitchScene, {
   release: null,       // { grade, noBall, type }
   ai: null,            // the AI's decision for this ball
   feelScale: 0.6,      // the AI's hits are toned down (it's not your celebration)
+  bowler: null,        // your bowler (stats + family)
+  batterP: null,       // the AI batter (stats)
+  swipe: null,         // Step 4 window: { t, done }
 
   // ---------------------------------------------------------------- setup
   enter() {
     this._initPitch();
     this.seed = RNG.begin(Dev.nextSeed());
     this.rules = new WicketRushRules(WICKET_RUSH_DATA.classic);
+    // Wicket Rush: an average fast bowler against the balanced challenge batter.
+    this.bowler = Teams.plain('you', 'fast');
+    this.batterP = Teams.plain('ai');
+    Fielding.clear();
+    Stadium.setConditions(null);
     const R0 = BOWLING_DATA.reticle.start;
     this.aim = { x: R0.x, z: R0.z };
     this.typeIdx = 0;
     Effects.init();
+    this._initControls();
+    this._layout();
+    this._startBall();
+  },
+
+  _initControls() {
     BowlControls.init({
       select: (i) => this.selectType(i),
       bowlDown: () => this.bowlDown(),
       bowlUp: () => this.bowlUp(),
-    });
+      swipe: (dx) => this.onSwipe(dx),
+    }, this._deliveries());
     BowlControls.reset();
     BowlControls.selected = 0;
-    this._layout();
-    this._startBall();
   },
 
   exit() { BowlControls.reset(); },
@@ -55,7 +70,20 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     }
   },
 
-  _type() { return BOWLING_DATA.deliveries[this.typeIdx]; },
+  _family() { return Bowling.family(this.bowler.family); },
+  _deliveries() { return this._family().deliveries; },
+  _type() { return this._deliveries()[this.typeIdx] || this._deliveries()[0]; },
+  _fatigue() { return 0; },
+  _cond() { return null; },
+  _pressure() { return this.rules.pressure; },
+
+  // Release bands for this bowler: Control widens them, fatigue shrinks them.
+  _bands() {
+    const C = BOWLING_DATA.charge;
+    const k = Duel.bandScale(this.bowler, this._fatigue());
+    const around = (b) => { const m = (b[0] + b[1]) / 2, h = (b[1] - b[0]) / 2 * k; return [m - h, m + h]; };
+    return { perfect: around(C.perfect), good: around(C.good) };
+  },
 
   _startBall() {
     this._setState('aim');
@@ -63,10 +91,13 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     this.del = null;
     this.release = null;
     this.ai = null;
+    this.swipe = null;
     this.meter = 0;
     BowlControls.meter = 0;
     BowlControls.meterOn = false;
     BowlControls.enabled = true;
+    BowlControls.swipeOpen = false;
+    BowlControls.bands = this._bands();
     const r = this.rules;
     const n = r.ball + 1, total = r.rs.balls;
     this.banner = { text: n === total ? T('hud.lastBall') : T('hud.ballNo', { n, total }), color: '#ffffff', t: 0 };
@@ -83,8 +114,8 @@ const WicketRushScene = Object.assign({}, PitchScene, {
   // ---------------------------------------------------------------- input
   selectType(i) {
     if (this.paused) return;
-    if (this.state !== 'aim' && this.state !== 'charge') return;
-    if (this.state === 'charge') return;   // no changing mind mid run-up
+    if (this.state !== 'aim') return;       // no changing mind mid run-up
+    if (!this._deliveries()[i]) return;
     this.typeIdx = i;
     BowlControls.selected = i;
     Sound.play('uiTap');
@@ -102,6 +133,25 @@ const WicketRushScene = Object.assign({}, PitchScene, {
   bowlUp() {
     if (this.paused || this.state !== 'charge') return;
     this._release();
+  },
+
+  // Step 4: a sideways swipe straight after release.
+  onSwipe(dx) {
+    const sw = this.swipe;
+    if (!sw || sw.done || this.state !== 'delivery') return;
+    const W = BOWLING_DATA.swipe;
+    sw.done = true;
+    BowlControls.swipeOpen = false;
+    const mag = Math.min(1, Math.abs(dx) / W.fullPx);
+    this.del = Bowling.withSwipe(this.del, { dir: Math.sign(dx), mag });
+    this.del.golden = this.golden;
+    sw.dir = Math.sign(dx);
+    sw.flash = 1;
+    Sound.play('swish', { gain: 0.8 });
+    const sp = View3D.project(this.del.release.x, this.del.release.y, this.del.release.z);
+    if (sp) Effects.ring(sp.x, sp.y, 120, '#9be7ff', 0.3, 8);
+    Effects.text(T(this._family().kind === 'spin' ? 'bowl.moreSpin' : 'bowl.moreSwing'), CONFIG.LOGICAL_W / 2, 330, '#9be7ff', 50, { life: 0.9 });
+    this._planBatter();
   },
 
   pointerDown(id, x, y) {
@@ -137,43 +187,33 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     return { x: this.aim.x, z };
   },
 
+  // Dragging UP the screen moves the target up the screen (toward the batter).
   _updateAim(realDt) {
-    const R0 = BOWLING_DATA.reticle;
-    const d = BowlControls.takeDrag();
-    // dragging UP the screen = further from the batter (shorter length)
-    this.aim.x += d.x * R0.dragX;
-    this.aim.z -= d.y * R0.dragZ;
-    if (Keys.any(['KeyA', 'ArrowLeft'])) this.aim.x -= R0.keySpeedX * realDt;
-    if (Keys.any(['KeyD', 'ArrowRight'])) this.aim.x += R0.keySpeedX * realDt;
-    if (Keys.any(['KeyW', 'ArrowUp'])) this.aim.z += R0.keySpeedZ * realDt;
-    if (Keys.any(['KeyS', 'ArrowDown'])) this.aim.z -= R0.keySpeedZ * realDt;
-    this.aim.x = Math.max(R0.minX, Math.min(R0.maxX, this.aim.x));
-    this.aim.z = Math.max(R0.minZ, Math.min(R0.maxZ, this.aim.z));
+    const st = Aim.settings();
+    Aim.drag(this.aim, BowlControls.takeDrag(), st);
+    Aim.keys(this.aim, {
+      left: Keys.any(['KeyA', 'ArrowLeft']), right: Keys.any(['KeyD', 'ArrowRight']),
+      up: Keys.any(['KeyW', 'ArrowUp']), down: Keys.any(['KeyS', 'ArrowDown']),
+    }, realDt, st);
   },
 
   // ---------------------------------------------------------------- release
   _release() {
-    const C = BOWLING_DATA.charge, t = this._type();
+    const C = BOWLING_DATA.charge;
     const m = this.meter;
+    const B = this._bands();
     const noBall = m > C.noBallAbove;
-    const grade = (m >= C.perfect[0] && m <= C.perfect[1]) ? 'perfect'
-      : (m >= C.good[0] && m <= C.good[1]) ? 'good' : 'loose';
+    const grade = (m >= B.perfect[0] && m <= B.perfect[1]) ? 'perfect'
+      : (m >= B.good[0] && m <= B.good[1]) ? 'good' : 'loose';
     const power = Math.max(0, Math.min(1, (Math.min(m, 1) - C.minPower) / (1 - C.minPower)));
-    const speed = (C.speed[0] + (C.speed[1] - C.speed[0]) * power) * t.speed;
+    if (power > 0.9 && this.inn) this.inn._hardBalls = (this.inn._hardBalls || 0) + 1;
 
-    // Accuracy: the release grade decides how far the ball strays from the aim.
-    const acc = RNG.stream('bowlAcc');
-    const sc = C.scatter[grade];
-    const target = this._snapped();
-    const bounceX = target.x + acc.range(-1, 1) * sc;
-    const bounceZ = Math.max(0.3, target.z + acc.range(-1, 1) * sc * 2.5);
-    const movement = acc.range(-1, 1) * t.seam;
-
-    this.del = Delivery.build({
-      index: this.rules.ball, speed, releaseX: C.releaseX, bounceX, bounceZ, movement, restitution: t.bounce,
-    });
+    this.del = Bowling.release({
+      bowler: this.bowler, family: this.bowler.family, typeIdx: this.typeIdx, target: this._snapped(),
+      grade, power, fatigue: this._fatigue(), cond: this._cond(), index: this.rules.ball,
+    }, RNG.stream('bowlAcc'));
     this.del.golden = this.golden;
-    this.release = { grade, noBall, type: t.id, meter: m };
+    this.release = { grade, noBall, type: this._type().id, meter: m };
     BowlControls.meterOn = false;
     BowlControls.enabled = false;
     this._setState('delivery');
@@ -182,37 +222,51 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     this._showTiming(grade === 'loose' ? 'loose' : grade);
     if (noBall) Effects.text(T('bowl.overstep'), CONFIG.LOGICAL_W / 2, 300, '#ff6b6b', 60);
 
-    this._planBatter();
+    // Step 4: movement deliveries get a short swipe window before the batter commits.
+    if (this.del.canSwipe) {
+      this.swipe = { t: 0, done: false };
+      BowlControls.swipeOpen = true;
+    } else {
+      this._planBatter();
+    }
   },
 
   // Decide what the AI batter does with this ball and schedule its swing.
   _planBatter() {
-    const sim = this.del.sim, PI = BATTING_DATA.pitch, W = BOWLING_DATA.wide, LP = BOWLING_DATA.lbwPads;
+    const sim = this.del.sim;
     const tIdeal = sim.contactIdx * CONFIG.PHYSICS_STEP;
     const at = sim.path.at(tIdeal, {});
-    this.isWide = at.x > W.offX || at.x < W.legX;
-    // Would it hit the pads first (LBW) rather than the stumps (bowled)?
-    this.padHit = sim.hitsStumps && at.x >= LP.minX && at.x <= LP.maxX && at.y <= LP.maxY;
+    this.isWide = BallPlay.isWide(this.del);
+    const bat = this.batterP, bowl = this.bowler;
 
     const ai = this.isWide ? { leave: true, difficulty: 0 }
       : AIBatter.decide(this.del, {
-        releaseGrade: this.release.grade, pressure: this.rules.pressure,
+        releaseGrade: this.release.grade, pressure: this._pressure(),
         freeHit: this.rules.freeHit || this.release.noBall,
-        timingBias: this._type().batterTimingBias,
+        timingBias: this.del.timingBias, bat, bowl, fatigue: this._fatigue(),
       }, RNG.stream('ai'));
     this.ai = ai;
+    this._duelPlayers = { bat, bowl };
 
-    if (ai.leave) { this.shot = { leave: true, id: 'leave', contactT: null }; return; }
+    if (ai.leave) {
+      this.shot = { leave: true, id: 'leave', contactT: null };
+      this.fate = this.isWide ? { kind: 'miss', result: null } : BallPlay.fate({ del: this.del, left: true, bat, bowl }, RNG.stream('duel'));
+      return;
+    }
     const pressT = tIdeal + ai.err;
     let grade = Contact.grade(ai.shot, ai.err);
     const shot = { id: ai.shot, pressT, err: ai.err, grade, swingStart: pressT, contactT: null, done: false };
     if (grade !== 'miss' && !Contact.inReach(at)) grade = shot.grade = 'miss';
-    if (grade !== 'miss') {
+    const f = BallPlay.fate({ del: this.del, shotId: ai.shot, grade, bat, bowl, releaseGrade: this.release.grade }, RNG.stream('duel'));
+    this.fate = f;
+    if (f.kind === 'contact') {
       shot.contactT = Math.max(pressT, tIdeal);
       shot.swingStart = Math.max(0, shot.contactT - this._swingTime(ai.shot) * 0.5);
+    } else if (f.kind === 'hitwicket') {
+      f.at = pressT + this._swingTime(ai.shot) * 0.6;
     }
     this.shot = shot;
-    Log.add('ai', `#${this.rules.ball + 1} ${this.del.lengthId} ${this.release.grade} d=${ai.difficulty.toFixed(2)} ${ai.shot} ${grade} err=${Math.round(ai.err * 1000)}ms`);
+    Log.add('ai', `#${this.rules.ball + 1} ${this.del.family}/${this.del.type} ${this.del.lengthId} ${this.release.grade} d=${ai.difficulty.toFixed(2)} ${ai.shot} ${grade} err=${Math.round(ai.err * 1000)}ms -> ${f.kind}${f.result ? ' ' + f.result : ''}`);
   },
 
   // ---------------------------------------------------------------- update
@@ -224,6 +278,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     this.stateT += dt;
     if (this.banner) this.banner.t += dt;
     if (this.timingLabel) this.timingLabel.t += dt;
+    Moments.update(this, dt);
 
     switch (this.state) {
       case 'aim':
@@ -239,6 +294,15 @@ const WicketRushScene = Object.assign({}, PitchScene, {
       }
       case 'delivery':
         this.dT += dt;
+        if (this.swipe && !this.swipe.done) {
+          this.swipe.t += dt;
+          if (this.swipe.t >= BOWLING_DATA.swipe.window) {
+            this.swipe.done = true;
+            BowlControls.swipeOpen = false;
+            this._planBatter();
+          }
+          break;
+        }
         this._updateDelivery();
         break;
       case 'inplay': {
@@ -261,37 +325,24 @@ const WicketRushScene = Object.assign({}, PitchScene, {
   },
 
   _updateDelivery() {
-    const sim = this.del.sim, step = CONFIG.PHYSICS_STEP;
+    const sim = this.del.sim;
     const sh = this.shot;
-    if (sh && sh.contactT !== null && !sh.done && this.dT >= sh.contactT) {
+    if (!sh) return;
+    if (sh.contactT !== null && !sh.done && this.dT >= sh.contactT) {
       sh.done = true;
       const hit = this._connect(sh.aim || this.ai.aim, RNG.stream('batting'), RNG.stream('fielding'));
       Log.add('ball', `#${this.rules.ball + 1} AI ${sh.id} ${sh.grade} -> ${hit.plan.result}`);
       return;
     }
-    if (sh && !sh.leave && sh.contactT === null && !sh.swishPlayed && this.dT >= sh.swingStart) {
+    if (!sh.leave && sh.contactT === null && !sh.swishPlayed && this.dT >= sh.swingStart) {
       sh.swishPlayed = true;
       Sound.play('swish');
+      if (this.fate && this.fate.kind === 'beaten') this._showTiming('beaten');
     }
-    const contactComing = sh && sh.contactT !== null;
-    if (sim.hitsStumps && !contactComing && this.ballStopT === null) {
-      const tPad = sim.contactIdx * step, tStumps = sim.stumpsIdx * step;
-      if (this.padHit && this.dT >= tPad) {
-        this.ballStopT = tPad;
-        Sound.play('batDefend');
-        this._endBall('lbw');
-        return;
-      }
-      if (!this.padHit && this.dT >= tStumps) {
-        this.ballStopT = tStumps;
-        this.stumpsBroken = true;
-        this._endBall('bowled');
-        return;
-      }
-    }
+    if (this._stepFate()) return;
     if (this.dT >= sim.path.duration()) {
       if (this.isWide) this._endBall('wide');
-      else this._endBall(sh && sh.leave ? 'leave' : 'miss');
+      else this._endBall(sh.leave ? 'leave' : 'miss');
     }
   },
 
@@ -308,8 +359,9 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     this.outcome = Object.assign(look, {
       key, res, t: 0,
       hold: F.outcomeHold + (wicket ? F.wicketHoldExtra : 0),
-      showText: wicket || res.notOut,          // six/four/wide markers already say it
-      umpire: wicket && key !== 'bowled',
+      showText: wicket || res.notOut || key === 'padLeg',   // six/four/wide markers already say it
+      umpire: wicket && key !== 'bowled' && key !== 'hitwicket',
+      fingerUp: wicket && key === 'lbw',
     });
     this._setState('outcome');
 
@@ -355,7 +407,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
 
   // ---------------------------------------------------------------- bowler animation
   _bowlerPhase() {
-    if (this.state === 'aim') return { runT: 0, after: -1 };
+    if (this.state === 'aim' || this.state === 'pick') return { runT: 0, after: -1 };
     if (this.state === 'charge') return { runT: Math.min(1, this.meter), after: -1 };
     return { runT: 1, after: this.dT + (this.hit ? this.hit.t : 0) };
   },
@@ -370,11 +422,30 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     Effects.drawParticles(ctx);
     if (Dev.hitzone && this.del) this._drawDebug(ctx);
     Effects.drawFlash(ctx);
+    Moments.draw(ctx, this);
     this._drawHud(ctx);
-    BowlControls.draw(ctx);
+    if (!ThrowMeter.active) BowlControls.draw(ctx);
+    this._drawSwipeHint(ctx);
     this._drawOutcome(ctx);
     Effects.drawTexts(ctx);
     if (this.paused) this._drawPause(ctx);
+  },
+
+  // "SWIPE FOR MORE SWING / SPIN" with arrows while the Step 4 window is open.
+  _drawSwipeHint(ctx) {
+    const sw = this.swipe;
+    if (!sw || sw.done || this.state !== 'delivery') return;
+    const cx = CONFIG.LOGICAL_W / 2, y = Display.safe.top + 262;
+    const k = 1 - sw.t / BOWLING_DATA.swipe.window;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, k * 2);
+    R.roundRect(cx - 360, y - 50, 720, 100, 30, 'rgba(8,20,40,0.8)', '#9be7ff', 4);
+    const nudge = Math.sin(sw.t * 30) * 12;
+    R.text('◀', cx - 300 - nudge, y, 56, '#9be7ff');
+    R.text('▶', cx + 300 + nudge, y, 56, '#9be7ff');
+    R.text(T(this._family().kind === 'spin' ? 'bowl.swipeSpin' : 'bowl.swipeSwing'), cx, y, 36, '#ffffff');
+    R.roundRect(cx - 250, y + 36, 500 * k, 8, 4, '#9be7ff');
+    ctx.restore();
   },
 
   _drawReticle(ctx) {
@@ -396,6 +467,16 @@ const WicketRushScene = Object.assign({}, PitchScene, {
       const q = View3D.project(this.aim.x, 0.01, this.aim.z);
       if (q) R.circle(q.x, q.y, 7, 'rgba(255,255,255,0.6)');
     }
+    // Which way this delivery will move (swing in the air, turn off the pitch).
+    const t = this._type();
+    const mv = (t.swing || 0) * 0.35 + (t.turn || 0) * 0.25;
+    if (Math.abs(mv) > 0.05) {
+      const q = View3D.project(s.x + Math.sign(mv) * Math.min(0.7, Math.abs(mv)), 0.01, s.z - 1.6);
+      if (q) {
+        R.line(p.x, p.y, q.x, q.y, 'rgba(155,231,255,0.85)', 5);
+        R.circle(q.x, q.y, 9, '#9be7ff');
+      }
+    }
     R.text(T('length.' + Delivery.lengthOf(s.z)), p.x, p.y + size * 0.42 + 26, 30, '#ffffff');
   },
 
@@ -409,14 +490,14 @@ const WicketRushScene = Object.assign({}, PitchScene, {
       prev = q;
     }
     ctx.globalAlpha = 1;
-    const d = this.del, ai = this.ai || {};
+    const d = this.del, ai = this.ai || {}, f = this.fate || {};
     const lines = [
-      `seed ${this.seed}  ball ${this.rules.ball + 1}  ${d.lengthId}  ${d.kmh}km/h  line ${d.line.toFixed(2)}  release ${this.release.grade} (${this.release.meter.toFixed(2)})`,
-      `hitsStumps ${sim.hitsStumps} pads ${this.padHit} wide ${this.isWide}  AI d=${(ai.difficulty || 0).toFixed(2)} ${ai.leave ? 'leave' : ai.shot + ' err ' + Math.round((ai.err || 0) * 1000) + 'ms'}`,
-      `pressure ${this.rules.pressure.toFixed(2)}  combo ${this.rules.combo}`,
+      `seed ${this.seed}  ball ${this.rules.ball + 1}  ${d.family}/${d.type} ${d.lengthId}  ${d.kmh}km/h  line ${d.line.toFixed(2)}  swing ${d.swing.toFixed(2)} move ${d.movement.toFixed(2)}  release ${this.release.grade} (${this.release.meter.toFixed(2)})`,
+      `hitsStumps ${sim.hitsStumps} wide ${this.isWide}  AI d=${(ai.difficulty || 0).toFixed(2)} ${ai.leave ? 'leave' : (ai.shot || '-') + ' err ' + Math.round((ai.err || 0) * 1000) + 'ms'}  fate ${f.kind || '-'} ${f.result || ''}`,
+      `pressure ${this._pressure().toFixed(2)}  bowler ${this.bowler.short || this.bowler.id} vs ${this.batterP.short || this.batterP.id}`,
     ];
     const s = Display.safe;
-    R.rect(s.left + 20, s.top + 250, 1100, 110, 'rgba(0,0,0,0.6)');
+    R.rect(s.left + 20, s.top + 250, 1300, 110, 'rgba(0,0,0,0.6)');
     lines.forEach((l, k) => R.plainText(l, s.left + 34, s.top + 275 + k * 32, 24, '#00ffff'));
   },
 

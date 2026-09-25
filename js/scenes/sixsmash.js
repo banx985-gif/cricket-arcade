@@ -19,6 +19,8 @@ const SixSmashScene = Object.assign({}, PitchScene, {
     this._initPitch();
     this.seed = RNG.begin(Dev.nextSeed());
     this.rules = new SixSmashRules(SIX_SMASH_DATA.classic);
+    Fielding.clear();
+    Stadium.setConditions(null);
     this.deliveries = Delivery.innings(this.rules.rs.balls);
     Log.add('innings', 'deliveries ' + Delivery.fingerprint(this.deliveries).slice(0, 80) + '…');
     Effects.init();

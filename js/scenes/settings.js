@@ -21,13 +21,20 @@ const SettingsScene = {
     const b = this.buttons;
     b.clear();
     const on = (v) => T(v ? 'settings.on' : 'settings.off');
-    b.add(() => T('settings.sound', { state: on(!Save.data.settings.muted) }), cx - 330, 280, 660, 120,
+    b.add(() => T('settings.sound', { state: on(!Save.data.settings.muted) }), cx - 330, 225, 660, 110,
       () => { Save.setMuted(!Save.data.settings.muted); }, { size: 44, color: '#e9eef5' });
-    b.add(() => T('settings.vibration', { state: on(Save.data.settings.haptics !== false) }), cx - 330, 430, 660, 120,
+    b.add(() => T('settings.vibration', { state: on(Save.data.settings.haptics !== false) }), cx - 330, 355, 660, 110,
       () => { Save.setSetting('haptics', Save.data.settings.haptics === false); Platform.haptic('strong'); },
       { size: 44, color: '#e9eef5' });
-    b.add('settings.reset', cx - 330, 610, 660, 120, () => { this.confirming = true; }, { size: 42, color: '#ff9b9b' });
-    b.add('settings.back', cx - 200, 830, 400, 120, () => Scenes.go('title'), { size: 50 });
+    // Controls (plan 34): bowling aim direction and sensitivity.
+    b.add(() => T('settings.aim', { state: T(Save.data.settings.aimInvert ? 'settings.aimInverted' : 'settings.aimNormal') }), cx - 330, 485, 660, 110,
+      () => { Save.setSetting('aimInvert', !Save.data.settings.aimInvert); }, { size: 36, color: '#e9eef5' });
+    const sens = ['low', 'normal', 'high'];
+    b.add(() => T('settings.aimSens', { state: T('settings.sens.' + (Save.data.settings.aimSensitivity || 'normal')) }), cx - 330, 615, 660, 110,
+      () => { const i = sens.indexOf(Save.data.settings.aimSensitivity || 'normal'); Save.setSetting('aimSensitivity', sens[(i + 1) % 3]); },
+      { size: 36, color: '#e9eef5' });
+    b.add('settings.reset', cx - 330, 760, 660, 100, () => { this.confirming = true; }, { size: 38, color: '#ff9b9b' });
+    b.add('settings.back', Display.safe.left + 30, Display.safe.top + 30, 260, 100, () => Scenes.go('title'), { size: 44 });
 
     const c = this.confirmBtns;
     c.clear();
@@ -58,12 +65,12 @@ const SettingsScene = {
   render(ctx) {
     drawMatchBackdrop(ctx, this._t, 0.7);
     const cx = CONFIG.LOGICAL_W / 2;
-    Sprites.ui('icon_settings', cx - 330, 150, 110, 110);
-    R.text(T('settings.title'), cx + 40, 150, 90, '#ffffff');
+    Sprites.ui('icon_settings', cx - 330, 130, 100, 100);
+    R.text(T('settings.title'), cx + 40, 130, 80, '#ffffff');
     this.buttons.draw();
     const m = Save.data.meta;
     R.text(T('settings.info', { v: m.build, n: m.writes, store: Store.backend }), cx, 1010, 22, 'rgba(255,255,255,0.45)', 'center', false);
-    if (this._msgT > 0) R.text(this._msg, cx, 770, 40, '#9cff6a');
+    if (this._msgT > 0) R.text(this._msg, cx, 910, 40, '#9cff6a');
 
     if (this.confirming) {
       const v = Display.viewRect();

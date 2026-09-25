@@ -20,6 +20,9 @@ const Dev = {
   hitzone: false,
   showFps: false,
   matchFormat: null,      // quick match format override (e.g. 'test1')
+  forceFate: null,        // next ball: 'lbw' | 'hitwicket' | 'padLeg' | 'bowled' (see BallPlay.fate)
+  difficulty: null,       // Rivals strength override ('easy' | 'normal' | 'hard')
+  pitch: null, weather: null,   // force match conditions (tests / art checks)
   _taps: [],
   _buttons: new ButtonList(),
   _msg: '',
@@ -87,6 +90,11 @@ const Dev = {
       add(1, 1, () => T('dev.slowmo', { state: this._state(this.slowmo) }), () => { this.slowmo = !this.slowmo; });
       add(1, 2, () => T('dev.hitzone', { state: this._state(this.hitzone) }), () => { this.hitzone = !this.hitzone; });
       add(1, 3, () => T('dev.fps', { state: this._state(this.showFps) }), () => { this.showFps = !this.showFps; });
+      add(0, 3, () => T('dev.layers', { state: this._state(Stadium.showLayers) }), () => { Stadium.showLayers = !Stadium.showLayers; });
+      add(0, 4, () => T('dev.rivals', { state: T('dev.diff.' + (this.difficulty || PLAYER_DATA.quickMatchDifficulty)) }), () => {
+        const k = ['easy', 'normal', 'hard'];
+        this.difficulty = k[(k.indexOf(this.difficulty || PLAYER_DATA.quickMatchDifficulty) + 1) % 3];
+      });
     } else if (this.tab === 'jump') {
       const go = (scene, params) => () => { this.hide(); Scenes.go(scene, params); };
       add(0, 0, () => T('dev.jump.title'), go('title'));
@@ -100,6 +108,9 @@ const Dev = {
       add(0, 1, () => T('dev.match.tieNow'), () => this._tieNow());
       add(1, 0, () => T('dev.match.endInnings'), () => this._endInnings());
       add(1, 1, () => T('dev.match.freeHit'), () => this._matchDo((inn) => { inn.freeHit = true; this.say(T('dev.done')); }));
+      add(0, 2, () => T('dev.match.forceLbw'), () => { this.forceFate = 'lbw'; this.say(T('dev.done')); });
+      add(0, 3, () => T('dev.match.forceHitWicket'), () => { this.forceFate = 'hitwicket'; this.say(T('dev.done')); });
+      add(0, 4, () => T('dev.match.forceLegNotOut'), () => { this.forceFate = 'padLeg'; this.say(T('dev.done')); });
       add(1, 2, () => T('dev.match.checkpoint'), () => this._matchDo(() => { Match.checkpoint('over'); this.say(T('dev.done')); }));
     } else if (this.tab === 'save') {
       add(0, 3, () => T('dev.save.print'), () => { console.log('[save]', JSON.stringify(Save.data, null, 2)); this.say(T('dev.save.printed')); });
@@ -206,7 +217,7 @@ const Dev = {
     if (this.tab === 'match') {
       const inn = this._inMatch();
       R.text(inn ? T('dev.match.state', { runs: inn.runs, wkts: inn.wickets, overs: inn.overs, target: inn.target || '-' })
-        : T('dev.match.notInMatch'), cx, 740, 30, '#ffffff', 'center', false);
+        : T('dev.match.notInMatch'), cx, 254, 24, '#ffffff', 'center', false);
     }
     if (this.tab === 'save') {
       this._saveLines.forEach((l, i) => R.plainText(l, cx - 620, 285 + i * 40, 24, '#cfe8ff'));

@@ -36,13 +36,49 @@ const Validate = {
     for (const s of Object.keys(BATTING_DATA.shots)) str('shot.' + s, 'shot type');
     for (const g of ['perfect', 'good', 'early', 'late', 'miss', 'loose']) str('timing.' + g, 'timing grade');
 
-    // Bowling
-    const types = dupes('bowling deliveries', BOWLING_DATA.deliveries, 'id');
-    for (const d of BOWLING_DATA.deliveries) { art(d.icon, 'delivery ' + d.id); str('bowl.type.' + d.id, 'delivery ' + d.id); }
+    // Bowling: every family has exactly 4 deliveries (plan 6.2)
+    for (const [fid, fam] of Object.entries(BOWLING_DATA.families)) {
+      if (fam.id !== fid) p.push(`bowling family "${fid}" has id "${fam.id}"`);
+      const types = dupes('bowling deliveries (' + fid + ')', fam.deliveries, 'id');
+      if (types.size !== 4) p.push(`bowling family "${fid}" needs exactly 4 deliveries`);
+      art(fam.icon, 'family ' + fid); str(fam.nameKey, 'family ' + fid);
+      for (const d of fam.deliveries) { art(d.icon, 'delivery ' + d.id); str('bowl.type.' + d.id, 'delivery ' + d.id); }
+    }
+    for (const id of BOWLING_DATA.familyOrder) if (!BOWLING_DATA.families[id]) p.push(`family order lists unknown family "${id}"`);
     const A = BOWLING_DATA.aiBatter;
     if (A.weakness && !lengths.has(A.weakness.id)) p.push(`AI batter weakness "${A.weakness.id}" is not a delivery length`);
     for (const k of Object.keys(A.difficulty)) if (!lengths.has(k)) p.push(`AI batter difficulty "${k}" is not a delivery length`);
-    if (types.size !== 4) p.push('bowling needs exactly 4 delivery slots');
+
+    // Teams: every lineup bowler has a real family; at least 5 bowlers (plan 7.12)
+    const bowlers = PLAYER_DATA.teams.lineup.filter((l) => l.families);
+    if (bowlers.length < 5) p.push('a team needs at least 5 bowlers');
+    for (const l of bowlers) for (const f of l.families) if (!BOWLING_DATA.families[f]) p.push(`lineup bowler family "${f}" doesn't exist`);
+    for (const [k, d] of Object.entries(PLAYER_DATA.difficulty)) str('dev.diff.' + k, 'difficulty');
+
+    // Field settings
+    const presetIds = dupes('field presets', FIELD_DATA.presets, 'id');
+    for (const pr of FIELD_DATA.presets) {
+      art(pr.icon, 'field ' + pr.id); str('field.' + pr.id, 'field ' + pr.id);
+      if (pr.positions.length !== 10) p.push(`field "${pr.id}" needs 10 fielders (it has ${pr.positions.length})`);
+      if (!pr.positions.length || pr.positions[0][0] !== 'keeper') p.push(`field "${pr.id}" must list the keeper first`);
+      dupes('field "' + pr.id + '" positions', pr.positions.map((x) => x[0]));
+      if (pr.unlock !== 'always' && !(pr.unlock && pr.unlock.quickMatchWins > 0)) p.push(`field "${pr.id}" has an unknown unlock condition`);
+    }
+    for (const r of FIELD_DATA.aiRules) if (!presetIds.has(r.pick)) p.push(`field AI rule picks unknown preset "${r.pick}"`);
+
+    // Stadium layers
+    for (const [sid, st] of Object.entries(STADIUM_DATA.stadiums)) {
+      str(st.nameKey, 'stadium ' + sid);
+      art(st.stands.id, 'stadium ' + sid); art(st.boards.id, 'stadium ' + sid);
+      for (const pr of st.props) art(pr[0], 'stadium ' + sid + ' prop');
+      for (const f of st.flags.concat(st.banners)) art(f[0], 'stadium ' + sid);
+      for (const c of st.crowd) for (const fr of ['sit', 'cheer', 'jump']) art('crowd_' + c[0] + '_' + fr, 'stadium ' + sid + ' crowd');
+    }
+    for (const [w, id] of Object.entries(STADIUM_DATA.skies)) art(id, 'sky ' + w);
+    for (const [k, pa] of Object.entries(STADIUM_DATA.pitchArt)) { art(pa.id, 'pitch ' + k); if (!STADIUM_DATA.pitchTypes[k]) p.push(`pitch art "${k}" has no pitch type`); }
+    for (const [k, pt] of Object.entries(STADIUM_DATA.pitchTypes)) { str(pt.nameKey, 'pitch ' + k); if (!STADIUM_DATA.pitchArt[k]) p.push(`pitch type "${k}" has no pitch art`); }
+    for (const [k, w] of Object.entries(STADIUM_DATA.weather)) { str(w.nameKey, 'weather ' + k); if (!STADIUM_DATA.skies[k]) p.push(`weather "${k}" has no sky`); }
+    art(STADIUM_DATA.grass.id, 'grass');
 
     // Scoring tiers must climb
     const climbing = (label, tiers) => {
@@ -55,6 +91,8 @@ const Validate = {
     for (const [key, f] of Object.entries(MATCH_DATA.formats)) {
       if (f.id !== key) p.push(`match format "${key}" has id "${f.id}"`);
       if (!(f.overs > 0) || !(f.wickets > 0)) p.push(`match format "${key}" needs overs and wickets`);
+      if (!(f.maxOvers > 0)) p.push(`match format "${key}" needs a bowler over limit`);
+      else if (f.maxOvers * bowlers.length < f.overs) p.push(`match format "${key}": not enough bowlers to bowl ${f.overs} overs`);
     }
     if (!MATCH_DATA.formats[MATCH_DATA.defaultFormat]) p.push(`default match format "${MATCH_DATA.defaultFormat}" doesn't exist`);
     for (const side of ['player', 'ai']) {

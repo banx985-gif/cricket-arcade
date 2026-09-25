@@ -26,7 +26,7 @@ class WicketRushRules {
   }
   get mult() { return this.multFor(this.combo); }
 
-  static isWicket(key) { return key === 'bowled' || key === 'lbw' || key === 'caught'; }
+  static isWicket(key) { return key === 'bowled' || key === 'lbw' || key === 'caught' || key === 'hitwicket'; }
 
   // key: how the ball ended — 'bowled'|'lbw'|'caught'|'dot'|'miss'|'leave'|
   //   'defended'|'edge'|'runs'|'four'|'six'|'wide'

@@ -6,20 +6,28 @@
 
 const Delivery = {
   // Build a delivery from an exact bounce point.
-  // p: { index, lengthId, speed, releaseX, bounceX, bounceZ, movement, restitution, releaseHeight? }
+  // p: { index, lengthId, speed, releaseX, bounceX, bounceZ, movement, restitution, releaseHeight?,
+  //      swing? (m/s² in the air), skid? (pace kept off the pitch), type?, family? }
+  // With swing, the ball is started off-line so that it still PITCHES on the
+  // aimed spot (the reticle is where it lands) and curves on the way.
   build(p) {
     const D = BATTING_DATA.delivery, P = BATTING_DATA.physics;
     const release = { x: p.releaseX, y: p.releaseHeight || D.releaseHeight, z: D.releaseZ };
-    const dx = p.bounceX - release.x, dz = p.bounceZ - release.z;
-    const distXZ = Math.hypot(dx, dz);
+    const swing = p.swing || 0;
+    const dz = p.bounceZ - release.z;
+    let dx = p.bounceX - release.x;
+    let distXZ = Math.hypot(dx, dz);
     const t1 = distXZ / p.speed;
+    dx -= 0.5 * swing * t1 * t1;
+    distXZ = Math.hypot(dx, dz);
     const vy = (P.ballRadius - release.y + 0.5 * P.gravity * t1 * t1) / t1;
     const vel = { x: dx / distXZ * p.speed, y: vy, z: dz / distXZ * p.speed };
     // Where the ball would cross the stumps line before any movement.
     const line = release.x + dx * (release.z / (release.z - p.bounceZ));
     const d = {
       index: p.index || 0, lengthId: p.lengthId || this.lengthOf(p.bounceZ), speed: p.speed,
-      line, bounceZ: p.bounceZ, movement: p.movement || 0, restitution: p.restitution,
+      line, bounceX: p.bounceX, bounceZ: p.bounceZ, movement: p.movement || 0, restitution: p.restitution,
+      swing, skid: p.skid || null, type: p.type || null, family: p.family || null,
       release, vel,
       kmh: Math.round(p.speed * D.displayKmhPerMs),
       golden: false,

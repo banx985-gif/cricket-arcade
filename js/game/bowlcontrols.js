@@ -3,8 +3,8 @@
 // Step 2: left thumb drags the target reticle on the pitch.
 // Step 3: hold BOWL — the bowler runs in and the meter fills; let go in the
 //         gold band for a PERFECT release.
-// (Step 4 — post-release swing/spin swipes — arrives with swing/spin bowlers;
-//  the fast-bowler set used here has no movement deliveries.)
+// Step 4: straight after release, a quick sideways swipe anywhere adds extra
+//         swing or spin (only for deliveries that can move; see BOWLING_DATA.swipe).
 // Each control belongs to one finger ID, so aiming and bowling work together.
 
 const BowlControls = {
@@ -24,15 +24,30 @@ const BowlControls = {
   selected: 0,
   meter: 0,               // shown charge (0..max)
   meterOn: false,
-  onSelect: null, onBowlDown: null, onBowlUp: null,
+  deliveries: null,       // the bowler's four deliveries (a family from BOWLING_DATA)
+  bands: null,            // { perfect: [a, b], good: [a, b] } for this bowler (Control, fatigue)
+  swipeOpen: false,       // Step 4 window
+  sw: { id: null, x0: 0, dx: 0 },
+  onSelect: null, onBowlDown: null, onBowlUp: null, onSwipe: null,
 
-  init(handlers) {
+  init(handlers, deliveries) {
     this.onSelect = handlers.select;
     this.onBowlDown = handlers.bowlDown;
     this.onBowlUp = handlers.bowlUp;
-    this.slots = BOWLING_DATA.deliveries.map(() => ({ x: 0, y: 0, flash: 0 }));
+    this.onSwipe = handlers.swipe || null;
+    this.setDeliveries(deliveries || BOWLING_DATA.deliveries);
+    this.bands = null;
     this.layout();
   },
+
+  setDeliveries(list) {
+    this.deliveries = list;
+    this.slots = list.map(() => ({ x: 0, y: 0, flash: 0 }));
+    this.layout();
+  },
+
+  // Release bands in use (defaults from BOWLING_DATA.charge).
+  band(name) { return (this.bands && this.bands[name]) || BOWLING_DATA.charge[name]; },
 
   layout() {
     const s = Display.safe, L = this.LAYOUT;
@@ -46,9 +61,14 @@ const BowlControls = {
   reset() {
     this.bowl.id = null; this.bowl.pressed = false;
     this.drag.id = null; this.drag.active = false; this.drag.dx = 0; this.drag.dy = 0;
+    this.sw.id = null; this.sw.dx = 0; this.swipeOpen = false;
   },
 
   down(id, x, y) {
+    if (this.swipeOpen) {
+      this.sw.id = id; this.sw.x0 = x; this.sw.dx = 0;
+      return true;
+    }
     const b = this.bowl;
     if (b.id === null && Math.hypot(x - b.x, y - b.y) <= this.LAYOUT.bowl.r * 1.18) {
       b.id = id; b.pressed = true;
@@ -73,6 +93,11 @@ const BowlControls = {
   },
 
   move(id, x, y) {
+    if (this.sw.id === id) {
+      this.sw.dx = x - this.sw.x0;
+      if (this.swipeOpen && Math.abs(this.sw.dx) >= BOWLING_DATA.swipe.fullPx && this.onSwipe) { this.onSwipe(this.sw.dx); this.sw.id = null; }
+      return true;
+    }
     const d = this.drag;
     if (d.id !== id) return false;
     d.dx += x - d.lx; d.dy += y - d.ly;
@@ -81,6 +106,11 @@ const BowlControls = {
   },
 
   up(id) {
+    if (this.sw.id === id) {
+      this.sw.id = null;
+      if (this.swipeOpen && Math.abs(this.sw.dx) >= BOWLING_DATA.swipe.minPx && this.onSwipe) this.onSwipe(this.sw.dx);
+      return true;
+    }
     if (this.bowl.id === id) {
       this.bowl.id = null; this.bowl.pressed = false;
       if (this.onBowlUp) this.onBowlUp();
@@ -100,6 +130,10 @@ const BowlControls = {
 
   // Keyboard: 1–4 pick a delivery; Space/K hold to bowl.
   keyDown(code) {
+    if (this.swipeOpen && this.onSwipe) {
+      const dir = { KeyA: -1, ArrowLeft: -1, KeyD: 1, ArrowRight: 1 }[code];
+      if (dir) { this.onSwipe(dir * BOWLING_DATA.swipe.fullPx); return true; }
+    }
     const n = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 }[code];
     if (n !== undefined) { this.slots[n].flash = 1; if (this.onSelect) this.onSelect(n); return true; }
     if ((code === 'Space' || code === 'KeyK') && !this.bowl.pressed) {
@@ -136,7 +170,7 @@ const BowlControls = {
 
     // ---- delivery slots ----
     this.slots.forEach((sl, i) => {
-      const def = BOWLING_DATA.deliveries[i];
+      const def = this.deliveries[i];
       const sel = i === this.selected;
       const r = L.slotR * (sel ? 1.08 : 1);
       R.circle(sl.x + 4, sl.y + 6, r, 'rgba(0,0,0,0.35)');
@@ -160,8 +194,9 @@ const BowlControls = {
       ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'butt'; ctx.stroke();
     };
     ring(0, C.max, 'rgba(0,0,0,0.55)', 26);
-    ring(C.good[0], C.good[1], 'rgba(120,230,110,0.8)', 18);
-    ring(C.perfect[0], C.perfect[1], '#ffd23f', 18);
+    const good = this.band('good'), perfect = this.band('perfect');
+    ring(good[0], good[1], 'rgba(120,230,110,0.8)', 18);
+    ring(perfect[0], perfect[1], '#ffd23f', 18);
     ring(C.noBallAbove, C.max, 'rgba(255,70,70,0.85)', 18);
     if (this.meterOn || this.meter > 0) {
       const v = Math.min(C.max, this.meter);
@@ -177,7 +212,7 @@ const BowlControls = {
     R.circle(b.x + 5, b.y + 8, r, 'rgba(0,0,0,0.4)');
     R.circle(b.x, b.y + off, r, '#1f8a4c', CONFIG.COLOR.ink, 6);
     R.circle(b.x, b.y + off - r * 0.28, r * 0.62, 'rgba(255,255,255,0.18)');
-    Sprites.ui(BOWLING_DATA.deliveries[this.selected].icon, b.x, b.y + off - 18, r * 1.1, r * 0.9, { alpha: 0.9 });
+    Sprites.ui(this.deliveries[this.selected].icon, b.x, b.y + off - 18, r * 1.1, r * 0.9, { alpha: 0.9 });
     R.text(T('bowl.bowl'), b.x, b.y + off + r * 0.52, 40, '#ffffff');
     if (!this.enabled) R.circle(b.x, b.y + off, r, 'rgba(20,20,20,0.45)');
   },

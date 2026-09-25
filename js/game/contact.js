@@ -4,30 +4,35 @@
 
 const Contact = {
   // err = press time minus ideal time (seconds). Negative = early.
-  grade(shotId, err) {
-    const w = BATTING_DATA.shots[shotId].window;
+  // scale = the duel's window size (Duel.windowScale: batter Timing vs bowler
+  // Delivery, pressure, Composure). 1 = the windows in batting.js.
+  grade(shotId, err, scale) {
+    const w = BATTING_DATA.shots[shotId].window, k = scale || 1;
     const a = Math.abs(err);
-    if (a <= w.perfect) return 'perfect';
-    if (a <= w.good) return 'good';
-    if (a <= w.edge) return err < 0 ? 'early' : 'late';
+    if (a <= w.perfect * k) return 'perfect';
+    if (a <= w.good * k) return 'good';
+    if (a <= w.edge * k) return err < 0 ? 'early' : 'late';
     return 'miss';
   },
 
   // Latest press (after the ideal moment) that can still make contact.
-  lateLimit(shotId) { return BATTING_DATA.shots[shotId].window.edge; },
+  lateLimit(shotId, scale) { return BATTING_DATA.shots[shotId].window.edge * (scale || 1); },
 
   inReach(ball) {
     const PI = BATTING_DATA.pitch;
     return Math.abs(ball.x - PI.reachCentreX) <= PI.reachHalfWidth && ball.y <= PI.reachMaxHeight;
   },
 
+  // o.mods (from the duel, optional): { edge, power, jitter } multipliers.
   // Returns { kind: 'hit'|'edge'|'defend', vel, dirDeg, loftDeg, speed }
   resolve(o, rng) {
     const S = BATTING_DATA.shots[o.shotId], DIR = BATTING_DATA.direction, PI = BATTING_DATA.pitch;
     const grade = o.grade;
+    const m = o.mods || {};
 
     // Edges: mistimed shots can take the edge and fly fine behind the stumps.
-    if (rng.chance(S.edgeChance[grade] || 0)) {
+    // Contact makes them rarer; the bowler's Movement and Deception more common.
+    if (rng.chance(Math.min(0.9, (S.edgeChance[grade] || 0) * (m.edge || 1)))) {
       const side = rng.chance(DIR.insideEdgeChance) ? -1 : 1;
       const dirDeg = side * rng.rangeOf(DIR.edgeAngle);
       const loftDeg = rng.rangeOf(DIR.edgeLoft) * (o.shotId === 'defend' ? 0.4 : 1);
@@ -46,7 +51,7 @@ const Contact = {
     // Timing drags the ball: early -> leg side, late -> off side.
     const sev = grade === 'early' || grade === 'late' ? 1 : grade === 'good' ? 0.35 : 0;
     if (o.err < 0) dirDeg += DIR.earlyPull * sev; else dirDeg += DIR.latePush * sev;
-    dirDeg += rng.range(-1, 1) * S.directionJitter;
+    dirDeg += rng.range(-1, 1) * S.directionJitter * (m.jitter || 1);
     dirDeg = Math.max(-150, Math.min(150, dirDeg));
 
     // Loft: stick up = in the air, stick down = along the ground.
@@ -57,7 +62,7 @@ const Contact = {
     loftDeg += rng.range(-2, 2);
     loftDeg = Math.max(0, loftDeg);
 
-    let speed = S.speed[grade] * rng.range(0.97, 1.03);
+    let speed = S.speed[grade] * rng.range(0.97, 1.03) * (m.power || 1);
     return this._pack(o.shotId === 'defend' ? 'defend' : 'hit', dirDeg, loftDeg, speed);
   },
 

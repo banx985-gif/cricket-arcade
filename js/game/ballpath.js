@@ -38,6 +38,9 @@ class BallPath {
 
 const BallSim = {
   // Simulate a DELIVERY from release to the keeper.
+  // d.swing = sideways acceleration in the air (m/s², until it pitches)
+  // d.movement = sideways velocity added off the pitch (seam / spin turn)
+  // d.skid = pace kept through the bounce
   delivery(d) {
     const P = BATTING_DATA.physics, PI = BATTING_DATA.pitch;
     const dt = CONFIG.PHYSICS_STEP, g = P.gravity, r = P.ballRadius;
@@ -45,16 +48,20 @@ const BallSim = {
     let x = d.release.x, y = d.release.y, z = d.release.z;
     let vx = d.vel.x, vy = d.vel.y, vz = d.vel.z;
     let bounced = 0;
+    const swing = d.swing || 0;
+    const keep = d.skid || BATTING_DATA.delivery.bounceSpeedKeep;
     path.push(x, y, z);
     for (let s = 0; s < 600; s++) {
       vy -= g * dt;
+      if (bounced === 0) vx += swing * dt;
       x += vx * dt; y += vy * dt; z += vz * dt;
       if (y <= r && vy < 0) {
         y = r;
         if (bounced === 0) {
           vy = -vy * d.restitution;
-          vx = vx * BATTING_DATA.delivery.bounceSpeedKeep + d.movement;
-          vz = vz * BATTING_DATA.delivery.bounceSpeedKeep;
+          vx = vx * keep + d.movement;
+          vz = vz * keep;
+          path.bounceX = x;
         } else {
           vy = -vy * P.bounceRestitution;
           vx *= P.bounceFriction; vz *= P.bounceFriction;
@@ -67,7 +74,7 @@ const BallSim = {
     }
 
     // Key moments.
-    let contactIdx = -1, stumpsIdx = -1, hitsStumps = false;
+    let contactIdx = -1, stumpsIdx = -1, hitsStumps = false, stumpsX = null;
     for (let i = 1; i < path.n; i++) {
       if (contactIdx < 0 && path.z[i] <= PI.contactZ) contactIdx = i;
       if (stumpsIdx < 0 && path.z[i] <= 0) {
@@ -77,9 +84,10 @@ const BallSim = {
         const sx = path.x[i - 1] + (path.x[i] - path.x[i - 1]) * k;
         const sy = path.y[i - 1] + (path.y[i] - path.y[i - 1]) * k;
         hitsStumps = Math.abs(sx) <= PI.stumpsHalfWidth + r && sy <= PI.stumpsHeight + r;
+        stumpsX = sx;
       }
     }
-    return { path, contactIdx, stumpsIdx, hitsStumps };
+    return { path, contactIdx, stumpsIdx, hitsStumps, stumpsX, bounceX: path.bounceX === undefined ? null : path.bounceX };
   },
 
   // Simulate a HIT ball from a start point and velocity. onStep(t, x, y, z,

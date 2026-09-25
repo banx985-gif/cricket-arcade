@@ -27,7 +27,7 @@ const Save = {
   defaults() {
     return {
       meta: this._meta(),
-      settings: { muted: false, haptics: true },
+      settings: { muted: false, haptics: true, aimInvert: false, aimSensitivity: 'normal' },
       challenges: {},            // modeId -> { score, streak, sixes, wickets, combo … }
       matches: {},               // formatId -> { played, won }
       // ---- empty until their systems exist (plan 33) ----
@@ -106,6 +106,8 @@ const Save = {
     const base = this.defaults();
     for (const k of Object.keys(base)) if (d[k] === undefined) d[k] = base[k];
     if (d.settings && d.settings.haptics === undefined) d.settings.haptics = true;
+    if (d.settings && d.settings.aimInvert === undefined) d.settings.aimInvert = false;
+    if (d.settings && d.settings.aimSensitivity === undefined) d.settings.aimSensitivity = 'normal';
     return d;
   },
 

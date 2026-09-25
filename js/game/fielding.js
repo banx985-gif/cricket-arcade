@@ -4,12 +4,60 @@
 // Catch attempts roll on the 'fielding' random stream.
 
 const Fielding = {
+  // The field setting in use (a FIELD_DATA preset) and the fielding side's
+  // quality (Duel.fieldMods). Scenes set these each over; null = the plain
+  // balanced field from batting.js with average fielders.
+  preset: null,
+  powerplay: false,
+  mods: null,
+
+  setPreset(id, powerplay) {
+    this.preset = FIELD_DATA.presets.find((p) => p.id === id) || null;
+    this.powerplay = !!powerplay;
+    this._cache = null;
+  },
+  clear() { this.preset = null; this.powerplay = false; this.mods = null; this._cache = null; },
+
+  // Where a preset puts everyone (powerplay: extra deep fielders come in).
+  positionsOf(preset, powerplay) {
+    const list = preset.positions.map(([id, x, z]) => ({ id, x, z, keeper: id === 'keeper' }));
+    if (powerplay) {
+      const cz = BATTING_DATA.field.boundaryCentreZ;
+      const dist = (f) => Math.hypot(f.x, f.z - cz);
+      const outside = list.filter((f) => !f.keeper && dist(f) > FIELD_DATA.ringRadius).sort((a, b) => dist(a) - dist(b));
+      for (const f of outside.slice(FIELD_DATA.powerplayMaxOutside)) {
+        const k = (FIELD_DATA.ringRadius - 2) / dist(f);
+        f.x *= k; f.z = cz + (f.z - cz) * k;
+      }
+    }
+    return list;
+  },
+
   // Home positions of every fielder this ball (bowler joins after delivery).
   fielders() {
     const F = BATTING_DATA.field;
-    const list = F.positions.map(p => ({ id: p.id, x: p.x, z: p.z, keeper: !!p.keeper }));
+    if (this._cache) return this._cache;
+    const list = this.preset ? this.positionsOf(this.preset, this.powerplay)
+      : F.positions.map(p => ({ id: p.id, x: p.x, z: p.z, keeper: !!p.keeper }));
     if (F.bowlerFields) list.push({ id: 'bowler', x: 0.4, z: F.bowlerFollowThroughZ, bowler: true });
+    this._cache = list;
     return list;
+  },
+
+  // The computer's field for this over (plan 7.16), from FIELD_DATA.aiRules.
+  // ctx: { phase, kind, family, wicketsFell }; allowed(id) limits the choice
+  // (the player's auto-pick only uses unlocked presets).
+  aiChoose(ctx, rng, allowed) {
+    for (const rule of FIELD_DATA.aiRules) {
+      const w = rule.when;
+      if (w.phase && w.phase !== ctx.phase) continue;
+      if (w.kind && w.kind !== ctx.kind) continue;
+      if (w.family && w.family !== ctx.family) continue;
+      if (w.wicketsFell && !ctx.wicketsFell) continue;
+      if (allowed && !allowed(rule.pick)) continue;
+      if (rng.chance(rule.chance)) return rule.pick;
+    }
+    return 'balanced';
   },
 
   // Placement assist (plan 6.1): nudge an aimed shot toward the nearest gap
@@ -35,6 +83,8 @@ const Fielding = {
   // start: ball position at contact; c: Contact.resolve() result.
   resolve(start, c, shotId, rng) {
     const F = BATTING_DATA.field;
+    const M = this.mods || { catchBonus: 0, stopBonus: 0, speedMult: 1 };
+    const speedF = F.fielderSpeed * M.speedMult;
     const fielders = this.fielders();
     const catchable = c.kind === 'edge' || c.loftDeg >= F.minLoftForCatch;
     const noCatch = {};          // fielders who already dropped it
@@ -50,14 +100,14 @@ const Fielding = {
         return bounced === 0 ? 'six' : 'four';
       }
       for (const f of fielders) {
-        const run = Math.max(0, t - F.reaction) * F.fielderSpeed + F.reach;
+        const run = Math.max(0, t - F.reaction) * speedF + F.reach;
         const d = Math.hypot(x - f.x, z - f.z);
         if (d > run) continue;
         if (bounced === 0 && catchable && y >= F.catchMinHeight && y <= F.catchMaxHeight) {
           if (noCatch[f.id]) continue;
           // Catch attempt: full-stretch catches are harder.
           const stretch = Math.max(0, Math.min(1, (d - (run - F.reach)) / F.reach));
-          const p = F.catchSkill - F.hardCatchPenalty * stretch;
+          const p = F.catchSkill + M.catchBonus - F.hardCatchPenalty * stretch;
           if (rng.chance(p)) {
             out.fielder = { id: f.id, from: { x: f.x, z: f.z }, to: { x, z }, t };
             out.catchPoint = { x, y, z };
@@ -70,7 +120,7 @@ const Fielding = {
         if (y <= F.groundPickupMaxHeight && (bounced > 0 || !catchable || noCatch[f.id])) {
           if (noStop[f.id]) continue;
           const tier = F.cleanStop.find(s => speed >= s.minSpeed);
-          if (tier && !rng.chance(tier.chance)) { noStop[f.id] = true; continue; }
+          if (tier && !rng.chance(Math.min(0.97, tier.chance + M.stopBonus))) { noStop[f.id] = true; continue; }
           out.fielder = { id: f.id, from: { x: f.x, z: f.z }, to: { x, z }, t };
           return 'fielded';
         }
@@ -96,7 +146,7 @@ const Fielding = {
       if (sim.endReason !== 'fielded') {
         const f = this._nearest(fielders, end.x, end.z);
         const d = Math.hypot(end.x - f.x, end.z - f.z);
-        const arrive = F.reaction + Math.max(0, d - F.reach) / F.fielderSpeed;
+        const arrive = F.reaction + Math.max(0, d - F.reach) / speedF;
         fieldT = Math.max(out.endT, arrive);
         out.fielder = { id: f.id, from: { x: f.x, z: f.z }, to: end, t: arrive };
       }

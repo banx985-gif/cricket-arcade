@@ -25,6 +25,11 @@ class Innings {
     this.striker = 1; this.nonStriker = 2; this.nextBatter = 3;
     this.thisOver = [];
     this.lastOver = [];
+    // Bowling (plan 7.12): who bowled each over (index = over number, the
+    // current over last), and each bowler's figures.
+    this.overBowlers = [];
+    this.bowlerFigs = {};
+    this.field = null;                         // field preset for this over
     this.ended = false;
     this.endReason = null;
   }
@@ -44,7 +49,7 @@ class Innings {
   }
 
   // b: { kind: 'legal'|'wide'|'noball', batRuns (ran), boundary: 0|4|6,
-  //      wicket: null|'bowled'|'caught'|'lbw'|'runout' }
+  //      wicket: null|'bowled'|'caught'|'lbw'|'hitwicket'|'runout' }
   apply(b) {
     const PR = WICKET_RUSH_DATA.classic.pressure;
     const kind = b.kind || 'legal';
@@ -68,6 +73,14 @@ class Innings {
     else if (batRuns) pressure += PR.perRun * batRuns;
     else if (kind === 'legal' && !b.wicket) { this.dots++; pressure += PR.dot; }
 
+    // The bowler's figures (run outs aren't the bowler's wicket).
+    const bid = this.overBowlers[this.overBowlers.length - 1];
+    if (bid) {
+      const f = this.bowlerFigs[bid] || (this.bowlerFigs[bid] = { balls: 0, runs: 0, wkts: 0 });
+      if (kind === 'legal') f.balls++;
+      f.runs += res.runs;
+    }
+
     // Completed runs: odd = batters swap ends.
     if (batRuns % 2 === 1) this._swap();
 
@@ -77,6 +90,7 @@ class Innings {
       } else {
         res.wicket = true;
         this.wickets++;
+        if (bid && b.wicket !== 'runout') this.bowlerFigs[bid].wkts++;
         pressure += PR.wicket;
         const out = this.bat(this.striker);
         out.out = b.wicket;
@@ -133,6 +147,9 @@ const Match = {
   superOvers: 0,
   over: false,
   result: null,
+  teams: null,         // { player, ai } generated sides (Teams.forMatch)
+  cond: null,          // { pitch, weather }
+  fatigue: {},         // bowler id -> 0..1 (plan 7.15)
 
   start(formatId) {
     this.fmt = MATCH_DATA.formats[formatId || MATCH_DATA.defaultFormat];
@@ -143,7 +160,35 @@ const Match = {
     this.result = null;
     this.toss = null;
     this._lastCp = null;
-    Log.add('match', `start ${this.fmt.id} seed ${this.seed}`);
+    this.teams = Teams.forMatch(Dev.difficulty || PLAYER_DATA.quickMatchDifficulty);
+    const cr = RNG.stream('conditions'), Q = STADIUM_DATA.quickMatch;
+    const pick = (w) => cr.weighted(Object.entries(w).map(([id, weight]) => ({ id, weight }))).id;
+    this.cond = { stadium: STADIUM_DATA.defaultStadium, pitch: Dev.pitch || pick(Q.pitchWeights), weather: Dev.weather || pick(Q.weatherWeights) };
+    this.fatigue = {};
+    Log.add('match', `start ${this.fmt.id} seed ${this.seed} pitch ${this.cond.pitch} weather ${this.cond.weather}`);
+  },
+
+  team(side) { return this.teams[side]; },
+  // The player batting / bowling now in an innings.
+  batter(inn, no) { return this.teams[inn.battingSide].players[(no || inn.striker) - 1]; },
+  bowlerOf(inn) {
+    const id = inn.overBowlers[inn.overBowlers.length - 1];
+    return this.teams[inn.bowlingSide].players.find((p) => p.id === id) || null;
+  },
+  // Is a new over waiting for its bowler?
+  needsBowler(inn) { return inn.legal % 6 === 0 && inn.overBowlers.length === inn.legal / 6 && !inn.ended; },
+  // Start an over with this bowler and field.
+  setBowler(inn, id, field) {
+    if (!this.needsBowler(inn)) inn.overBowlers[inn.overBowlers.length - 1] = id;
+    else inn.overBowlers.push(id);
+    inn.field = field || 'balanced';
+    inn._hardBalls = 0;
+  },
+  // End of an over: fatigue.
+  overDone(inn) {
+    const id = inn.overBowlers[inn.overBowlers.length - 1];
+    if (id) BowlerRules.overDone(this.fatigue, this.teams[inn.bowlingSide], id, inn._hardBalls || 0);
+    inn._hardBalls = 0;
   },
 
   // Random toss winner (plan 7.13). The AI picks from its own stream.
@@ -178,6 +223,7 @@ const Match = {
       phase, next: next || null,
       fmt: this.fmt.id, seed: this.seed, toss: this.toss, mainBattedFirst: this.mainBattedFirst,
       superOvers: this.superOvers,
+      teams: this.teams, cond: this.cond, fatigue: this.fatigue,
       innings: this.innings.map((i) => i.toJSON()),
       rng: RNG.snapshot(),
       summary: { battingSide: inn.battingSide, runs: inn.runs, wickets: inn.wickets, overs: inn.overs,
@@ -206,6 +252,10 @@ const Match = {
     this.mainBattedFirst = cp.mainBattedFirst;
     this.superOvers = cp.superOvers || 0;
     this.innings = cp.innings.map((o) => Innings.fromJSON(o));
+    this.teams = cp.teams || Teams.forMatch();
+    this.cond = cp.cond || { stadium: STADIUM_DATA.defaultStadium, pitch: 'balanced', weather: 'clear' };
+    this.fatigue = cp.fatigue || {};
+    for (const inn of this.innings) { if (!inn.overBowlers) inn.overBowlers = []; if (!inn.bowlerFigs) inn.bowlerFigs = {}; }
     this.over = false;
     this.result = null;
     RNG.restore(cp.rng);

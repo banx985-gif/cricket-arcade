@@ -1,8 +1,10 @@
-// Cricket Arcade — Quick Match: YOU BAT (M03).
+// Cricket Arcade — Quick Match: YOU BAT (M03, M04b).
 // Built from the Six Smash scene (same controls, timing, contact, fielding),
-// with match rules on top: an AI bowler (who sometimes bowls wides and
-// no-balls), running between wickets, free hits, strike, overs, a chase
-// target, and the innings ending on overs / all out / target reached.
+// with match rules on top: a computer bowling attack (each bowler with their
+// own family, stats and over limit, changed every over), wides and no-balls,
+// running between wickets against the computer's throws, free hits, strike,
+// overs, a chase target, and the innings ending on overs / all out / target.
+// Your batter's stats against the bowler's shape every ball (game/duel.js).
 
 const MatchBatScene = Object.assign({}, SixSmashScene, {
   showNonStriker: true,
@@ -15,7 +17,10 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     this.rules = this.inn;                   // shared code reads .ball from here
     this.seed = Match.seed;
     this._bowlRng = RNG.stream('aiBowl:' + this.inn.index);
+    this.team = Match.team('ai');            // the computer's attack
+    Stadium.setConditions(Match.cond);
     Effects.init();
+    MatchupCard.hide();
     BatControls.init((k) => this.onShot(k));
     BatControls.reset();
     BatControls.enabled = false;
@@ -25,7 +30,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     this._startBall();
   },
 
-  exit() { BatControls.reset(); RunControls.reset(); },
+  exit() { BatControls.reset(); RunControls.reset(); Fielding.clear(); },
 
   _layout() {
     this._layoutPause('toss');               // RESTART = a fresh match
@@ -38,22 +43,47 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (p) { BatControls.reset(); RunControls.run.id = null; RunControls.cancel.id = null; }
   },
 
-  // The AI bowler: a normal seeded delivery, sometimes turned into a wide or no-ball.
+  // ---- the computer's bowling ----
   _startBall() {
     Match.overStart();                       // resume checkpoint at the start of each over
-    const A = MATCH_DATA.aiBowler, rng = this._bowlRng;
-    let d = Delivery.make(this.inn.legal, rng);
-    const roll = rng.next();
-    this.extraKind = roll < A.wideChance ? 'wide' : roll < A.wideChance + A.noBallChance ? 'noball' : null;
-    if (this.extraKind === 'wide') {
-      const side = rng.chance(0.75) ? 1 : -1;
-      d = Delivery.build(Object.assign({}, d.params, { bounceX: d.params.bounceX + side * A.wideOffset }));
+    const inn = this.inn;
+    const prevBatter = this.batterP;
+    this.batterP = Match.batter(inn);
+    if (Match.needsBowler(inn)) {
+      const rng = RNG.stream('aiPick:' + inn.index);
+      const bw = BowlerRules.aiPick(inn, this.team, Match.fatigue, rng);
+      const ph = BowlerRules.phase(inn);
+      const fam = Bowling.family(bw.family);
+      Match.setBowler(inn, bw.id, Fielding.aiChoose({ phase: ph, kind: fam.kind, family: fam.id, wicketsFell: inn.wickets > (this._wktsAtOver || 0) }, rng));
+      this._wktsAtOver = inn.wickets;
+      this.bowlerP = Match.bowlerOf(inn);
+      MatchupCard.show(this.batterP, this.bowlerP, 'bat');
+    } else {
+      this.bowlerP = Match.bowlerOf(inn);
+      if (prevBatter && prevBatter !== this.batterP) MatchupCard.show(this.batterP, this.bowlerP, 'bat');
     }
-    this.del = d;
+    Fielding.setPreset(inn.field, BowlerRules.phase(inn) === 'powerplay');
+    Fielding.mods = Duel.fieldMods(this.team, Fielding.preset);
+    this._duelPlayers = { bat: this.batterP, bowl: this.bowlerP };
+
+    const A = MATCH_DATA.aiBowler, rng = this._bowlRng, bowl = this.bowlerP;
+    const fatigue = Match.fatigue[bowl.id] || 0;
+    const ch = Bowling.aiChoose(bowl, { phase: BowlerRules.phase(inn), fatigue }, rng);
+    const accK = 1 - PLAYER_DATA.duel.aiExtras.accuracy * Teams.n(bowl.stats.accuracy);
+    const roll = rng.next();
+    this.extraKind = roll < A.wideChance * accK ? 'wide' : roll < (A.wideChance + A.noBallChance) * accK ? 'noball' : null;
+    if (this.extraKind === 'wide') ch.target.x += (rng.chance(0.75) ? 1 : -1) * A.wideOffset;
+    this.del = Bowling.release({ bowler: bowl, family: bowl.family, typeIdx: ch.typeIdx, target: ch.target,
+      grade: ch.grade, power: ch.power, fatigue, cond: Match.cond, index: inn.legal }, rng);
+    if (!this.extraKind && BallPlay.isWide(this.del)) this.extraKind = 'wide';
+    // Reading the variation: a deceptive bowler shows it later, or not at all.
+    const Rd = PLAYER_DATA.duel.read, dec = Teams.u(bowl.stats.deception);
+    this.readAt = this.del.variation && rng.chance(Rd.hideChance * dec) ? null : Rd.showAt[0] + (Rd.showAt[1] - Rd.showAt[0]) * dec;
+    this.windowScale = Duel.windowScale(this.batterP, bowl, { pressure: Duel.pressure(inn), fatigue, kind: this.del.kind });
+
     this._setState('ready');
     this._resetBall();
     RunControls.visible = false;
-    const inn = this.inn;
     this.banner = { text: this._ballLabel(), color: '#ffffff', t: 0 };
     if (inn.freeHit) { this.banner.sub = T('bowl.freeHit'); this.banner.subColor = '#ff9d2e'; }
   },
@@ -62,6 +92,35 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     const inn = this.inn;
     const txt = T('match.overBall', { over: Math.floor(inn.legal / 6) + 1, ball: (inn.legal % 6) + 1 });
     return inn.isSuper ? T('match.superOver') + ' · ' + txt : txt;
+  },
+
+  // ---- batting: the shot, with the duel's timing window ----
+  onShot(shotId) {
+    if (this.paused) return;
+    if (this.state === 'outcome' && this.stateT > 0.35) { this.stateT = this.outcome.hold; return; }
+    if (this.state !== 'delivery' || this.shot) return;
+    const tIdeal = this.del.sim.contactIdx * CONFIG.PHYSICS_STEP;
+    const err = this.dT - tIdeal;
+    let grade = Contact.grade(shotId, err, this.windowScale);
+    const ballAtContact = this.del.sim.path.at(tIdeal, {});
+    const shot = { id: shotId, pressT: this.dT, err, grade, swingStart: this.dT, contactT: null, done: false };
+    this.shot = shot;
+    BatControls.enabled = false;
+    if (grade !== 'miss' && !Contact.inReach(ballAtContact)) { grade = shot.grade = 'miss'; shot.missReason = 'outOfReach'; }
+    else if (grade === 'miss') shot.missReason = err < 0 ? 'tooEarly' : 'tooLate';
+
+    const f = BallPlay.fate({ del: this.del, shotId, grade, bat: this.batterP, bowl: this.bowlerP, releaseGrade: this.del.releaseGrade }, RNG.stream('duel'));
+    this.fate = f;
+    if (f.kind === 'contact') {
+      // Early presses wait for the ball; late ones connect straight away.
+      shot.contactT = Math.max(this.dT, tIdeal);
+      shot.swingStart = Math.max(this.dT, shot.contactT - this._swingTime(shotId) * 0.5);
+    } else {
+      Sound.play('swish');
+      if (f.kind === 'hitwicket') f.at = this.dT + this._swingTime(shotId) * 0.6;
+      if (f.kind === 'beaten') this._showTiming('beaten', grade === 'good' ? null : grade === 'early' ? 'tooEarly' : 'tooLate');
+      else this._showTiming('miss', shot.missReason);
+    }
   },
 
   // ---- running ----
@@ -76,15 +135,29 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (h.running.cancel(h.t)) Sound.play('swish');
   },
 
+  // The computer fields: its throw is rolled from its Fielding (same three
+  // outcomes as yours). The RUN colours judge a direct hit / a keeper throw.
   _connect(aim, battingRng, fieldingRng) {
     const h = PitchScene._connect.call(this, aim, battingRng, fieldingRng);
-    const th = this._addThrow(h);
-    if (th) h.running = new Running(th.t1);
+    const plan = h.plan;
+    if (plan.result === 'fielded') {
+      const n = plan.path.n - 1;
+      const from = { x: plan.path.x[n], y: 1.2, z: plan.path.z[n] };
+      const t0 = Math.max(plan.endT, plan.fieldT || 0) + MATCH_DATA.running.pickupTime;
+      const grade = Throw.aiGrade(Duel.fieldMods(this.team).fielding, fieldingRng);
+      h.throw = Throw.make(from, t0, grade);
+      const ok = Throw.make(from, t0, 'okay'), pf = Throw.make(from, t0, 'perfect');
+      h.running = new Running(Infinity, { safe: pf.returnT, tight: ok.returnT }, Duel.runTimeMult(this.batterP));
+    }
     return h;
   },
 
   _inPlayEnd(h) {
-    if (h.throw) return h.running && !h.running.done ? h.throw.t1 + 0.5 : h.throw.t1 + 0.15;
+    if (h.throw) {
+      const r = h.running;
+      if (r && !r.done && (r.cur || r.queued)) return Math.max(h.throw.t1, h.throw.returnT) + 0.3;
+      return h.throw.t1 + 0.15;
+    }
     return PitchScene._inPlayEnd.call(this, h);
   },
 
@@ -114,12 +187,15 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
   update(dt, realDt) {
     BatControls.update(realDt);
     RunControls.update(realDt);
+    MatchupCard.update(realDt);
     if (this.paused || Dev.open || Display.isPortrait) return;
     Effects.update(dt);
     Stadium.update(dt);
     this.stateT += dt;
     if (this.banner) this.banner.t += dt;
     if (this.timingLabel) this.timingLabel.t += dt;
+    if (this.flashMarker) this.flashMarker.t += dt;
+    Moments.update(this, dt);
 
     const D = BATTING_DATA.delivery;
     switch (this.state) {
@@ -145,12 +221,17 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
         const h = this.hit;
         h.t += dt;
         if (h.running) {
+          const th = h.throw;
+          if (th && h.t >= th.t1 && h.running.returnT === Infinity) {
+            h.running.setReturn(th.returnT, th.grade === 'bad');
+            if (th.grade === 'bad') this._overthrow();
+          }
           h.running.update(h.t);
           RunControls.visible = !h.running.done && !h.running.runOut;
           RunControls.risk = h.running.risk(h.t);
           RunControls.canCancel = h.running.canCancel();
           RunControls.queued = h.running.queued;
-          if (h.running.runOut && !this.stumpsBroken) { this.stumpsBroken = true; Sound.play('stumps'); }
+          if (h.running.runOut && !this.stumpsBroken) { this.stumpsBroken = true; this.stumpsBrokenAt = Stadium._time; Sound.play('stumps'); }
         }
         const key = this._stepInPlay();
         if (key) this._endBall(key);
@@ -169,6 +250,12 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     this._updateCamera(dt);
   },
 
+  _overthrow() {
+    Effects.text(T('outcome.overthrow'), CONFIG.LOGICAL_W / 2, 330, '#ffb36b', 70, { life: 1.4 });
+    this.flashMarker = { id: 'marker_overthrow', t: 0 };
+    Sound.play('crowdCheer', { gain: 0.6 });
+  },
+
   _updateDelivery() {
     const sim = this.del.sim, step = CONFIG.PHYSICS_STEP;
     const tIdeal = sim.contactIdx * step;
@@ -178,34 +265,23 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
       sh.done = true;
       const hit = this._connect(BatControls.aim(), RNG.stream('batting'), RNG.stream('fielding'));
       this._showTiming(sh.grade);
-      Log.add('ball', `inn${this.inn.index + 1} ${this.inn.overs} ${sh.id} ${sh.grade} -> ${hit.plan.result}`);
+      Log.add('ball', `inn${this.inn.index + 1} ${this.inn.overs} ${this.del.family}/${this.del.type} ${sh.id} ${sh.grade} -> ${hit.plan.result}`);
       return;
     }
-
-    // Missed, and it would hit the stumps: LBW if the pads were in the way, else bowled.
-    const contactComing = sh && sh.contactT !== null;
-    if (sim.hitsStumps && !contactComing && this.ballStopT === null) {
-      const LP = BOWLING_DATA.lbwPads;
-      const at = sim.path.at(tIdeal, {});
-      const pad = at.x >= LP.minX && at.x <= LP.maxX && at.y <= LP.maxY;
-      if (pad && this.dT >= tIdeal + Contact.lateLimit('power')) {
-        this.ballStopT = tIdeal;
-        if (!sh) this._showTiming('miss', 'noShot');
-        Sound.play('batDefend');
-        this._endBall('lbw');
-        return;
-      }
-      if (!pad && this.dT >= sim.stumpsIdx * step) {
-        this.ballStopT = sim.stumpsIdx * step;
-        this.stumpsBroken = true;
-        if (!sh) this._showTiming('miss', 'noShot');
-        this._endBall('bowled');
-        return;
+    // No shot, and the late window has closed: the ball goes on (it may hit
+    // the pad or the stumps).
+    const late = tIdeal + Contact.lateLimit('power', this.windowScale) + 0.02;
+    if (!sh && this.dT > late) {
+      BatControls.enabled = false;
+      if (!this.fate) {
+        this.fate = this.extraKind === 'wide' ? { kind: 'miss', result: null }
+          : BallPlay.fate({ del: this.del, left: true, bat: this.batterP, bowl: this.bowlerP }, RNG.stream('duel'));
+        if (this.fate.result) this._showTiming('miss', 'noShot');
       }
     }
-    if (!sh && this.dT > tIdeal + Contact.lateLimit('power') + 0.02) BatControls.enabled = false;
+    if (this._stepFate()) return;
     if (this.dT >= sim.path.duration()) {
-      if (!sh && this.extraKind !== 'wide') this._showTiming('miss', 'noShot');
+      if (!sh && this.extraKind !== 'wide' && !(this.fate && this.fate.result)) this._showTiming('miss', 'noShot');
       this._endBall(this.extraKind === 'wide' ? 'wide' : 'miss');
     }
   },
@@ -218,9 +294,10 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     const boundary = key === 'six' ? 6 : key === 'four' ? 4 : 0;
     const batRuns = run ? run.completed : 0;
     let wicket = null;
-    if (key === 'caught' || key === 'bowled' || key === 'lbw') wicket = key;
+    if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') wicket = key;
     else if (run && run.runOut) wicket = 'runout';
     const res = inn.apply({ kind, batRuns, boundary, wicket });
+    if (res.overDone || inn.ended) Match.overDone(inn);
     this._showBallResult(key, res, batRuns, wicket, true);
   },
 
@@ -231,14 +308,16 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     let lookKey = key;
     if (wicket === 'runout') lookKey = 'runout';
     else if (res.notOut) lookKey = 'notout';
+    else if (key === 'padLeg') lookKey = 'padLeg';
     else if (!wicket && key !== 'six' && key !== 'four' && key !== 'wide') lookKey = batRuns > 0 ? 'runs' : (key === 'edge' ? 'edge' : key);
     const look = this._outcomeLook(lookKey, batRuns);
     if (res.notOut) look.text = T(this.extraKind === 'noball' || (this.release && this.release.noBall) ? 'outcome.notOutNoBall' : 'outcome.notOut');
     this.outcome = Object.assign(look, {
       key: lookKey, res, t: 0,
       hold: F.outcomeHold + (res.wicket ? 0.4 : 0) + (res.overDone ? F.overBreak : 0) + (this.inn.ended ? 0.6 : 0),
-      showText: !!wicket || res.notOut,        // six/four/wide markers already say it
+      showText: !!wicket || res.notOut || lookKey === 'padLeg',   // six/four/wide markers already say it
       umpire: res.wicket && (wicket === 'caught' || wicket === 'lbw'),
+      fingerUp: res.wicket && wicket === 'lbw',
     });
     this._setState('outcome');
     RunControls.visible = false;
@@ -264,10 +343,52 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     Log.add('score', `inn${this.inn.index + 1} ${this.inn.overs}: ${lookKey} ${res.symbol} => ${this.inn.runs}/${this.inn.wickets}`);
   },
 
+  // A small marker pop (e.g. OVERTHROW) that isn't the ball's result.
+  _drawFlashMarker(ctx) {
+    const f = this.flashMarker;
+    if (!f || f.t > 1.4) return;
+    const a = Math.min(1, f.t / 0.1) * Math.min(1, (1.4 - f.t) / 0.25);
+    const s = 0.6 + Math.min(1, f.t / 0.14) * 0.4;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, a);
+    Sprites.ui(f.id, CONFIG.LOGICAL_W / 2, 470, 260 * s, 240 * s);
+    ctx.restore();
+  },
+
   // ---- render ----
   render(ctx) {
     SixSmashScene.render.call(this, ctx);
-    if (!this.paused) RunControls.draw(ctx);
+    if (this.paused) return;
+    Moments.draw(ctx, this);
+    RunControls.draw(ctx);
+    MatchupCard.draw(ctx, this.state === 'ready' || this.state === 'runup');
+    if (this.state === 'runup' || (this.state === 'ready' && this.stateT > 0.2)) {
+      const runT = this.state === 'runup' ? this.stateT / BATTING_DATA.delivery.runUpTime : 0.01;
+      if (!MatchupCard.card) ReadChip.draw(ctx, this.del, runT, this.readAt);
+    }
+    this._drawFlashMarker(ctx);
+  },
+
+  _drawTimingRing(ctx) {
+    if (!BATTING_DATA.feel.showTimingRing || this.state !== 'delivery' || this.shot) return;
+    const sim = this.del.sim;
+    const tIdeal = sim.contactIdx * CONFIG.PHYSICS_STEP;
+    const left = tIdeal - this.dT;
+    if (left < -0.1 || left > 0.75) return;
+    const i = sim.contactIdx;
+    const p = View3D.project(sim.path.x[i], sim.path.y[i], sim.path.z[i]);
+    if (!p) return;
+    const w = BATTING_DATA.shots.power.window, k = this.windowScale || 1;
+    const r = 26 + Math.max(0, left) * 260;
+    const perfect = Math.abs(left) <= w.perfect * k;
+    const good = Math.abs(left) <= w.good * k;
+    const col = perfect ? '#ffd23f' : good ? '#9cff6a' : 'rgba(255,255,255,0.85)';
+    const a = Math.min(1, (0.75 - left) / 0.25);
+    ctx.globalAlpha = Math.max(0, a);
+    R.circle(p.x, p.y, r, null, CONFIG.COLOR.ink, 9);
+    R.circle(p.x, p.y, r, null, col, 5);
+    R.circle(p.x, p.y, 22, null, 'rgba(255,255,255,0.5)', 3);
+    ctx.globalAlpha = 1;
   },
 
   _drawHud(ctx) {
@@ -285,8 +406,16 @@ const MatchScoreHud = {
     const side = MATCH_DATA.teams[inn.battingSide];
     const h = MatchHud.scoreboard(ctx, s.left + 16, s.top + 12, 470, inn, T(side.shortKey));
     MatchHud.thisOver(ctx, s.left + 34, s.top + 12 + h + 30, inn);
-    const b = inn.bat(inn.striker);
-    R.text(T('match.batterLine', { n: b.no, r: b.runs, b: b.balls }), s.left + 34, s.top + 12 + h + 80, 24, '#ffffff', 'left');
+    const b = inn.bat(inn.striker), bp = Match.batter(inn);
+    R.text(T('match.batterLine', { name: bp ? bp.short : b.no, r: b.runs, b: b.balls }), s.left + 34, s.top + 12 + h + 78, 24, '#ffffff', 'left');
+    const bw = Match.bowlerOf(inn);
+    if (bw) {
+      const f = inn.bowlerFigs[bw.id] || { balls: 0, runs: 0, wkts: 0 };
+      const fam = Bowling.family(bw.family);
+      Sprites.ui(fam.icon, s.left + 52, s.top + 12 + h + 118, 40, 34);
+      R.text(T('match.bowlerLine', { name: bw.short, w: f.wkts, r: f.runs, o: Math.floor(f.balls / 6) + '.' + (f.balls % 6) }),
+        s.left + 80, s.top + 12 + h + 118, 22, '#b8f5c0', 'left');
+    }
     if (inn.target) {
       const w = 270;
       const x = s.right - 116 - 40 - w;

@@ -28,6 +28,7 @@ const TossScene = {
     Save.clearResume();                      // a new match replaces any unfinished one
     Match.start((params && params.format) || Dev.matchFormat || MATCH_DATA.defaultFormat);
     Match.flipToss();
+    Stadium.setConditions(Match.cond);
     this._t = 0;
     this.phase = 'flip';
     Effects.init();
@@ -104,6 +105,11 @@ const TossScene = {
       this.buttons.draw();
     }
     R.text(T('match.formatLine', { n: Match.fmt.overs }), cx, 1010, 28, '#b8c6d6', 'center', false);
+    if (Match.cond) {
+      const c = Match.cond;
+      R.text(T('match.conditions', { ground: T(STADIUM_DATA.stadiums[c.stadium].nameKey), pitch: T(STADIUM_DATA.pitchTypes[c.pitch].nameKey),
+        weather: T(STADIUM_DATA.weather[c.weather].nameKey) }), cx, 960, 30, '#ffd23f', 'center', false);
+    }
   },
 };
 
@@ -115,6 +121,7 @@ const MatchBreakScene = {
   enter(params) {
     this.data = params;
     this._t = 0;
+    Stadium.setConditions(Match.cond);
     if (params.next === 'result') { Scenes.go('matchresult'); return; }
     Match.checkpoint('break', params.next);   // resume point: the innings break
     Effects.init();
@@ -146,7 +153,8 @@ const MatchBreakScene = {
       R.panel(cx - 520, 230, 1040, 190);
       R.text(inningsLine(last), cx, 290, 50, '#ffffff');
       const top = last.topScorer();
-      R.text(T('match.topScorer', { n: top.no, r: top.runs, b: top.balls }) + ' · ' +
+      const topP = Match.teams ? Match.teams[last.battingSide].players[top.no - 1] : null;
+      R.text(T('match.topScorer', { name: topP ? topP.short : top.no, r: top.runs, b: top.balls }) + ' · ' +
         T('match.extrasLine', { n: last.extras.wides + last.extras.noBalls }), cx, 365, 30, '#b8c6d6', 'center', false);
       const target = last.runs + 1;
       const chaser = last.bowlingSide;
@@ -171,6 +179,9 @@ const MatchResultScene = {
     this.won = r.winner === 'player';
     Save.clearResume();
     Save.recordMatch(Match.fmt.id, this.won);
+    // Anything earned by this result (e.g. field settings at Quick Match win milestones).
+    this.unlocked = Unlocks.check();
+    if (this.unlocked.length) Save.write();
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();
     this.buttons.add('match.playAgain', cx - 440, 880, 400, 130, () => Scenes.go('toss'), { size: 50 });
@@ -224,8 +235,16 @@ const MatchResultScene = {
       R.text(inningsLine(inn), cx + 490, y + (rowH - 12) / 2, Math.min(36, rowH * 0.42), inn.battingSide === 'player' ? '#9fd0ff' : '#b8f5c0', 'right');
       y += rowH;
     });
+    if (this.unlocked && this.unlocked.length) {
+      const u = this.unlocked[0];
+      const p = FIELD_DATA.presets.find((x) => x.id === u.id);
+      const pulse = 1 + Math.sin(this._t * 5) * 0.04;
+      R.panel(cx - 470, 770, 940, 90, 'rgba(40,30,4,0.95)', '#ffd23f');
+      if (p) Sprites.ui(p.icon, cx - 400, 815, 80 * pulse, 80 * pulse);
+      R.text(T('unlock.newField', { f: T('field.' + u.id) }), cx + 40, 815, 38, '#ffd23f');
+    }
     const rec = Save.best(Match.fmt.id);
-    if (rec) R.text(T('match.record', { won: rec.won || 0, played: rec.played || 0 }), cx, 840, 30, '#d8e4f0', 'center', false);
+    if (rec && !(this.unlocked && this.unlocked.length)) R.text(T('match.record', { won: rec.won || 0, played: rec.played || 0 }), cx, 840, 30, '#d8e4f0', 'center', false);
 
     this.buttons.draw();
     Effects.drawParticles(ctx);

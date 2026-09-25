@@ -184,10 +184,17 @@ const Sprites = {
       R.circle(x + 0.26 * s, y - 0.62 * s, 0.12 * s, '#f5f5f5', '#999', Math.max(1, 0.02 * s));
     },
 
-    umpire(ctx, x, y, s) {
+    // opts.finger = the umpire's finger is up (OUT).
+    umpire(ctx, x, y, s, o) {
       R.ellipse(x, y, 0.5 * s, 0.13 * s, 'rgba(0,0,0,0.25)');
       R.roundRect(x - 0.2 * s, y - 0.9 * s, 0.17 * s, 0.9 * s, 0.05 * s, '#2a2a2a');
       R.roundRect(x + 0.03 * s, y - 0.9 * s, 0.17 * s, 0.9 * s, 0.05 * s, '#2a2a2a');
+      if (o && o.finger) {
+        // right arm straight up, one finger raised
+        R.line(x + 0.24 * s, y - 1.42 * s, x + 0.34 * s, y - 2.3 * s, '#f5f5f0', 0.13 * s);
+        R.circle(x + 0.345 * s, y - 2.33 * s, 0.075 * s, '#c79b76');
+        R.line(x + 0.345 * s, y - 2.36 * s, x + 0.35 * s, y - 2.6 * s, '#c79b76', 0.045 * s);
+      }
       R.roundRect(x - 0.3 * s, y - 1.52 * s, 0.6 * s, 0.72 * s, 0.14 * s, '#f5f5f0');
       R.circle(x, y - 1.7 * s, 0.17 * s, '#c79b76');
       R.rect(x - 0.26 * s, y - 1.86 * s, 0.52 * s, 0.05 * s, '#f5f5f0');
@@ -208,6 +215,20 @@ const Sprites = {
       }
       if (b === undefined) {
         R.line(x - hw, y - h - lw * 0.4, x + hw, y - h - lw * 0.4, '#e8c872', lw * 0.8);
+      } else if (o.back) {
+        // hit wicket: the bails fly off behind the batter (away from us:
+        // up the screen, getting smaller) and tumble
+        const t = b;
+        for (const dir of [-1, 1]) {
+          const k = Math.max(0.25, 1 - t * 0.55);
+          const bx = x + dir * (hw * 0.4 + t * 0.35 * s);
+          const by = y - h - lw - (t * 2.6 - t * t * 2.2) * s - t * 0.9 * s;
+          ctx.save();
+          ctx.translate(bx, by);
+          ctx.rotate(t * 11 * dir);
+          R.rect(-hw * 0.5 * k, -lw * 0.4 * k, hw * k, lw * 0.8 * k, '#e8c872');
+          ctx.restore();
+        }
       } else {
         // bails fly
         const t = b;

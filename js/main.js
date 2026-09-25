@@ -112,6 +112,7 @@ const Main = {
       }
       Display.beginFrame();
       Scenes.render(Display.ctx);
+      Stadium.drawLayerOverlay(Display.ctx);
       Dev.render(Display.ctx, this.fps);
       if (typeof Validate !== 'undefined') Validate.render(Display.ctx);
       if (this.tapToContinue) this._drawTapToContinue(Display.ctx, dt);

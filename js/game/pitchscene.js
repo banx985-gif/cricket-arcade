@@ -33,6 +33,9 @@ const PitchScene = {
     this.outcome = null;
     this.ballStopT = null;
     this.stumpsBroken = false;
+    this.stumpsBrokenAt = 0;
+    this.fate = null;          // BallPlay.fate() for this ball
+    this.moment = null;        // an LBW / hit-wicket moment playing (game/moments.js)
     this.trail = [];
     this.timingLabel = null;
   },
@@ -83,6 +86,46 @@ const PitchScene = {
 
   _swingTime(shotId) { return shotId === 'defend' ? 0.16 : 0.26; },
 
+  // ---------------------------------------------------------------- when the ball wins
+  // The ball beat the bat (this.fate: beaten / miss / hit wicket). Plays it out:
+  //   lbw / padLeg  it stops at the pad -> anim_lbw -> out (or not out)
+  //   bowled        it hits the stumps
+  //   hitwicket     the swing clips the stumps -> anim_hit_wicket
+  // Returns true once the ball's end has been handled (the scene waits).
+  _stepFate() {
+    const f = this.fate;
+    if (!f || f.kind === 'contact' || !this.del) return false;
+    if (this.moment || this.state !== 'delivery') return true;
+    const step = CONFIG.PHYSICS_STEP, sim = this.del.sim;
+    if (f.kind === 'hitwicket') {
+      if (this.dT >= f.at) {
+        Moments.start(this, 'anim_hit_wicket', () => this._endBall('hitwicket'));
+        return true;
+      }
+      return false;
+    }
+    if (f.result === 'lbw' || f.result === 'padLeg') {
+      const tPad = sim.contactIdx * step;
+      if (this.dT >= tPad) {
+        this.ballStopT = tPad;
+        Moments.start(this, 'anim_lbw', () => this._endBall(f.result), { notOut: f.result === 'padLeg' });
+        return true;
+      }
+      return false;
+    }
+    if (f.result === 'bowled') {
+      const tS = sim.stumpsIdx * step;
+      if (this.dT >= tS && this.ballStopT === null) {
+        this.ballStopT = tS;
+        this.stumpsBroken = true;
+        this.stumpsBrokenAt = Stadium._time;
+        this._endBall('bowled');
+        return true;
+      }
+    }
+    return false;
+  },
+
   // ---------------------------------------------------------------- contact
   // Resolve a scheduled swing that connects. Returns the hit.
   _connect(aim, battingRng, fieldingRng) {
@@ -91,7 +134,8 @@ const PitchScene = {
     const tIdeal = sim.contactIdx * CONFIG.PHYSICS_STEP;
     // Late contacts meet the ball a touch behind the ideal point.
     const pos = sim.path.at(Math.min(this.dT, tIdeal + 0.035), {});
-    const c = Contact.resolve({ shotId: sh.id, grade: sh.grade, err: sh.err, aim, ball: pos }, battingRng);
+    const mods = this._duelPlayers ? BallPlay.mods(this._duelPlayers.bat, this._duelPlayers.bowl, sh.id) : null;
+    const c = Contact.resolve({ shotId: sh.id, grade: sh.grade, err: sh.err, aim, ball: pos, mods }, battingRng);
     const plan = Fielding.resolve(pos, c, sh.id, fieldingRng);
     this.hit = { c, plan, t: 0, pos, grade: sh.grade, perfect: sh.grade === 'perfect', dropShown: false };
     this._setState('inplay');
@@ -174,8 +218,8 @@ const PitchScene = {
       Sound.play('crowdCheer');
       Sound.play('four');
       Stadium.cheer(0.7);
-    } else if (key === 'caught' || key === 'bowled' || key === 'lbw') {
-      Sound.play(key === 'bowled' ? 'stumps' : 'catchIt');
+    } else if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') {
+      Sound.play(key === 'bowled' ? 'stumps' : key === 'lbw' || key === 'hitwicket' ? 'wicket' : 'catchIt');
       Sound.play('wicket');
       Effects.shake(F.wicketShake.amp, F.wicketShake.dur);
       Platform.haptic('wicket');
@@ -193,8 +237,10 @@ const PitchScene = {
       defended: ['outcome.defended', '#d7dde2', 90],
       caught:   ['outcome.caught', '#ff4b4b', 140, 'marker_wicket'],
       bowled:   ['outcome.bowled', '#ff4b4b', 140, 'marker_wicket'],
-      lbw:      ['outcome.lbw', '#ff4b4b', 140, 'marker_wicket'],
-      runout:   ['outcome.runOut', '#ff4b4b', 140, 'marker_wicket'],
+      lbw:      ['outcome.lbwOut', '#ff4b4b', 120, 'marker_lbw'],
+      hitwicket:['outcome.hitWicketOut', '#ff4b4b', 110, 'marker_hit_wicket'],
+      runout:   ['outcome.runOut', '#ff4b4b', 140, 'marker_run_out'],
+      padLeg:   ['outcome.notOutLeg', '#ffd23f', 80],
       wide:     ['outcome.wide', '#ffb36b', 120, 'marker_wide'],
       noball:   ['outcome.noball', '#ffb36b', 120, 'marker_no_ball'],
       notout:   ['outcome.notOut', '#ffd23f', 110, 'marker_free_hit'],
@@ -229,7 +275,7 @@ const PitchScene = {
   },
 
   _throwPos(th, t, out) {
-    const k = Math.max(0, Math.min(1, (t - th.t0) / (th.t1 - th.t0)));
+    const k = Math.max(0, Math.min(1, (t - th.t0) / Math.max(0.001, th.t1 - th.t0)));
     out.x = th.from.x + (th.to.x - th.from.x) * k;
     out.z = th.from.z + (th.to.z - th.from.z) * k;
     out.y = th.from.y + (th.to.y - th.from.y) * k + th.peak * 4 * k * (1 - k);
@@ -284,8 +330,12 @@ const PitchScene = {
     // view so the running batters and the stumps are in shot.
     const following = this.hit && (this.state === 'inplay' || this.state === 'outcome') &&
       this.hit.t >= C.follow.cutDelay && !(this.hit.throw && this.hit.t >= this.hit.throw.t0);
+    const highlight = !following && this._highlightOn && this._highlightOn();
     if (following) {
       want = this._followWant(this.hit.t);
+    } else if (highlight) {
+      const H = C.highlight;
+      want = { pos: { x: H.pos[0], y: H.pos[1], z: H.pos[2] }, tgt: { x: H.target[0], y: H.target[1], z: H.target[2] }, focal: H.focal };
     } else {
       const P = C.pitch;
       want = {
@@ -295,12 +345,12 @@ const PitchScene = {
       };
     }
     const cam = this.cam;
-    const mode = following ? 'follow' : 'pitch';
+    const mode = following ? 'follow' : highlight ? 'highlight' : 'pitch';
     if (mode !== this.camMode) {
       this.camMode = mode;       // hard cut between the two camera positions
       Object.assign(cam.pos, want.pos); Object.assign(cam.tgt, want.tgt); cam.focal = want.focal;
     }
-    const ease = following ? C.followEase : C.resetEase;
+    const ease = following ? C.followEase : highlight ? 8 : C.resetEase;
     const k = 1 - Math.exp(-ease * dt);
     for (const a of ['x', 'y', 'z']) {
       cam.pos[a] += (want.pos[a] - cam.pos[a]) * k;
@@ -310,8 +360,16 @@ const PitchScene = {
     View3D.set(cam.pos, cam.tgt, cam.focal);
   },
 
+  // Highlight camera (plan 7.11): a low shot of the stumps for bowled and
+  // hit-wicket moments.
+  _highlightOn() {
+    if (this.moment && this.moment.id === 'anim_hit_wicket') return true;
+    return !!(this.outcome && this.state === 'outcome' && (this.outcome.key === 'bowled' || this.outcome.key === 'hitwicket')
+      && this.stateT < BATTING_DATA.camera.highlight.hold);
+  },
+
   _showTiming(grade, reason) {
-    const colors = { perfect: '#ffd23f', good: '#9cff6a', early: '#ffb36b', late: '#ffb36b', miss: '#ff8f8f', loose: '#ffb36b' };
+    const colors = { perfect: '#ffd23f', good: '#9cff6a', early: '#ffb36b', late: '#ffb36b', miss: '#ff8f8f', loose: '#ffb36b', beaten: '#ff8f8f' };
     this.timingLabel = { text: T('timing.' + grade), color: colors[grade], t: 0, sub: reason ? T('timing.' + reason) : null };
   },
 
@@ -352,9 +410,10 @@ const PitchScene = {
       if (p) items.push({ id, p, opts: opts || {}, d: p.d });
     };
 
-    add('stumps', 0, 0, 0, this.stumpsBroken ? { broken: Math.min(1.5, this.stateT) } : {});
+    const brokenT = Math.min(1.5, Math.max(0, Stadium._time - (this.stumpsBrokenAt || 0)));
+    add('stumps', 0, 0, 0, this.stumpsBroken ? { broken: brokenT, back: this.stumpsBroken === 'hitwicket' } : {});
     add('stumps', 0, 0, PI.length, {});
-    add('umpire', -1.3, 0, PI.length + 1.6);
+    add('umpire', -1.3, 0, PI.length + 1.6, { finger: Moments.fingerUp(this) });
 
     // Bowler
     const ph = this._bowlerPhase();
