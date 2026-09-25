@@ -27,6 +27,7 @@ const MyXICreateScene = {
   d: null, done: false, _t: 0,
   buttons: new ButtonList(),
   enter() {
+    if (FullGame.guard('myxi', null)) return;                  // (M13: My XI is in the Full Game)
     MyXIAssets.ensure();
     const r = makeRng(RNG.freshSeed()), C = MYXI_DATA;
     this.d = { name: this._randomName(r), colours: [C.colours[0], C.colours[7]], style: 'build', shield: 0, emblem: 0, badge: 0, stadium: 'local_oval' };
@@ -127,6 +128,7 @@ const MyXICreateScene = {
 const MyXIHomeScene = {
   buttons: new ButtonList(), _t: 0, flash: null,
   enter() {
+    if (FullGame.guard('myxi', null)) return;
     MyXIAssets.ensure();
     const S = Save.data;
     if (!MyXI.club(S)) { Scenes.go('myxicreate'); return; }

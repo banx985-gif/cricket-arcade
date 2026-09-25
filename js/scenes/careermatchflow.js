@@ -306,7 +306,12 @@ const CareerPromotedScene = {
     this.slot = params.slot; this.career = params.career; this._t = 0; this.coaches = params.coaches || [];
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();
-    this.buttons.add('career.toHome', cx - 260, 930, 520, 116, () => Scenes.go('careerhome', { slot: this.slot, career: this.career, stay: true }), { size: 44 });
+    this.buttons.add('career.toHome', cx - 260, 930, 520, 116, () => {
+      const home = { scene: 'careerhome', params: { slot: this.slot, career: this.career, stay: true } };
+      // The end of the free intro (M13): once, show what the Full Game adds. The career waits, saved.
+      if (FullGame.introEnd(Save.data, this.career)) { Save.write(); Scenes.go('fullgame', { reason: 'introEnd', back: home }); }
+      else Scenes.go(home.scene, home.params);
+    }, { size: 44 });
     Effects.init();
     Sound.play('fanfare');
   },

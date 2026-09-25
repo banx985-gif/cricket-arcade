@@ -48,8 +48,11 @@ const QuickMatchScene = {
       }
     }
     // length and difficulty
+    const back = { scene: 'quickmatch' };
     QUICKMATCH_DATA.formats.forEach((f, i) => b.add(() => T('qm.overs', { n: MATCH_DATA.formats[f].overs }), 280 + i * 205, 606, 195, 88, () => { o.fmt = f; this._layout(); },
-      { size: 30, color: o.fmt === f ? '#ffd23f' : '#5b6570', textColor: o.fmt === f ? CONFIG.COLOR.ink : '#ffffff' }));
+      { size: 30, color: o.fmt === f ? '#ffd23f' : '#5b6570', textColor: o.fmt === f ? CONFIG.COLOR.ink : '#ffffff',
+        // longer matches are in the Full Game (M13): greyed, and a tap opens the Full Game screen
+        disabled: () => FullGame.locked('quickFormat', f), onLocked: () => FullGame.guard('quickFormat', f, back), sub: FullGame.locked('quickFormat', f) ? 'full.badge' : null }));
     DIFFICULTY_DATA.levels.forEach((d, i) => b.add('chal.diff.' + d, 280 + i * 205, 722, 195, 88, () => { o.diff = d; this._layout(); },
       { size: 22, icon: DIFFICULTY_DATA[d].icon, color: o.diff === d ? '#ffd23f' : '#5b6570', textColor: o.diff === d ? CONFIG.COLOR.ink : '#ffffff' }));
     // the ground
@@ -67,16 +70,22 @@ const QuickMatchScene = {
     };
     row(QUICKMATCH_DATA.pitches, 'pitch', 606);
     row(QUICKMATCH_DATA.weathers, 'weather', 760);
-    b.add('qm.play', 1330, 900, 510, 130, () => Scenes.go(QuickMatch.start(Save.data, this.o), { keep: true }), { size: 60, color: '#9cff6a' });
+    b.add('qm.play', 1330, 900, 510, 130, () => this._play(), { size: 60, color: '#9cff6a' });
   },
 
+  _play() {
+    // (M13) the free intro plays 5 overs at the Local Oval
+    const back = { scene: 'quickmatch' };
+    if (FullGame.guard('quickFormat', this.o.fmt, back) || FullGame.guard('ground', this.o.stadium, back)) return;
+    Scenes.go(QuickMatch.start(Save.data, this.o), { keep: true });
+  },
   update(dt) { this._t += dt; Stadium.update(dt); },
   pointerDown(id, x, y) { if (!Dev.pointerDown(id, x, y)) { Sound.unlock(); this.buttons.down(id, x, y); } },
   pointerMove(id, x, y) { if (!Dev.pointerMove(id, x, y)) this.buttons.move(id, x, y); },
   pointerUp(id) { if (!Dev.pointerUp(id)) this.buttons.up(id); },
   keyDown(code) {
     if (code === 'Escape') Scenes.go('title');
-    if (code === 'Enter' || code === 'Space') Scenes.go(QuickMatch.start(Save.data, this.o), { keep: true });
+    if (code === 'Enter' || code === 'Space') this._play();
   },
 
   _team(ctx, side, x0) {
@@ -106,6 +115,7 @@ const QuickMatchScene = {
     const g = MYXI_DATA.stadiums.find((x) => x.id === o.stadium);
     Sprites.ui('qm_stadium_' + g.id, 570, 880, 260, 110);
     R.text(T('stadium.' + g.id), 570, 950, 22, '#ffffff');
+    if (FullGame.locked('ground', g.id)) { R.roundRect(470, 820, 200, 44, 18, '#ffd23f'); R.text(T('full.badge'), 570, 842, 18, CONFIG.COLOR.ink, 'center', false); }
     if (g.id !== STADIUM_DATA.defaultStadium && !STADIUM_DATA.stadiums[g.id]) R.text(T('qm.groundSoon'), 570, 1012, 17, '#8a96a3', 'center', false);
     R.text(T('qm.pitch'), 1000, 658, 26, '#b8c6d6', 'left', false);
     R.text(T('qm.weather'), 1000, 812, 26, '#b8c6d6', 'left', false);

@@ -138,6 +138,7 @@ const Save = {
     }
     if (!doc && main === null && legacy !== null) doc = this._parse(legacy);   // old M01–M03 save
     if (!doc) doc = this.defaults();
+    this.existedContent = main !== null && doc.meta ? doc.meta.content : null;   // (M13: a save from before the free intro)
     this.data = doc;
     if (typeof Gear !== 'undefined') Gear.ensure(this.data);     // the starter kit is always in the Locker
     if (typeof Coaches !== 'undefined') Coaches.ensure(this.data); // and the starting coaches

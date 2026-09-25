@@ -55,7 +55,7 @@ const TitleScene = {
     this.topBtns.add('title.missions', s.right - 400, s.top + 228, 370, 88, () => Scenes.go('missions'), { size: 30, color: '#ffb13b', icon: 'icon_missions',
       disabled: locked('missions'), onLocked: why('missions'),
       sub: () => (Modes.unlocked(Save.data, 'missions') ? T('title.missionStars', { n: Missions.totalStars(Save.data), t: MISSION_DATA.list.length * 3 }) : T('title.lockedShort')) });
-    this.topBtns.add('title.myxi', s.right - 400, s.top + 122, 370, 96, () => Scenes.go(MyXI.club(Save.data) ? 'myxihome' : 'myxicreate'), { size: 36, color: '#9cff6a', icon: 'myxi_badge',
+    this.topBtns.add('title.myxi', s.right - 400, s.top + 122, 370, 96, () => { if (!FullGame.guard('myxi', null)) Scenes.go(MyXI.club(Save.data) ? 'myxihome' : 'myxicreate'); }, { size: 36, color: '#9cff6a', icon: 'myxi_badge',
       disabled: () => !MyXI.unlocked(Save.data), sub: () => (MyXI.unlocked(Save.data) ? (MyXI.club(Save.data) ? MyXI.club(Save.data).name : T('myxi.createClub')) : T('myxi.locked')) });
     this.resumeBtns.clear();
     this.resumeBtns.add('resume.resume', cx - 430, 640, 420, 120, () => this._resume(), { size: 38 });

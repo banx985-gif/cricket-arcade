@@ -36,6 +36,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     Tech.end();
     this._initPitch();
     this.chal = Challenge.begin('rush', params && params.rs ? params : null);
+    if (FullGame.guard('ruleset', this.chal.rs, { scene: 'challenges', params: { game: 'rush' } })) { this.isChallenge = false; return; }   // (M13)
     this.seed = RNG.begin(Dev.nextSeed());
     this.rules = new WicketRushRules(this.chal.rs);
     this.inn = this.rules;                  // the techniques read the innings from here

@@ -248,6 +248,7 @@ const QuickMatch = {
   // Start the match from a setup; returns the toss scene.
   start(save, o) {
     this.last = o;
+    if (typeof FullGame !== 'undefined' && (FullGame.locked('quickFormat', o.fmt) || FullGame.locked('ground', o.stadium))) return 'quickmatch';   // (M13 safety)
     if (typeof MissionMatch !== 'undefined') MissionMatch.on = false;
     if (typeof MyXIMatch !== 'undefined') MyXIMatch.on = false;
     CareerMatch.on = false;

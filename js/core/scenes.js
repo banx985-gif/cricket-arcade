@@ -22,6 +22,7 @@ const Scenes = {
     Log.add('scene', name);
     if (next.enter) next.enter(params || {});
     if (typeof Sound !== 'undefined' && Sound.forScene) Sound.forScene(name);     // the screen's music + crowd (M12)
+    if (typeof Platform !== 'undefined' && Platform.keepAwake && typeof SOUND_DATA !== 'undefined') Platform.keepAwake(SOUND_DATA.crowdScenes.includes(name));   // screen on in matches (M13)
   },
 
   update(dt, realDt) { if (this.current && this.current.update) this.current.update(dt, realDt); },

@@ -4,11 +4,14 @@
 // Gameplay tuning lives in js/data/, not here â€” this file is engine/app level.
 
 const CONFIG = {
-  BUILD_VERSION: '0.12.0-m12',
-  BUILD_STAMP: '20260926-023312',            // filled in by publish.ps1 (date-time of the published build)
-  CONTENT_VERSION: 7,
+  BUILD_VERSION: '0.13.0-m13',
+  BUILD_STAMP: '20260926-031414',            // filled in by publish.ps1 (date-time of the published build)
+  CONTENT_VERSION: 8,
   SAVE_SCHEMA_VERSION: 2,
   DEBUG_BUILD: true,          // dev panel + content checks. publish.ps1 -Release turns this off.
+  // How the game is sold (plan 44 item 6, still open): 'free_intro' = free download,
+  // one Full Game Unlock purchase; 'paid_download' = everything open, no unlock screens.
+  MONETISATION: 'free_intro',
 
   LOGICAL_W: 1920,
   LOGICAL_H: 1080,

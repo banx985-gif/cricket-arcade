@@ -73,7 +73,7 @@ const MissionHubScene = {
     b.clear();
     if (this.sel) {
       const m = Missions.def(this.sel);
-      b.add('mis.play', cx + 250, 920, 520, 120, () => Scenes.go(MissionMatch.start(m.id)), { size: 56, color: '#9cff6a' });
+      b.add('mis.play', cx + 250, 920, 520, 120, () => { if (!FullGame.guard('mission', m.id, { scene: 'missions', params: { cat: m.cat } })) Scenes.go(MissionMatch.start(m.id)); }, { size: 56, color: '#9cff6a' });
       b.add('gear.back', cx - 770, 920, 380, 120, () => { this.sel = null; this._layout(); }, { size: 40, color: '#e9eef5' });
       return;
     }
@@ -85,7 +85,10 @@ const MissionHubScene = {
           disabled: !open, sub: () => (open ? T('mis.catStars', { n: Missions.inCat(c.id).reduce((a, m) => a + Missions.stars(save, m.id), 0), t: Missions.inCat(c.id).length * 3 }) : T('mis.catLocked', { n: c.opensAfter })) });
     });
     for (const c of this._cells()) {
-      const bt = b.add(() => '', c.x, c.y, c.w, c.h, () => { if (Missions.open(save, c.m.id)) { this.sel = c.m.id; this._layout(); } else Sound.play('ui_error'); });
+      const bt = b.add(() => '', c.x, c.y, c.w, c.h, () => {
+        if (FullGame.guard('mission', c.m.id, { scene: 'missions', params: { cat: this.cat } })) return;
+        if (Missions.open(save, c.m.id)) { this.sel = c.m.id; this._layout(); } else Sound.play('ui_error');
+      });
       bt.invisible = true;
     }
   },
@@ -125,6 +128,7 @@ const MissionHubScene = {
     Sprites.ui(CHALLENGE_DATA.difficulty[m.diff].icon, c.x + c.w - 40, c.y + 38, 56, 56, { alpha: open ? 1 : 0.4 });
     R.text(T('mis.' + m.id), c.x + c.w / 2, c.y + 88, 28, open ? '#ffffff' : '#8a96a3');
     R.text(T(m.side === 'bat' ? 'mis.youBat' : 'mis.youBowl') + ' · ' + T('chal.diff.' + m.diff), c.x + c.w / 2, c.y + 124, 18, '#b8c6d6', 'center', false);
+    if (FullGame.locked('mission', m.id)) { R.roundRect(c.x + 100, c.y + 146, c.w - 200, 48, 20, '#ffd23f'); R.text(T('full.badge'), c.x + c.w / 2, c.y + 170, 20, CONFIG.COLOR.ink, 'center', false); return; }
     if (!open) { R.text(T('mis.locked'), c.x + c.w / 2, c.y + 170, 22, '#8a96a3', 'center', false); return; }
     for (let k = 0; k < 3; k++) drawMissionStar(c.x + c.w / 2 - 60 + k * 60, c.y + 170, 22, !!(st && st.stars[k]));
   },
@@ -205,7 +209,7 @@ const MissionResultScene = {
     Effects.init();
     const cx = CONFIG.LOGICAL_W / 2, m = Missions.def(params.id), b = this.buttons;
     b.clear();
-    b.add('result.retry', cx - 640, 920, 400, 120, () => Scenes.go(MissionMatch.start(m.id)), { size: 52 });
+    b.add('result.retry', cx - 640, 920, 400, 120, () => Scenes.go(MissionMatch.start(m.id)), { size: 52 });   // (a mission you just played is open)
     const list = Missions.inCat(m.cat), next = list[list.indexOf(m) + 1];
     if (next && Missions.open(Save.data, next.id)) b.add('mis.next', cx - 200, 920, 400, 120, () => Scenes.go('missions', { brief: next.id }), { size: 48, color: '#9cff6a' });
     b.add('mis.toHub', cx + 240, 920, 400, 120, () => Scenes.go('missions', { cat: m.cat }), { size: 44, color: '#e9eef5' });

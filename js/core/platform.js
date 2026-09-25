@@ -23,7 +23,41 @@ const Platform = {
     // Chrome's page lifecycle: the tab may be frozen without a visibility change.
     document.addEventListener('freeze', hide);
     document.addEventListener('resume', show);
+    // The Android / iOS app (Capacitor): pause / resume and the back button.
+    const App = this.native() && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    if (App) {
+      App.addListener('pause', hide);
+      App.addListener('resume', show);
+      App.addListener('backButton', () => this._back(App));
+    }
   },
+
+  // Running inside the store app (not a browser)?
+  native() { return typeof window !== 'undefined' && !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); },
+  // Android back button: works like Escape (close a panel, pause a match, go back); on the Title it leaves the app.
+  _back(App) {
+    if (typeof Scenes === 'undefined') return;
+    if (Scenes.currentName === 'title') { App.exitApp(); return; }
+    Scenes.keyDown('Escape');
+  },
+
+  // Keep the screen on during matches (Screen Wake Lock: phones' browsers and the app).
+  _wake: null,
+  keepAwake(on) {
+    try {
+      if (on && !this._wake && navigator.wakeLock) navigator.wakeLock.request('screen').then((w) => { this._wake = w; w.addEventListener('release', () => { this._wake = null; }); }).catch(() => {});
+      if (!on && this._wake) { this._wake.release().catch(() => {}); this._wake = null; }
+    } catch (e) { /* optional */ }
+  },
+
+  // ---- the Full Game Unlock (M13, plan 43A.11): gameplay asks ONLY isFullGame() ----
+  initFullGame(o) { return Entitlement.init(o); },
+  isFullGame() { return typeof Entitlement === 'undefined' ? true : Entitlement.isFull(); },
+  fullGamePrice() { return typeof Entitlement === 'undefined' ? null : Entitlement.price(); },
+  buyFullGame() { return Entitlement.buy(); },
+  restoreFullGame() { return Entitlement.restore(); },
+  usingTestStore() { return typeof Entitlement !== 'undefined' && Entitlement.store === TestStore; },
+  relockFullGameTest() { return Entitlement.relockTest(); },
 
   _background() {
     if (this.backgrounded) return;

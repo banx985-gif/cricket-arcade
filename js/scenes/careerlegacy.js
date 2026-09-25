@@ -52,6 +52,7 @@ const LegacyCard = {
 
 // =====================================================================================
 const CareerRetireScene = {
+  // (M13: retirement and Legacy are in the Full Game; Career Home checks first)
   career: null, slot: 1, done: null, _t: 0,
   buttons: new ButtonList(),
   enter(params) {

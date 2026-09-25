@@ -63,7 +63,7 @@ const CareerHomeScene = {
       sub: () => CareerUI.pathwayLabel(c) });
     // Stage 8 over: retire (plan 8.21), or face the Champion again.
     if (c.phase === 'complete') {
-      b.add('legacy.retireBtn', s.right - 520, y - 10, 490, 160, () => Scenes.go('careerretire', { slot: this.slot, career: c }), { size: 44, color: '#ffd23f' });
+      b.add('legacy.retireBtn', s.right - 520, y - 10, 490, 160, () => { if (!FullGame.guard('legacy', null, { scene: 'careerhome', params: { slot: this.slot, career: c, stay: true } })) Scenes.go('careerretire', { slot: this.slot, career: c }); }, { size: 44, color: '#ffd23f' });
       if (!(c.hooks.rivals && c.hooks.rivals.champion && c.hooks.rivals.champion.beaten)) b.add('career.rematch', s.left + 710, 680, 560, 90, () => { Career.rematch(c); this._save(); this._layout(); this._checkEvent(); }, { size: 30, color: '#ff9d7a' });
     }
     if (c.phase === 'offers') b.add('career.seeOffers', s.right - 520, y - 10, 490, 160, () => Scenes.go('careeroffers', { slot: this.slot, career: c }), { size: 40, color: '#ffd23f', icon: 'stage_contract_offer' });
@@ -135,7 +135,10 @@ const CareerHomeScene = {
 
   // Start the stage the career was promoted into.
   _startStage() {
-    const c = this.career, r = Career.beginStage(c);
+    const c = this.career;
+    // Free intro (M13): Stage 3 onwards needs the Full Game. The career waits here, saved.
+    if (FullGame.guard('stage', FullGame.nextStageN(c), { scene: 'careerhome', params: { slot: this.slot, career: c, stay: true } })) return;
+    const r = Career.beginStage(c);
     if (!r) return;
     this._save();
     if (r === 'offers') Scenes.go('careeroffers', { slot: this.slot, career: c });
@@ -144,6 +147,7 @@ const CareerHomeScene = {
 
   _play() {
     const c = this.career;
+    if (FullGame.guard('stage', Career.stage(c).n, { scene: 'careerhome', params: { slot: this.slot, career: c, stay: true } })) return;
     const go = (scene) => { this.panel = null; Scenes.go(scene); };
     // A match left part-way: pick it up from its checkpoint if it's still there.
     if (c.matchInProgress) {

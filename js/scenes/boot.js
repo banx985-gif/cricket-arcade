@@ -15,6 +15,8 @@ const BootScene = {
     Store.open()
       .then(() => Save.load())
       .catch((e) => { Log.add('error', 'save load failed: ' + e); Save.data = Save.defaults(); })
+      .then(() => Platform.initFullGame({ grandfather: Save.existedContent !== null && Save.existedContent < 8 }))
+      .catch((e) => { Log.add('error', 'entitlement: ' + e); })
       .then(() => Save.loadResume())
       .then((r) => { this.pendingResume = r; })
       .catch(() => { this.pendingResume = null; })

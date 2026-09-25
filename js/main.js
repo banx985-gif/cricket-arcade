@@ -107,6 +107,7 @@ const Main = {
     Scenes.register('tutorial', TutorialScene);
     Scenes.register('trophyroom', TrophyRoomScene);
     Scenes.register('credits', CreditsScene);
+    Scenes.register('fullgame', FullGameScene);
     Scenes.go('boot');
 
     this._lastT = performance.now();

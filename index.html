@@ -48,6 +48,7 @@
   <script src="js/data/myxi.js"></script>
   <script src="js/data/challenges.js"></script>
   <script src="js/data/missions.js"></script>
+  <script src="js/data/intro.js"></script>
   <script src="js/data/meta.js"></script>
   <script src="js/data/sound.js"></script>
   <script src="js/data/assets.js"></script>
@@ -55,6 +56,7 @@
   <script src="js/core/rng.js"></script>
   <script src="js/core/log.js"></script>
   <script src="js/core/platform.js"></script>
+  <script src="js/core/entitlement.js"></script>
   <script src="js/core/display.js"></script>
   <script src="js/core/input.js"></script>
   <script src="js/core/audio.js"></script>
@@ -102,6 +104,7 @@
   <script src="js/game/challenges.js"></script>
   <script src="js/game/missions.js"></script>
   <script src="js/game/meta.js"></script>
+  <script src="js/game/fullgame.js"></script>
   <script src="js/game/career.js"></script>
   <script src="js/game/careermatch.js"></script>
   <script src="js/game/careerui.js"></script>
@@ -132,12 +135,14 @@
   <script src="js/scenes/quickmatch.js"></script>
   <script src="js/scenes/tutorial.js"></script>
   <script src="js/scenes/trophyroom.js"></script>
+  <script src="js/scenes/fullgame.js"></script>
 
   <script src="js/main.js"></script>
   <script>
     // Offline support for the installed app. Only works from a real web
     // address, so it is skipped when the game is opened as a file on a PC.
-    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    // (Not inside the store app: it already has every file.)
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').catch((e) => console.warn('service worker not registered', e));
       });

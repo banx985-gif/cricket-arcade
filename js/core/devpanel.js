@@ -91,6 +91,10 @@ const Dev = {
       add(1, 1, () => T('dev.slowmo', { state: this._state(this.slowmo) }), () => { this.slowmo = !this.slowmo; });
       add(1, 2, () => T('dev.hitzone', { state: this._state(this.hitzone) }), () => { this.hitzone = !this.hitzone; });
       add(1, 3, () => T('dev.fps', { state: this._state(this.showFps) }), () => { this.showFps = !this.showFps; });
+      // M13: the pretend store (browser / test builds)
+      add(1, 4, () => T('dev.full.unlock', { state: this._state(Platform.isFullGame()) }), () => { Platform.buyFullGame().then(() => { this.say(T('dev.done')); this._refreshScene(); }); });
+      add(1, 5, () => T('dev.full.relock'), () => { Platform.relockFullGameTest().then(() => { this.say(T('dev.done')); this._refreshScene(); }); });
+      add(0, 5, () => T('dev.full.restore'), () => { Platform.restoreFullGame().then((r) => { this.say(T(r.found ? 'dev.full.restored' : 'dev.full.nothing')); this._refreshScene(); }); });
       add(0, 3, () => T('dev.layers', { state: this._state(Stadium.showLayers) }), () => { Stadium.showLayers = !Stadium.showLayers; });
       add(0, 4, () => T('dev.rivals', { state: T('dev.diff.' + (this.difficulty || PLAYER_DATA.quickMatchDifficulty)) }), () => {
         const k = ['easy', 'normal', 'hard'];
@@ -330,6 +334,9 @@ const Dev = {
     Save.data.unlocks = Save.data.unlocks || {}; Save.data.unlocks.allMissions = true;
     this.hide(); Scenes.go('missions', { brief: m.id });
   },
+
+  // Re-layout the screen underneath after an unlock / relock.
+  _refreshScene() { const sc = Scenes.current; if (sc && sc._layout) try { sc._layout(); } catch (e) { /* not every screen */ } },
 
   _askSeed() {
     let v = null;

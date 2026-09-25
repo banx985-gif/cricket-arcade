@@ -51,7 +51,7 @@ const ChallengeHubScene = {
     b.add('title.mode', cx - 430, 116, 410, 96, () => this._choose('six'), { size: 40, color: this.game === 'six' ? '#ff7a3a' : '#5b6570', textColor: this.game === 'six' ? CONFIG.COLOR.ink : '#ffffff', icon: 'icon_six_smash' });
     b.add('title.modeWicket', cx + 20, 116, 410, 96, () => this._choose('rush'), { size: 40, color: this.game === 'rush' ? '#3ddc84' : '#5b6570', textColor: this.game === 'rush' ? CONFIG.COLOR.ink : '#ffffff', icon: 'icon_wicket_rush' });
     // ruleset cards (tap areas; drawn by the screen)
-    this._cards().forEach((c) => { const bt = b.add(() => '', c.x, c.y, c.w, c.h, () => { if (Profile.open(Save.data, 'ruleset', c.id)) { this.sel = c.id; this._layout(); } else Sound.play('ui_error'); }); bt.invisible = true; });
+    this._cards().forEach((c) => { const bt = b.add(() => '', c.x, c.y, c.w, c.h, () => { if (FullGame.guard('ruleset', c.id, { scene: 'challenges', params: { game: this.game } })) return; if (Profile.open(Save.data, 'ruleset', c.id)) { this.sel = c.id; this._layout(); } else Sound.play('ui_error'); }); bt.invisible = true; });
     // right column: player, difficulty, play
     const rx = cx + 260;
     b.add('chal.changePlayer', rx + 452, 636, 190, 92, () => { if (this.options) ChallengePicker.open(this); }, { size: 28, color: '#9be7ff', disabled: () => !this.options });
@@ -70,6 +70,7 @@ const ChallengeHubScene = {
 
   _play() {
     if (!this.pick) return;
+    if (FullGame.guard('ruleset', this.sel, { scene: 'challenges', params: { game: this.game } })) return;
     Scenes.go(this.game === 'six' ? 'sixsmash' : 'wicketrush', { rs: this.sel, diff: this.diff, pick: this.pick });
   },
 
@@ -111,6 +112,15 @@ const ChallengeHubScene = {
 
   _drawCard(ctx, c) {
     const on = c.id === this.sel, rec = Challenge.record(Save.data, c.id), col = this.game === 'six' ? '#ff7a3a' : '#3ddc84';
+    if (FullGame.locked('ruleset', c.id)) {
+      // in the Full Game (M13): shown, with what it is, and a tap opens the Full Game screen
+      R.roundRect(c.x, c.y, c.w, c.h, 26, 'rgba(20,24,30,0.9)', '#ffd23f', 3);
+      Sprites.ui(c.r.icon, c.x + c.w / 2, c.y + 80, 110, 94, { alpha: 0.45 });
+      R.text(T('chal.rs.' + c.id), c.x + c.w / 2, c.y + 170, 28, '#b8c6d6');
+      R.roundRect(c.x + 40, c.y + 230, c.w - 80, 56, 22, '#ffd23f');
+      R.text(T('full.badge'), c.x + c.w / 2, c.y + 258, 24, CONFIG.COLOR.ink, 'center', false);
+      return;
+    }
     if (!Profile.open(Save.data, 'ruleset', c.id)) {
       // opens with the Global Profile Level (plan 21.1: new challenge rulesets)
       R.roundRect(c.x, c.y, c.w, c.h, 26, 'rgba(20,24,30,0.9)', '#5b6570', 3);
