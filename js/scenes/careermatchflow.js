@@ -14,6 +14,12 @@ const CareerPreMatchScene = {
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();
     this.buttons.add('career.play', cx - 260, 900, 520, 130, () => this._go(), { size: 56, color: '#9cff6a' });
+    // Change techniques before the match (plan 11): the loadout, or the tree itself.
+    const c = CareerMatch.career, go = (scene) => () => Scenes.go(scene, { slot: CareerMatch.slot, career: c, from: 'prematch', back: 'prematch' });
+    this.buttons.add('tree.loadout', cx - 780, 900, 420, 130, go('careerloadout'), { size: 40, color: '#9be7ff',
+      sub: () => { const lo = SkillTree.loadout(c); return T('career.loadoutSub', { a: lo.active.length, p: lo.passive.length }); } });
+    this.buttons.add('career.skillTree', cx + 360, 900, 420, 130, go('careertree'), { size: 38, color: '#ffd23f',
+      sub: () => T('career.treeSub', { n: c.player.skillTokens }) });
     Stadium.setConditions(Match.cond);
   },
   _go() { Scenes.go(Match.startInnings()); },
@@ -49,6 +55,13 @@ const CareerPreMatchScene = {
     R.text(T(STADIUM_DATA.weather[co.weather].nameKey), cx + 180, 770, 26, '#ffffff', 'left', false);
     if (c.energy < CAREER_DATA.energy.low) R.text(T('career.lowEnergyWarn'), cx, 850, 26, '#ff9d7a', 'center', false);
     else R.text(T('career.formLine', { f: T('career.formLevel.' + c.form) }), cx, 850, 24, '#d8e4f0', 'center', false);
+    // Your equipped techniques, and anything from the tree that's switched on today.
+    const lo = SkillTree.loadout(c);
+    const eq = lo.active.concat(lo.passive);
+    if (eq.length) R.roundRect(cx - 890, 745, 30 + eq.length * 110, 110, 24, 'rgba(8,20,36,0.7)', '#9be7ff', 3);
+    eq.forEach((id, i) => TreeArt.draw(SKILL_TREE_DATA.techniques[id].icon, cx - 820 + i * 110, 800, 110));
+    const notes = (CareerMatch.matchNotes || []).map((id) => TreeText.name(id));
+    if (notes.length) R.text(T('career.matchPerks', { list: notes.join(' · ') }), cx, 488, 22, '#ffe28a', 'center', false);
     this.buttons.draw();
   },
 };
@@ -184,6 +197,14 @@ const CareerResultScene = {
     R.text(T('career.xpGain', { n: r.xp }), x + 30, 510, 28, '#c9a6ff', 'left', false);
     if (r.levels) R.text(T('career.levelUp', { n: c.player.level, g: r.levels * CAREER_DATA.levels.growthPerLevel }), x + 770, 620, 26, '#ffb400', 'right');
     R.text(T('career.formChange', { a: T('career.formLevel.' + r.formBefore), b: T('career.formLevel.' + r.formAfter) }), x + 30, 565, 26, '#ffffff', 'left', false);
+    // Coins, and what the Wicket Tree did this match (M06)
+    if (r.coins) R.text(T('career.coinsGain', { n: r.coins }), x + 770, 510, 26, '#ffe28a', 'right', false);
+    const extra = [];
+    if (r.crowd) extra.push(T('career.crowdBonus', { n: r.crowd }));
+    if (r.formSaved) extra.push(T('career.formSaved'));
+    const used = Object.keys(r.techUses || {}).filter((id) => SKILL_TREE_DATA.techniques[id]).map((id) => TreeText.name(id));
+    if (used.length) extra.push(T('career.techUsed', { list: used.slice(0, 3).join(', ') + (used.length > 3 ? '…' : '') }));
+    extra.forEach((line, i) => R.text(line, cx - 560, 720 + i * 30, 19, '#9be7ff', 'center', false));
     R.text(T('career.energyNow', { n: r.energyAfter }), x + 770, 565, 26, '#ffffff', 'right', false);
     // Selection Meter, filling up
     const S = CAREER_DATA.stages.find((st) => st.id === (c.promotedFrom && r.gate && r.gate.result === 'promoted' ? c.promotedFrom : c.stage)) || Career.stage(c);

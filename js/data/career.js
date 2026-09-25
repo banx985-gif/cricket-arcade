@@ -79,7 +79,7 @@ const CAREER_DATA = {
     max: 50,
     xpFor: (level) => 60 + level * 40,        // XP needed to go from level to level + 1
     growthPerLevel: 3,
-    skillTokensPerLevel: 1,                    // spent in the Skill Tree (next milestone, docs/SKILL_TREE_v1.md)
+    skillTokensPerLevel: 1,                    // spent in the Wicket Tree (data/skilltree.js)
     skillTokensPerPromotion: 2,
   },
   // Growth Point cost to raise a stat by 1: gets dearer at high ratings.
@@ -187,9 +187,10 @@ const CAREER_DATA = {
   },
 
   // ---- Hooks for later milestones (named so they're easy to find) ----------------
-  // skillTree: docs/SKILL_TREE_v1.md (next job). player.tree holds the nodes,
-  //   player.skillTokens the points; CareerStats.bonus() is where perks add to stats.
-  // equipment / techniques / coach / records / sponsors / rivals / events:
-  //   buttons are on Career Home, greyed "coming soon"; career.hooks keeps their save space.
-  comingSoon: ['equipment', 'techniques', 'coach', 'records'],
+  // The Wicket Tree (M06) is in data/skilltree.js + game/skilltree.js: player.tree
+  //   holds it, player.skillTokens the points; CareerStats.bonus() adds its perks.
+  // equipment / coach / records / sponsors / rivals / events: buttons are on
+  //   Career Home, greyed "coming soon"; career.hooks keeps their save space.
+  //   Rivals: call SkillTree.rivalWin(c) when one is beaten (+1 Skill Token).
+  comingSoon: ['equipment', 'coach', 'records'],
 };

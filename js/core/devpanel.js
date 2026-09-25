@@ -8,6 +8,7 @@
 //   JUMP  — go straight to any screen / mode (incl. a 1-over test match)
 //   MATCH — force a match state: tie on the last ball, end the innings, free hit
 //   SAVE  — inspect the save, print it, corrupt it (to test backup recovery), wipe it
+//   CAREER — Wicket Tree testing: +10 Skill Tokens, +500 coins, "between stages" (respec)
 // More commands are added as their systems arrive (career, items, …).
 
 const Dev = {
@@ -71,9 +72,9 @@ const Dev = {
     b.clear();
     const cx = CONFIG.LOGICAL_W / 2;
     // tabs
-    const tabs = ['main', 'jump', 'match', 'save'];
+    const tabs = ['main', 'jump', 'match', 'save', 'career'];
     tabs.forEach((t, i) => {
-      b.add(() => T('dev.tab.' + t), cx - 620 + i * 310, 150, 300, 88, () => { this.tab = t; this._layout(); },
+      b.add(() => T('dev.tab.' + t), cx - 775 + i * 310, 150, 300, 88, () => { this.tab = t; this._layout(); },
         { size: 30, color: this.tab === t ? '#ffd23f' : '#6b7a8c', textColor: this.tab === t ? '#000' : '#fff' });
     });
     const w = 600, h = 92, gap = 16;
@@ -118,6 +119,17 @@ const Dev = {
         Scenes.go('careerresult', CareerMatch.finish());
       });
       add(1, 2, () => T('dev.match.checkpoint'), () => this._matchDo(() => { Match.checkpoint('over'); this.say(T('dev.done')); }));
+    } else if (this.tab === 'career') {
+      // Works on the career open on Career Home (or in a career match).
+      const withCareer = (fn) => () => {
+        const c = (Scenes.currentName === 'careerhome' && CareerHomeScene.career) || (Scenes.currentName === 'careertree' && CareerTreeScene.career) || (CareerMatch.on && CareerMatch.career);
+        if (!c) { this.say(T('dev.career.none')); return; }
+        const slot = Scenes.currentName === 'careertree' ? CareerTreeScene.slot : Scenes.currentName === 'careerhome' ? CareerHomeScene.slot : CareerMatch.slot;
+        fn(c); CareerSave.save(c, slot); this.say(T('dev.done'));
+      };
+      add(0, 0, () => T('dev.career.tokens'), withCareer((c) => SkillTree.earn(c, 'level', 10)));
+      add(0, 1, () => T('dev.career.coins'), () => { Save.data.currencies.coins = (Save.data.currencies.coins || 0) + 500; Save.write(); this.say(T('dev.done')); });
+      add(1, 0, () => T('dev.career.between'), withCareer((c) => { if (c.phase === 'season') c.phase = 'promoted'; else if (c.phase === 'promoted' && c.fixtures.length) c.phase = 'season'; }));
     } else if (this.tab === 'save') {
       add(0, 3, () => T('dev.save.print'), () => { console.log('[save]', JSON.stringify(Save.data, null, 2)); this.say(T('dev.save.printed')); });
       add(1, 3, () => T('dev.save.corrupt'), () => {

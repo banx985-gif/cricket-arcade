@@ -29,13 +29,18 @@ const CareerMatch = {
     return T(MATCH_DATA.teams[side].shortKey);
   },
 
-  // The career player as a team member (effective stats: form, energy, …).
+  // The career player as a team member (effective stats: form, energy, the
+  // Wicket Tree's perks). perks = SkillTree.mods: the duel maths reads them
+  // (Duel.perk), so they work in the simulated balls too.
   _playerEntity(c, pos) {
     const p = c.player;
+    const ms = SkillTree.matchStats(c, Career.effectiveStats(c), this.fixture, Career.stage(c).teamRating);
+    this.matchNotes = ms.notes;
     return {
       id: 'player' + pos, no: pos, name: p.name, short: p.name.split(' ').length > 1 ? p.name[0] + '. ' + p.name.split(' ').slice(1).join(' ') : p.name,
       role: p.role === 'batter' ? 'bat' : p.role === 'bowler' ? 'bowl' : 'all', keeper: false,
-      family: Career.bowls(c) ? p.family : null, leftHanded: p.batHand === 'left', stats: Career.effectiveStats(c), isCareer: true,
+      family: Career.bowls(c) ? p.family : null, leftHanded: p.batHand === 'left', stats: ms.stats, isCareer: true,
+      perks: SkillTree.mods(c),
     };
   },
 
@@ -79,6 +84,7 @@ const CareerMatch = {
     });
     this.pid = 'player' + this.batPos(c);
     this._assign(c);
+    Tech.begin(c);                                  // techniques: charges, stacks, Legend Moment
     // Career matches resolve the toss automatically (plan 7.13).
     const t = Match.flipToss();
     if (t.winner === 'player') t.choice = RNG.stream('toss').chance(0.5) ? 'bat' : 'bowl';
@@ -88,6 +94,15 @@ const CareerMatch = {
     CareerSave.save(c, slot);                                                // autosave before entering a match
     Log.add('career', `fixture ${fx.n} v ${fx.opp.name} (${fmt}) toss ${t.winner} ${t.choice}`);
     return 'careerprematch';
+  },
+
+  // The loadout / tree changed on the pre-match screen (no ball bowled yet):
+  // rebuild the career player's match entity and the technique state.
+  refreshPlayer() {
+    if (!this.on || !Match.teams) return;
+    const pos = parseInt(this.pid.replace('player', ''), 10);
+    Match.teams.player.players[pos - 1] = this._playerEntity(this.career, pos);
+    Tech.begin(this.career);
   },
 
   // Which overs the career player bowls (from the club's spell: new ball,
@@ -100,7 +115,7 @@ const CareerMatch = {
     if (!this.assigned.length) this.assigned.push(0);
   },
 
-  ctx() { return this.on ? { slot: this.slot, n: this.fixture.n, pid: this.pid, assigned: this.assigned } : null; },
+  ctx() { return this.on ? { slot: this.slot, n: this.fixture.n, pid: this.pid, assigned: this.assigned, tech: Tech.snapshot() } : null; },
 
   // ---- routing: live or simulated? ----
   // Sets the bowler at the start of an over (career side: the assignment;
@@ -198,6 +213,12 @@ const CareerMatch = {
     const summary = Career.finishMatch(c, fx, perf);
     summary.perf = perf;
     summary.opp = fx.opp;
+    // Techniques used this match count toward their mastery (plan 11.4).
+    summary.techUses = Tech.st ? Object.assign({}, Tech.st.uses) : {};
+    SkillTree.addMastery(c, summary.techUses);
+    Tech.end();
+    // Coins go to the global purse (plan 22.1).
+    Save.data.currencies.coins = (Save.data.currencies.coins || 0) + summary.coins;
     CareerSave.save(c, this.slot);                  // autosave after match completion
     Save.clearResume();
     this.on = false;
@@ -226,12 +247,13 @@ const CareerMatch = {
 
   // Back into a match from a resume checkpoint (title screen or Play Next).
   async resumeFrom(cp) {
-    const c = await Save.loadCareer(cp.career.slot);
+    const c = await CareerSave.load(cp.career.slot);
     if (!c) throw new Error('career slot ' + cp.career.slot + ' is empty');
     this.career = c; this.slot = cp.career.slot; this.pid = cp.career.pid; this.assigned = cp.career.assigned;
     this.fixture = c.fixtures.find((f) => f.n === cp.career.n);
     if (!this.fixture) throw new Error('fixture ' + cp.career.n + ' not found');
     this.on = true; this.ticker = [];
+    Tech.begin(c, cp.career.tech);
     const [scene, params] = Match.restore(cp);
     if (scene === 'matchbreak') return [scene, params];
     return [this.sceneFor(Match.current()), params];
@@ -242,6 +264,6 @@ const CareerMatch = {
 // in the global save for the Career Select screen.
 const CareerSave = {
   save(c, slot) { return Save.saveCareer(slot, c, Career.summary(c)); },
-  load(slot) { return Save.loadCareer(slot); },
+  load(slot) { return Save.loadCareer(slot).then((c) => { if (c) SkillTree.ensure(c); return c; }); },
   remove(slot) { return Save.saveCareer(slot, null, null); },
 };

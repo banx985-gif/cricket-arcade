@@ -11,7 +11,8 @@ const Sprites = {
   images: {},       // id -> { img, anchorX, anchorY, heightM, heightPx }
 
   // Load every entry of an asset group. Missing files are simply skipped and
-  // the placeholder keeps drawing.
+  // the placeholder keeps drawing. optional entries (art not made yet) that
+  // aren't there are not reported as missing.
   status: {},       // id -> 'loading' | 'ok' | 'missing'   (read by the content check)
   _pending: [],
 
@@ -24,7 +25,11 @@ const Sprites = {
       this._pending.push(new Promise((done) => {
         const img = new Image();
         img.onload = () => { this.images[id] = Object.assign({ img }, e); this.status[id] = 'ok'; done(); };
-        img.onerror = () => { this.status[id] = 'missing'; Log.add('asset', 'missing ' + e.src); done(); };
+        img.onerror = () => {
+          this.status[id] = e.optional ? 'pending' : 'missing';
+          if (!e.optional) Log.add('asset', 'missing ' + e.src);
+          done();
+        };
         img.src = e.src;
       }));
     }

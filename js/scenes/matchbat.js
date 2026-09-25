@@ -65,7 +65,9 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     }
     Fielding.setPreset(inn.field, BowlerRules.phase(inn) === 'powerplay');
     Fielding.mods = Duel.fieldMods(this.team, Fielding.preset);
-    this._duelPlayers = { bat: this.batterP, bowl: this.bowlerP };
+    // Career: your techniques' stat boosts for this ball (game/techniques.js).
+    this.batP = Tech.batStats(this.batterP, inn);
+    this._duelPlayers = { bat: this.batP, bowl: this.bowlerP };
 
     const A = MATCH_DATA.aiBowler, rng = this._bowlRng, bowl = this.bowlerP;
     const fatigue = Match.fatigue[bowl.id] || 0;
@@ -80,7 +82,8 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     // Reading the variation: a deceptive bowler shows it later, or not at all.
     const Rd = PLAYER_DATA.duel.read, dec = Teams.u(bowl.stats.deception);
     this.readAt = this.del.variation && rng.chance(Rd.hideChance * dec) ? null : Rd.showAt[0] + (Rd.showAt[1] - Rd.showAt[0]) * dec;
-    this.windowScale = Duel.windowScale(this.batterP, bowl, { pressure: Duel.pressure(inn), fatigue, kind: this.del.kind });
+    this._baseWindow = Duel.windowScale(this.batP, bowl, { pressure: Duel.pressure(inn), fatigue, kind: this.del.kind, chase: !!inn.target });
+    this._techBall();
 
     this._setState('ready');
     this._resetBall();
@@ -88,6 +91,17 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     this.banner = { text: this._ballLabel(), color: '#ffffff', t: 0 };
     if (inn.freeHit) { this.banner.sub = T('bowl.freeHit'); this.banner.subColor = '#ff9d2e'; }
   },
+
+  // Techniques that size the timing windows for this ball; re-run when you
+  // fire one (TECHNIQUE / LEGEND buttons, before the ball is bowled).
+  _techBall() {
+    const tw = Tech.batWindows(this);
+    this.windowScale = this._baseWindow * tw.k;
+    this.techExtra = tw.extra;
+    TechUI.layout('bat', this.inn, () => this.state === 'ready' || this.state === 'runup');
+  },
+  _techMods(m, sh, aim) { return Tech.contactMods(m, sh, aim, this); },
+  _techContact(c, sh) { Tech.afterContact(c, sh, this); },
 
   _ballLabel() {
     const inn = this.inn;
@@ -102,7 +116,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (this.state !== 'delivery' || this.shot) return;
     const tIdeal = this.del.sim.contactIdx * CONFIG.PHYSICS_STEP;
     const err = this.dT - tIdeal;
-    let grade = Contact.grade(shotId, err, this.windowScale);
+    let grade = Contact.grade(shotId, err, this.windowScale, this.techExtra);
     const ballAtContact = this.del.sim.path.at(tIdeal, {});
     const shot = { id: shotId, pressT: this.dT, err, grade, swingStart: this.dT, contactT: null, done: false };
     this.shot = shot;
@@ -110,7 +124,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (grade !== 'miss' && !Contact.inReach(ballAtContact)) { grade = shot.grade = 'miss'; shot.missReason = 'outOfReach'; }
     else if (grade === 'miss') shot.missReason = err < 0 ? 'tooEarly' : 'tooLate';
 
-    const f = BallPlay.fate({ del: this.del, shotId, grade, bat: this.batterP, bowl: this.bowlerP, releaseGrade: this.del.releaseGrade }, RNG.stream('duel'));
+    const f = BallPlay.fate({ del: this.del, shotId, grade, bat: this.batP, bowl: this.bowlerP, releaseGrade: this.del.releaseGrade }, RNG.stream('duel'));
     this.fate = f;
     if (f.kind === 'contact') {
       // Early presses wait for the ball; late ones connect straight away.
@@ -148,7 +162,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
       const grade = Throw.aiGrade(Duel.fieldMods(this.team).fielding, fieldingRng);
       h.throw = Throw.make(from, t0, grade);
       const ok = Throw.make(from, t0, 'okay'), pf = Throw.make(from, t0, 'perfect');
-      h.running = new Running(Infinity, { safe: pf.returnT, tight: ok.returnT }, Duel.runTimeMult(this.batterP));
+      h.running = new Running(Infinity, { safe: pf.returnT, tight: ok.returnT }, Duel.runTimeMult(this.batP || this.batterP));
     }
     return h;
   },
@@ -168,6 +182,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     Fullscreen.request();
     if (this._pauseDown(id, x, y)) return;
     if (RunControls.down(id, x, y)) return;
+    if (TechUI.down(id, x, y, () => this._techBall())) return;
     BatControls.down(id, x, y);
   },
   pointerUp(id) {
@@ -192,6 +207,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (this.paused || Dev.open || Display.isPortrait) return;
     Effects.update(dt);
     Stadium.update(dt);
+    Tech.update(realDt);
     this.stateT += dt;
     if (this.banner) this.banner.t += dt;
     if (this.timingLabel) this.timingLabel.t += dt;
@@ -271,12 +287,12 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     }
     // No shot, and the late window has closed: the ball goes on (it may hit
     // the pad or the stumps).
-    const late = tIdeal + Contact.lateLimit('power', this.windowScale) + 0.02;
+    const late = tIdeal + Contact.lateLimit('power', this.windowScale, this.techExtra) + 0.02;
     if (!sh && this.dT > late) {
       BatControls.enabled = false;
       if (!this.fate) {
         this.fate = this.extraKind === 'wide' ? { kind: 'miss', result: null }
-          : BallPlay.fate({ del: this.del, left: true, bat: this.batterP, bowl: this.bowlerP }, RNG.stream('duel'));
+          : BallPlay.fate({ del: this.del, left: true, bat: this.batP, bowl: this.bowlerP }, RNG.stream('duel'));
         if (this.fate.result) this._showTiming('miss', 'noShot');
       }
     }
@@ -299,6 +315,8 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     else if (run && run.runOut) wicket = 'runout';
     const res = inn.apply({ kind, batRuns, boundary, wicket });
     if (res.overDone || inn.ended) Match.overDone(inn);
+    if (Tech.mine(this.batterP)) Tech.batBallEnd(key, kind === 'legal', res.wicket ? wicket : null);
+    TechUI.btns = [];
     this._showBallResult(key, res, batRuns, wicket, true);
   },
 
@@ -368,6 +386,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
       if (!MatchupCard.card) ReadChip.draw(ctx, this.del, runT, this.readAt);
     }
     this._drawFlashMarker(ctx);
+    TechUI.draw(ctx);
   },
 
   _drawTimingRing(ctx) {
@@ -379,10 +398,10 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     const i = sim.contactIdx;
     const p = View3D.project(sim.path.x[i], sim.path.y[i], sim.path.z[i]);
     if (!p) return;
-    const w = BATTING_DATA.shots.power.window, k = this.windowScale || 1;
+    const w = Contact.windows('power', this.windowScale || 1, this.techExtra);
     const r = 26 + Math.max(0, left) * 260;
-    const perfect = Math.abs(left) <= w.perfect * k;
-    const good = Math.abs(left) <= w.good * k;
+    const perfect = Math.abs(left) <= w.perfect;
+    const good = Math.abs(left) <= w.good;
     const col = perfect ? '#ffd23f' : good ? '#9cff6a' : 'rgba(255,255,255,0.85)';
     const a = Math.min(1, (0.75 - left) / 0.25);
     ctx.globalAlpha = Math.max(0, a);

@@ -139,8 +139,11 @@ const PitchScene = {
     const tIdeal = sim.contactIdx * CONFIG.PHYSICS_STEP;
     // Late contacts meet the ball a touch behind the ideal point.
     const pos = sim.path.at(Math.min(this.dT, tIdeal + 0.035), {});
-    const mods = this._duelPlayers ? BallPlay.mods(this._duelPlayers.bat, this._duelPlayers.bowl, sh.id) : null;
+    let mods = this._duelPlayers ? BallPlay.mods(this._duelPlayers.bat, this._duelPlayers.bowl, sh.id) : null;
+    // Career techniques (game/techniques.js) adjust the contact, then the hit.
+    if (this._techMods) mods = this._techMods(mods || { edge: 1, power: 1, jitter: 1 }, sh, aim);
     const c = Contact.resolve({ shotId: sh.id, grade: sh.grade, err: sh.err, aim, ball: pos, mods }, battingRng);
+    if (this._techContact) this._techContact(c, sh);
     const plan = Fielding.resolve(pos, c, sh.id, fieldingRng);
     this.hit = { c, plan, t: 0, pos, grade: sh.grade, perfect: sh.grade === 'perfect', dropShown: false };
     this._setState('inplay');

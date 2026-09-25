@@ -6,24 +6,36 @@ const Contact = {
   // err = press time minus ideal time (seconds). Negative = early.
   // scale = the duel's window size (Duel.windowScale: batter Timing vs bowler
   // Delivery, pressure, Composure). 1 = the windows in batting.js.
-  grade(shotId, err, scale) {
-    const w = BATTING_DATA.shots[shotId].window, k = scale || 1;
+  // extra (optional, techniques and perks): { perfect, good } make just that
+  // window bigger (Perfect Window, Sharp Eye); perfectIsGood = the Perfect
+  // window is Good-sized (the Legend Moment).
+  grade(shotId, err, scale, extra) {
+    const w = this.windows(shotId, scale, extra);
     const a = Math.abs(err);
-    if (a <= w.perfect * k) return 'perfect';
-    if (a <= w.good * k) return 'good';
-    if (a <= w.edge * k) return err < 0 ? 'early' : 'late';
+    if (a <= w.perfect) return 'perfect';
+    if (a <= w.good) return 'good';
+    if (a <= w.edge) return err < 0 ? 'early' : 'late';
     return 'miss';
   },
 
+  // The windows in use, in seconds either side of the ideal moment.
+  windows(shotId, scale, extra) {
+    const w = BATTING_DATA.shots[shotId].window, k = scale || 1, x = extra || {};
+    const good = w.good * k * (x.good || 1);
+    const perfect = x.perfectIsGood ? good : Math.min(good, w.perfect * k * (x.perfect || 1));
+    return { perfect, good, edge: Math.max(w.edge * k, good) };
+  },
+
   // Latest press (after the ideal moment) that can still make contact.
-  lateLimit(shotId, scale) { return BATTING_DATA.shots[shotId].window.edge * (scale || 1); },
+  lateLimit(shotId, scale, extra) { return this.windows(shotId, scale, extra).edge; },
 
   inReach(ball) {
     const PI = BATTING_DATA.pitch;
     return Math.abs(ball.x - PI.reachCentreX) <= PI.reachHalfWidth && ball.y <= PI.reachMaxHeight;
   },
 
-  // o.mods (from the duel, optional): { edge, power, jitter } multipliers.
+  // o.mods (from the duel, optional): { edge, power, jitter } multipliers, and
+  // speedGrade = hit it as far as this grade would (Boundary King).
   // Returns { kind: 'hit'|'edge'|'defend', vel, dirDeg, loftDeg, speed }
   resolve(o, rng) {
     const S = BATTING_DATA.shots[o.shotId], DIR = BATTING_DATA.direction, PI = BATTING_DATA.pitch;
@@ -62,7 +74,7 @@ const Contact = {
     loftDeg += rng.range(-2, 2);
     loftDeg = Math.max(0, loftDeg);
 
-    let speed = S.speed[grade] * rng.range(0.97, 1.03) * (m.power || 1);
+    let speed = S.speed[m.speedGrade || grade] * rng.range(0.97, 1.03) * (m.power || 1);
     return this._pack(o.shotId === 'defend' ? 'defend' : 'hit', dirDeg, loftDeg, speed);
   },
 

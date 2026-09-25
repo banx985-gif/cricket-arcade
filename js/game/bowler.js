@@ -16,7 +16,7 @@ const Bowling = {
   // Everything random about a release, rolled once. o: see release().
   roll(o, rng) {
     const C = BOWLING_DATA.charge;
-    const sc = C.scatter[o.grade] * Duel.scatterMult(o.bowler, o.fatigue);
+    const sc = C.scatter[o.grade] * Duel.scatterMult(o.bowler, o.fatigue) * ((o.boost && o.boost.scatter) || 1);
     const cond = this.conditions(o.cond);
     return {
       dx: rng.range(-1, 1) * sc,
@@ -27,7 +27,8 @@ const Bowling = {
   },
 
   // o: { bowler, family, typeIdx, target {x,z}, grade, power (0..1), fatigue,
-  //      cond {pitch, weather}, index, swipe? {dir, mag} }
+  //      cond {pitch, weather}, index, swipe? {dir, mag},
+  //      boost? {scatter, speed, move, turn, reverse, threat} (techniques, game/techniques.js) }
   // r: the roll (from roll()); rebuilding with a swipe reuses it.
   build(o, r) {
     const C = BOWLING_DATA.charge;
@@ -43,11 +44,16 @@ const Bowling = {
       speed = lerp(F.speed, power) * Duel.paceMult(bw);
     }
     speed *= t.speed * cond.pitch.pace;
+    const bo = o.boost || {};
+    if (bo.speed) speed *= bo.speed;
     const move = C.movement[o.grade] || 1, mm = Duel.moveMult(bw);
     let seam = r.seam * (t.seam || 0) * mm * move * cond.pitch.seam;
     let swing = (t.swing || 0) * mm * move * cond.pitch.swing * cond.weather.swing;
     let turn = (t.turn || 0) * (F.powerTo === 'spin' ? turnK : mm) * move * cond.pitch.turn * cond.weather.turn;
     turn += r.vary * (F.powerTo === 'spin' ? 2 : 1);
+    if (bo.move) { seam *= bo.move; swing *= bo.move; }
+    if (bo.turn) turn *= bo.turn;
+    if (bo.reverse) { swing = -swing; turn = -turn; seam = -seam; }
 
     // Step 4: the movement swipe.
     if (o.swipe && t.swipe && o.swipe.mag > 0) {
@@ -67,7 +73,7 @@ const Bowling = {
       movement: seam + turn, restitution: t.bounce * cond.pitch.bounce, swing, skid: t.skid,
       type: t.id, family: F.id,
     });
-    d.threat = t.threat || 1;
+    d.threat = (t.threat || 1) * (bo.threat || 1);
     d.variation = o.typeIdx !== 0;
     d.releaseGrade = o.grade;
     d.power = power;
@@ -172,7 +178,7 @@ const BowlerRules = {
     for (const p of team.players) {
       if (!p.family) continue;
       if (p.id === bowlerId) {
-        const add = F.perOver * (1 - F.fitnessSaves * Teams.u(p.stats.fitness)) + F.perHardBall * (hardBalls || 0);
+        const add = (F.perOver * (1 - F.fitnessSaves * Teams.u(p.stats.fitness)) + F.perHardBall * (hardBalls || 0)) * Duel.perk(p, 'fatigue', 1);
         fatigue[p.id] = Math.min(1, (fatigue[p.id] || 0) + add);
       } else {
         fatigue[p.id] = Math.max(0, (fatigue[p.id] || 0) - F.restPerOver);

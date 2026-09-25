@@ -32,7 +32,24 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     this._startBall();
   },
 
-  exit() { BowlControls.reset(); BowlerPicker.hide(); ThrowMeter.stop(); Fielding.clear(); },
+  exit() { BowlControls.reset(); BowlerPicker.hide(); ThrowMeter.stop(); Fielding.clear(); TechUI.btns = []; },
+
+  // ---- career techniques (game/techniques.js) ----
+  // Release bands with the bowler's stats for this ball, then the techniques.
+  _bands() {
+    const C = BOWLING_DATA.charge;
+    const k = Duel.bandScale(this.bowlP || this.bowler, this._fatigue());
+    const around = (b) => { const m = (b[0] + b[1]) / 2, h = (b[1] - b[0]) / 2 * k; return [m - h, m + h]; };
+    return Tech.bands({ perfect: around(C.perfect), good: around(C.good) }, this);
+  },
+  _techSetup() {
+    this.bowlP = Tech.bowlStats(this.bowler, this.inn);
+    BowlControls.bands = this._bands();
+    TechUI.layout('bowl', this.inn, () => this.state === 'aim');
+  },
+  _techBoost() { return Tech.releaseBoost(this); },
+  _techAi() { return Tech.aiCtx(this); },
+  _techMods(m) { return Tech.hitMods(m, this); },
 
   _layout() {
     this._layoutPause('toss');
@@ -66,7 +83,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     this.banner = { text: MatchBatScene._ballLabel.call(this), color: '#ffffff', t: 0 };
     if (this.inn.freeHit) { this.banner.sub = T('bowl.freeHit'); this.banner.subColor = '#ff9d2e'; }
     if (Match.needsBowler(this.inn)) this._pickBowler();
-    else { this._applyOver(false); BowlControls.bands = this._bands(); }
+    else { this._applyOver(false); this._techSetup(); }
   },
 
   // ---- choose the bowler + field for the next over ----
@@ -85,6 +102,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
         Match.setBowler(inn, bowlerId, field);
         this._applyOver(true);
         this._setState('aim');
+        this._techSetup();
         BowlControls.enabled = true;
         Log.add('match', `over ${Math.floor(inn.legal / 6) + 1}: ${bowlerId} bowls, field ${field}`);
       },
@@ -95,6 +113,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
   _applyOver(fresh) {
     const inn = this.inn;
     this.bowler = Match.bowlerOf(inn) || this.bowler;
+    this.bowlP = this.bowler;
     BowlControls.setDeliveries(this._deliveries());
     if (fresh) { this.typeIdx = 0; BowlControls.selected = 0; }
     BowlControls.bands = this._bands();
@@ -150,6 +169,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     Fullscreen.request();
     if (this._pauseDown(id, x, y)) return;
     if (BowlerPicker.down(id, x, y)) return;
+    if (!ThrowMeter.active && TechUI.down(id, x, y, () => { BowlControls.bands = this._bands(); })) return;
     if (ThrowMeter.active) {
       const b = ThrowMeter.btn;
       b.id = id; b.pressed = Math.hypot(x - b.x, y - b.y) <= b.r * 1.2;
@@ -186,6 +206,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     if (this.paused || Dev.open || Display.isPortrait) return;
     Effects.update(dt);
     Stadium.update(dt);
+    Tech.update(realDt);
     this.stateT += dt;
     if (this.banner) this.banner.t += dt;
     if (this.timingLabel) this.timingLabel.t += dt;
@@ -223,7 +244,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
         const h = this.hit;
         // The throw: the game slows while you stop the marker.
         if (h.throwPending && h.t >= h.throwPending.ready) {
-          if (!ThrowMeter.active && !h.meterDone) { h.meterDone = true; ThrowMeter.start(Duel.fieldMods(this.team).fielding); Sound.play('uiTap'); }
+          if (!ThrowMeter.active && !h.meterDone) { h.meterDone = true; ThrowMeter.start(Duel.fieldMods(this.team).fielding, Tech.throwZone()); Sound.play('uiTap'); }
           const g = ThrowMeter.update(realDt);
           if (g) this._throw(g);
           else dt *= MATCH_DATA.throw.meter.slowMo;
@@ -274,6 +295,8 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     ThrowMeter.stop();
     const res = inn.apply({ kind, batRuns, boundary, wicket });
     if (res.overDone || inn.ended) Match.overDone(inn);
+    if (Tech.mine(this.bowler)) Tech.bowlBallEnd(key, kind === 'legal', !!res.wicket, res.runs);
+    TechUI.btns = [];
     this.extraKind = null;
     MatchBatScene._showBallResult.call(this, key, res, batRuns, wicket, false);
     BowlControls.enabled = false;
@@ -285,6 +308,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     MatchupCard.draw(ctx, this.state === 'aim' || this.state === 'charge');
     ThrowMeter.draw(ctx);
     MatchBatScene._drawFlashMarker.call(this, ctx);
+    if (!BowlerPicker.open && !ThrowMeter.active) TechUI.draw(ctx);
     BowlerPicker.draw(ctx);
   },
 

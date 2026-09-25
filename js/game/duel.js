@@ -21,12 +21,16 @@ const Duel = {
     return this._clamp(p, 0, P.max);
   },
 
+  // Wicket Tree perks carried on a career player's match entity (SkillTree.mods).
+  perk(p, k, dflt) { return p && p.perks && p.perks[k] !== undefined ? p.perks[k] : dflt; },
+
   // ---- the batter's timing window (player batting) ----
-  // ctx: { pressure, fatigue (bowler's), kind: 'pace'|'spin' }
+  // ctx: { pressure, fatigue (bowler's), kind: 'pace'|'spin', chase: true in a run chase }
   windowScale(bat, bowl, ctx) {
     const W = PLAYER_DATA.duel.window, c = ctx || {};
     let k = 1 + W.timing * Teams.n(bat.stats.timing) - W.delivery * Teams.n(bowl.stats.delivery);
-    k -= W.pressure * (c.pressure || 0) * (1 - W.composureSaves * Teams.u(bat.stats.composure));
+    const pr = (c.pressure || 0) * this.perk(bat, 'pressure', 1) * (c.chase ? this.perk(bat, 'chasePressure', 1) : 1);
+    k -= W.pressure * pr * (1 - W.composureSaves * Teams.u(bat.stats.composure));
     k += W.fatigue * this.tired(c.fatigue);            // a tired bowler is easier to time
     if (c.kind === 'spin') k *= PLAYER_DATA.duel.spinWindow;
     return this._clamp(k, W.min, W.max);
@@ -41,7 +45,7 @@ const Duel = {
     k -= PLAYER_DATA.duel.window.fatigue * this.tired(c.fatigue);
     return this._clamp(k, A.min, A.max);
   },
-  aiPressureMult(bat) { return 1 - PLAYER_DATA.duel.aiPressure.composureSaves * Teams.u(bat.stats.composure); },
+  aiPressureMult(bat) { return (1 - PLAYER_DATA.duel.aiPressure.composureSaves * Teams.u(bat.stats.composure)) * this.perk(bat, 'pressure', 1); },
   // Variations fool the AI more when your Deception is high (x its timing bias).
   aiReadMult(bowl) { return 1 + PLAYER_DATA.duel.aiRead.deception * Teams.n(bowl.stats.deception); },
 
@@ -49,7 +53,7 @@ const Duel = {
     const E = PLAYER_DATA.duel.edge;
     const k = 1 - E.contact * Teams.n(bat.stats.contact) + E.movement * Teams.n(bowl.stats.movement)
       + E.deception * Teams.n(bowl.stats.deception);
-    return this._clamp(k, E.min, E.max);
+    return this._clamp(k, E.min, E.max) * this.perk(bat, 'edge', 1);
   },
   powerMult(bat, shotId) {
     const P = PLAYER_DATA.duel.power;
@@ -66,9 +70,13 @@ const Duel = {
   fieldMods(team, preset) {
     const F = PLAYER_DATA.duel.fielding;
     let f = 50;
-    if (team && team.players) f = team.players.reduce((t, p) => t + p.stats.fielding, 0) / team.players.length;
+    let pc = 0, ps = 0;
+    if (team && team.players) {
+      f = team.players.reduce((t, p) => t + p.stats.fielding, 0) / team.players.length;
+      for (const p of team.players) { pc += this.perk(p, 'catchBonus', 0); ps += this.perk(p, 'stopBonus', 0); }   // Safe Hands, Field General
+    }
     const n = Teams.n(f), e = (preset && preset.effects) || {};
-    return { catchBonus: F.catchSkill * n + (e.catch || 0), stopBonus: F.cleanStop * n + (e.stop || 0), speedMult: 1 + F.speed * n, fielding: f };
+    return { catchBonus: F.catchSkill * n + (e.catch || 0) + pc, stopBonus: F.cleanStop * n + (e.stop || 0) + ps, speedMult: 1 + F.speed * n, fielding: f };
   },
 
   // ---- the bowler's release ----

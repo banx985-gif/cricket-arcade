@@ -7,7 +7,13 @@
 // Career art is large, so it loads the first time Career is opened.
 const CareerAssets = {
   loaded: false,
-  ensure() { if (!this.loaded) { this.loaded = true; Sprites.loadGroup('career'); } },
+  ensure() {
+    if (this.loaded) return;
+    this.loaded = true;
+    Sprites.loadGroup('career');
+    Sprites.loadGroup('skilltree');              // technique icons (M06)
+    Sprites.loadGroup('skilltreeArt');           // Wicket Tree art, when it's filed
+  },
 };
 
 // Small helpers shared by the career scenes.

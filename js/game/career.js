@@ -56,7 +56,7 @@ const Career = {
         family: CAREER_DATA.roles[o.role].bowls ? (o.family || 'fast') : null,
         stats: null, level: 1, xp: 0, growthPoints: 0, skillTokens: 0,
         // ---- hooks for later milestones ----
-        tree: { nodes: {}, keystones: {} },      // Skill Tree (docs/SKILL_TREE_v1.md)
+        tree: null,                              // the Wicket Tree (SkillTree.ensure fills it in)
         techniques: [], equipment: {},
       },
       origin: o.origin || null,
@@ -69,6 +69,7 @@ const Career = {
       hooks: { rivals: {}, sponsors: {}, events: {}, coach: null },
     };
     c.player.stats = this.roll(c, (r) => this.startStats(o.role, o.archetype, r));
+    SkillTree.ensure(c);                         // role point + archetype perk rank
     return c;
   },
 
@@ -97,7 +98,7 @@ const Career = {
       p.xp -= L.xpFor(p.level);
       p.level++;
       p.growthPoints += L.growthPerLevel;
-      p.skillTokens += L.skillTokensPerLevel;
+      SkillTree.earn(c, 'level', L.skillTokensPerLevel);
       ups++;
     }
     return ups;
@@ -225,7 +226,9 @@ const Career = {
   train(c, drillId) {
     const D = CAREER_DATA.training.find((t) => t.id === drillId);
     if (!D || this.prepsLeft(c) <= 0) return null;
-    const res = { drill: D.id, stat: D.stat, gain: D.gain, xp: D.xp, energy: -D.energy, levels: 0, emphasis: false };
+    const M = SkillTree.mods(c);
+    const energy = Math.round(D.energy * M.energy);
+    const res = { drill: D.id, stat: D.stat, gain: D.gain, xp: D.xp, energy: -energy, levels: 0, emphasis: false };
     this.roll(c, (r) => {
       if (D.emphasis && c.club && (c.club.emphasis === D.emphasis || c.club.emphasis === 'balanced')) {
         res.emphasis = true;
@@ -236,7 +239,8 @@ const Career = {
     // Tired training still helps, but less.
     if (c.energy < CAREER_DATA.energy.low) res.gain = Math.max(0, res.gain - 1);
     c.player.stats[D.stat] = Math.min(CAREER_DATA.statMax, c.player.stats[D.stat] + res.gain);
-    c.energy = Math.max(0, c.energy - D.energy);
+    c.energy = Math.max(0, c.energy - energy);
+    res.xp = Math.round(res.xp * (1 + M.xp));
     res.levels = this.addXp(c, res.xp);
     c.block.preps++;
     c.block.log.push('train:' + D.id);
@@ -247,7 +251,7 @@ const Career = {
     if (this.prepsLeft(c) <= 0) return null;
     const R = CAREER_DATA.rest;
     const before = c.energy;
-    c.energy = Math.min(CAREER_DATA.energy.max, c.energy + R.energy);
+    c.energy = Math.min(CAREER_DATA.energy.max, c.energy + R.energy + SkillTree.mods(c).restEnergy);
     let formUp = false;
     if (R.formUpFromPoor && c.form === 'poor') { c.form = 'normal'; formUp = true; }
     c.block.preps++;
@@ -287,9 +291,19 @@ const Career = {
     const G = this.gradeMatch(c, perf, fixture.objective);
     const S = CAREER_DATA.selection, F = CAREER_DATA.form;
     const lowEnergy = c.energy < CAREER_DATA.energy.low;
-    c.energy = Math.max(0, c.energy - CAREER_DATA.energy.match);
+    const M = SkillTree.mods(c), lo = SkillTree.loadout(c), TD = SKILL_TREE_DATA.techniques;
+    let energyCost = CAREER_DATA.energy.match * M.energy;
+    if (lo.passive.includes('fitness_freak')) energyCost -= TD.fitness_freak.energy;
+    c.energy = Math.max(0, c.energy - Math.max(0, Math.round(energyCost)));
     // Selection Meter
     let sel = S.fromGrade[G.grade] + (G.objectiveMet ? S.objective : 0);
+    // Crowd Favourite: your boundaries and wickets catch the selectors' eye.
+    let crowd = 0;
+    if (lo.passive.includes('crowd_favourite')) {
+      const CF = TD.crowd_favourite;
+      crowd = Math.min(CF.max, CF.perMoment * ((perf.bat.fours || 0) + (perf.bat.sixes || 0) + (perf.bowl.wkts || 0)));
+      sel += crowd;
+    }
     if (fixture.kind === 'final') sel *= S.finalMult;
     sel = Math.round(sel);
     const selBefore = c.selection;
@@ -298,11 +312,16 @@ const Career = {
     const formBefore = c.form;
     let step = F.fromGrade[G.grade];
     if (lowEnergy && this.roll(c, (r) => r.chance(CAREER_DATA.energy.slumpChance))) step -= 1;
+    // Iron Engine: form drops more slowly.
+    let formSaved = false;
+    if (step < 0 && M.flags.ironEngine && this.roll(c, (r) => r.chance(SKILL_TREE_DATA.keystones.ironEngine.formDropSave))) { step += 1; formSaved = true; }
     const i = F.levels.indexOf(c.form);
     c.form = F.levels[Math.max(0, Math.min(F.levels.length - 1, i + step))];
     // XP
-    const xp = CAREER_DATA.grade.xp[G.grade] + (G.objectiveMet ? 20 : 0);
+    const xp = Math.round((CAREER_DATA.grade.xp[G.grade] + (G.objectiveMet ? 20 : 0)) * (1 + M.xp));
     const levels = this.addXp(c, xp);
+    // Coins (the global currency, plan 22.1): CareerMatch.finish pays them into the save.
+    const coins = Math.round(SKILL_TREE_DATA.coinsFromGrade[G.grade] * (1 + M.coins));
     // The fixture and the schedule
     fixture.played = true;
     fixture.grade = G.grade;
@@ -315,7 +334,7 @@ const Career = {
       bat: perf.bat, bowl: perf.bowl, selection: sel, xp };
     c.history.push(rec);
     const out = Object.assign({}, G, { xp, levels, selection: sel, selBefore, selAfter: c.selection, formBefore, formAfter: c.form,
-      energyAfter: c.energy, objective: fixture.objective, kind: fixture.kind, won: !!perf.won });
+      energyAfter: c.energy, objective: fixture.objective, kind: fixture.kind, won: !!perf.won, coins, crowd, formSaved });
     // Stage gate after the last fixture of the block.
     if (!this.next(c)) out.gate = this.gate(c, fixture);
     return out;
@@ -346,7 +365,7 @@ const Career = {
   },
   promote(c) {
     const S = this.stage(c);
-    c.player.skillTokens += CAREER_DATA.levels.skillTokensPerPromotion;
+    SkillTree.earn(c, 'promotion', CAREER_DATA.levels.skillTokensPerPromotion);
     c.promotedFrom = S.id;
     c.stage = S.next;
     c.phase = 'promoted';
@@ -366,8 +385,8 @@ const Career = {
   },
 };
 
-// Stat bonuses from things that aren't base stats. Today: nothing. The Skill
-// Tree (next milestone) adds its minor perks here; equipment will too.
+// Stat bonuses from things that aren't base stats: the Wicket Tree's minor
+// perks (M06). Equipment will add here too.
 const CareerStats = {
   bonus(c) {
     const out = {};

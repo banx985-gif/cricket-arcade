@@ -6,8 +6,8 @@
 //   train     pick a drill (quick resolve)
 //   result    what training / rest did
 //   player    stats, level, XP; spend Growth Points (plan 10)
-// Equipment, Techniques (the Skill Tree, next milestone), Coach and Records are
-// shown greyed out, "coming soon".
+// SKILL TREE opens the Wicket Tree, LOADOUT the technique loadout (M06).
+// Equipment, Coach and Records are shown greyed out, "coming soon".
 
 const CareerHomeScene = {
   career: null,
@@ -47,8 +47,15 @@ const CareerHomeScene = {
     b.add('career.train', s.left + 380, y, 330, 140, () => this._open('train'), { size: 38, icon: 'train_timing_cage', disabled: noPrep, sub: () => T('career.prepLeft', { n: Career.prepsLeft(c) }) });
     b.add('career.rest', s.left + 730, y, 330, 140, () => this._rest(), { size: 38, color: '#9be7ff', icon: 'career_rest', disabled: noPrep, sub: 'career.restSub' });
     b.add('career.playNext', s.right - 520, y - 10, 490, 160, () => this._play(), { size: 54, color: '#9cff6a', disabled: () => promoted || !Career.next(c) });
+    // The Wicket Tree and the technique loadout (M06)
+    b.add('career.skillTree', s.right - 520, 130, 490, 170, () => Scenes.go('careertree', { slot: this.slot, career: c }), {
+      size: 44, color: '#ffd23f', icon: 'train_technique_practice', sub: () => T('career.treeSub', { n: c.player.skillTokens }),
+    });
+    b.add('tree.loadout', s.right - 520, 320, 490, 130, () => Scenes.go('careerloadout', { slot: this.slot, career: c }), {
+      size: 40, color: '#9be7ff', sub: () => { const lo = SkillTree.loadout(c); return T('career.loadoutSub', { a: lo.active.length, p: lo.passive.length }); },
+    });
     // Greyed "coming soon" (their systems arrive in later milestones).
-    const soon = [['career.equipment', 'slot_bat'], ['career.skillTree', 'train_technique_practice'], ['career.coach', 'meta_coach'], ['career.records', 'meta_records']];
+    const soon = [['career.equipment', 'slot_bat'], ['career.coach', 'meta_coach'], ['career.records', 'meta_records']];
     soon.forEach(([k, icon], i) => b.add(k, s.right - 520 + (i % 2) * 250, 610 + Math.floor(i / 2) * 110, 240, 96, () => {}, { size: 22, icon, disabled: true, sub: 'career.comingSoon' }));
     // tap the portrait area for the player panel
     b.add(() => '', s.left + 40, 150, 470, 470, () => this._open('player'), { color: 'rgba(0,0,0,0)' });
@@ -126,6 +133,7 @@ const CareerHomeScene = {
     if (code === 'Enter' || code === 'Space') this._play();
     if (code === 'KeyT') this._open('train');
     if (code === 'KeyR') this._rest();
+    if (code === 'KeyK') Scenes.go('careertree', { slot: this.slot, career: this.career });
   },
 
   // ---------------------------------------------------------------- drawing

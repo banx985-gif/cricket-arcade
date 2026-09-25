@@ -53,9 +53,10 @@ const AIBatter = {
     else if (d > 0.7 && rng.chance(A.defendWhenHard)) shot = 'defend';
     else shot = 'control';
 
+    // o.sigmaK / o.readK: the career bowler's techniques (game/techniques.js).
     const sigma = A.timingSigma * (1 + Math.max(0, d) * A.difficultyToSigma)
-      * Duel.aiSigmaMult(bat, bowl, { variation: del.variation, fatigue: o.fatigue });
-    const bias = (o.timingBias || 0) * (del.variation ? Duel.aiReadMult(bowl) : 1);
+      * Duel.aiSigmaMult(bat, bowl, { variation: del.variation, fatigue: o.fatigue }) * (o.sigmaK || 1);
+    const bias = (o.timingBias || 0) * (del.variation ? Duel.aiReadMult(bowl) * (o.readK || 1) : 1);
     const err = bias + this._normal(rng) * sigma;
 
     // Aim at a random part of the field; power shots go up, control stays low.

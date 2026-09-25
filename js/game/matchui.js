@@ -192,8 +192,10 @@ const ThrowMeter = {
   m: null,           // { t (real secs), zones, pos, done }
   btn: { x: 0, y: 0, r: 110, id: null, pressed: false },
 
-  start(fielding) {
-    this.m = { t: 0, zones: Throw.zones(fielding), pos: -1 };
+  // zoneK: bigger zones (the Rocket Arm perk).
+  start(fielding, zoneK) {
+    const z = Throw.zones(fielding), k = zoneK || 1;
+    this.m = { t: 0, zones: { perfect: Math.min(0.6, z.perfect * k), okay: Math.min(0.95, z.okay * k) }, pos: -1 };
     const s = Display.safe;
     this.btn.x = s.right - 230; this.btn.y = s.bottom - 230;
   },

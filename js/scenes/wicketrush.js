@@ -208,9 +208,11 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     const power = Math.max(0, Math.min(1, (Math.min(m, 1) - C.minPower) / (1 - C.minPower)));
     if (power > 0.9 && this.inn) this.inn._hardBalls = (this.inn._hardBalls || 0) + 1;
 
+    // bowlP / _techBoost: the career bowler's techniques (Quick Match / career only).
     this.del = Bowling.release({
-      bowler: this.bowler, family: this.bowler.family, typeIdx: this.typeIdx, target: this._snapped(),
+      bowler: this.bowlP || this.bowler, family: this.bowler.family, typeIdx: this.typeIdx, target: this._snapped(),
       grade, power, fatigue: this._fatigue(), cond: this._cond(), index: this.rules.ball,
+      boost: this._techBoost ? this._techBoost() : null,
     }, RNG.stream('bowlAcc'));
     this.del.golden = this.golden;
     this.release = { grade, noBall, type: this._type().id, meter: m };
@@ -237,13 +239,14 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     const tIdeal = sim.contactIdx * CONFIG.PHYSICS_STEP;
     const at = sim.path.at(tIdeal, {});
     this.isWide = BallPlay.isWide(this.del);
-    const bat = this.batterP, bowl = this.bowler;
+    const bat = this.batterP, bowl = this.bowlP || this.bowler;
+    const tk = this._techAi ? this._techAi() : {};
 
     const ai = this.isWide ? { leave: true, difficulty: 0 }
       : AIBatter.decide(this.del, {
         releaseGrade: this.release.grade, pressure: this._pressure(),
         freeHit: this.rules.freeHit || this.release.noBall,
-        timingBias: this.del.timingBias, bat, bowl, fatigue: this._fatigue(),
+        timingBias: this.del.timingBias, bat, bowl, fatigue: this._fatigue(), sigmaK: tk.sigmaK, readK: tk.readK,
       }, RNG.stream('ai'));
     this.ai = ai;
     this._duelPlayers = { bat, bowl };

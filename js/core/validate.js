@@ -136,6 +136,39 @@ const Validate = {
     for (const st of CAREER_DATA.stages) { str(st.nameKey, 'stage'); cart(st.art, 'stage'); if (!st.comingSoon && !MATCH_DATA.formats[st.format]) p.push(`stage "${st.id}" uses unknown format`); }
     for (const pool of Object.values(CAREER_DATA.objectives)) for (const o of [].concat(pool)) str('objective.' + o.id, 'objective');
 
+    // The Wicket Tree (M06): every node, technique, pair, name and picture
+    if (typeof SKILL_TREE_DATA !== 'undefined') {
+      const D = SKILL_TREE_DATA, ids = dupes('skill tree nodes', D.nodes, 'id');
+      const techs = Object.keys(D.techniques);
+      if (techs.length !== 36) p.push('the Wicket Tree needs 36 techniques (it has ' + techs.length + ')');
+      for (const t of techs) {
+        const nodes = D.nodes.filter((n) => n.tech === t);
+        if (nodes.length !== 1) p.push('technique "' + t + '" must be on exactly one tree node');
+        str('tech.' + t, 'technique'); str('tech.' + t + '.desc', 'technique');
+        cart(D.techniques[t].icon, 'technique ' + t);
+        if (!['bat', 'bowl', 'passive'].includes(D.techniques[t].kind)) p.push('technique "' + t + '" has an unknown kind');
+      }
+      for (const n of D.nodes) {
+        if (n.tech && !D.techniques[n.tech]) p.push('tree node "' + n.id + '" names unknown technique "' + n.tech + '"');
+        if (n.type !== 'capstone' && !D.branches.includes(n.branch)) p.push('tree node "' + n.id + '" has unknown branch');
+        if (!n.tech) { str('tree.' + n.id, 'tree node'); str('tree.' + n.id + '.desc', 'tree node'); }
+        if (n.type === 'minor' || n.type === 'keystone') { cart(n.id, 'tree node art'); str('tree.glyph.' + n.id, 'tree node'); }
+        if (n.type === 'keystone') {
+          const other = D.nodes.find((x) => x.id === n.pair);
+          if (!other || other.pair !== n.id || other.branch !== n.branch) p.push('keystone "' + n.id + '" needs a matching pair in its branch');
+        }
+        if (n.effect && n.effect.stat && !statKeys.has(n.effect.stat)) p.push('perk "' + n.id + '" raises unknown stat');
+      }
+      for (const b of D.branches) {
+        if (D.nodes.filter((n) => n.branch === b && n.type === 'minor').length !== 6) p.push('branch "' + b + '" needs 6 minor perks');
+        if (D.nodes.filter((n) => n.branch === b && n.type === 'keystone').length !== 2) p.push('branch "' + b + '" needs 2 keystones');
+        str('tree.branch.' + b, 'branch'); cart(D.art.branch[b], 'branch emblem');
+      }
+      for (const [a, id] of Object.entries(D.archetypeStart)) if (!ids.has(id) || D.nodes.find((n) => n.id === id).type !== 'minor') p.push('archetype "' + a + '" starts with unknown perk "' + id + '"');
+      for (const r of Object.keys(CAREER_DATA.roles)) if (!D.roles[r]) p.push('tree role rules missing for "' + r + '"');
+      for (const id of [D.art.bg, D.art.perkPip, D.art.token, D.art.respec, D.art.legend].concat(Object.values(D.art.node))) cart(id, 'tree art');
+    }
+
     // Manifest: every entry needs a file path, every id once (object keys are unique by nature)
     for (const [gname, g] of Object.entries(ASSET_MANIFEST.groups)) {
       for (const [id, e] of Object.entries(g)) if (!e || !e.src) p.push(`asset "${id}" in group ${gname} has no file path`);
