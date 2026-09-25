@@ -168,7 +168,18 @@ const Career = {
   },
 
   // ---- fixtures ----
-  _opponent(c, rating, final) {
+  _opponent(c, rating, final, kind) {
+    const S0 = Career.stage(c);
+    // Stages 5–8: other nations (their Development XI in Stage 5); a short domestic block in Stage 5 plays domestic sides.
+    if ((S0.team === 'devxi' || S0.team === 'national') && !(S0.team === 'devxi' && kind === 'extra')) {
+      return this.roll(c, (r) => this._nationOpp(c, r.pick(CAREER_DATA.world.teams.filter((t) => t.id !== c.origin)).id, rating, final));
+    }
+    if (S0.team === 'devxi') {
+      return this.roll(c, (r) => {
+        const pack = ORIGIN_PACKS.origins[c.origin], colours = this._clubColours(pack, r);
+        return { name: r.pick(pack.clubFragments) + ' ' + r.pick(CAREER_DATA.domesticSuffixes), colours, crest: this.makeCrest(r, colours), rating: Math.round(rating), final: !!final };
+      });
+    }
     // Stage 4: another franchise (not yours).
     if (Career.stage(c).team === 'franchise') {
       return this.roll(c, (r) => {
@@ -198,12 +209,18 @@ const Career = {
     }
     return r.pick(pack.clubFragments) + ' XI';
   },
+  // A national side as an opponent (Stage 5: their Development XI).
+  _nationOpp(c, id, rating, final) {
+    const t = CAREER_DATA.world.teams.find((x) => x.id === id), dev = this.stage(c).team === 'devxi';
+    return { name: ORIGIN_PACKS.origins[id].pathwayLabels[dev ? 4 : 5], nation: id, colours: t.colours.slice(), crest: { image: 'badge_' + id, colours: t.colours.slice() },
+      rating: Math.round(rating || t.rating), final: !!final };
+  },
   _fixture(c, kind, rating, opp) {
     const n = c.fixtures.length + 1;
-    const f = { n, kind, opp: opp || this._opponent(c, rating, kind === 'final'), played: false, seed: 0 };
+    const f = { n, kind, opp: opp || this._opponent(c, rating, kind === 'final', kind), played: false, seed: 0 };
     f.seed = this.roll(c, (r) => r.int(1, 999999999));
     // A rival boss match (plan 14): only in the stage's main block.
-    const rival = (kind === 'league' || kind === 'group' || kind === 'final') && Rivals.forFixture(this.stage(c), n);
+    const rival = ['league', 'group', 'final', 'quarter', 'semi', 'gauntlet', 'invitational'].includes(kind) && Rivals.forFixture(this.stage(c), n, kind);
     if (rival) f.rival = rival;
     f.objective = rival ? Rivals.objective(c, rival) : this.objectiveFor(c, f);
     return f;
@@ -213,21 +230,48 @@ const Career = {
     c.stage = stageId;
     c.fixtures = [];
     c.selection = 0;
+    c.stageMisses = 0;
     c.block = { preps: 0, log: [] };
     if (S.comingSoon) return;
     if (S.tournament) {
-      // Stage 4: your group's first match; the tournament adds the rest as it goes.
-      const t = Tournament.create(c, c.team.franchise), o = Tournament.myOpponents(t)[0];
+      // Stages 4 and 7: your group's first match; the tournament adds the rest as it goes.
+      const t = S.tournament === 'world' ? Tournament.create(c, c.origin, 'world') : Tournament.create(c, c.team.franchise), o = Tournament.myOpponents(t)[0];
       const f = this._fixture(c, 'group', Tournament.team(o).rating, Tournament.opp(o));
       f.round = 'g1';
       c.fixtures.push(f);
       return;
     }
+    if (S.elite) { this._eliteFixtures(c, S); return; }
+    // Stages 5–6: a different nation each match (rotating).
+    const nations = S.team === 'devxi' || S.team === 'national' ? this.roll(c, (r) => {
+      const ids = CAREER_DATA.world.teams.map((t) => t.id).filter((id) => id !== c.origin);
+      for (let i = ids.length - 1; i > 0; i--) { const j = r.int(0, i); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+      return ids;
+    }) : null;
     for (let i = 0; i < S.matches; i++) {
       const last = i === S.matches - 1;
       const rating = last ? S.finalOpponentRating : S.opponentRating[0] + (S.opponentRating[1] - S.opponentRating[0]) * i / Math.max(1, S.matches - 2);
-      c.fixtures.push(this._fixture(c, last ? 'final' : 'league', rating));
+      c.fixtures.push(this._fixture(c, last ? 'final' : 'league', rating, nations ? this._nationOpp(c, nations[i % nations.length], rating, last) : null));
     }
+  },
+  // Stage 8: 3 gauntlet matches, the Phantom's secret invitation (if earned), then the Champion.
+  _eliteFixtures(c, S) {
+    const E = CAREER_DATA.elite, side = (d, rating, final) => ({ name: T('elite.' + d.id), colours: d.colours.slice(), crest: { image: d.crest, colours: d.colours.slice() }, rating, final: !!final });
+    E.gauntlet.forEach((d, i) => c.fixtures.push(this._fixture(c, 'gauntlet', 0, side(d, S.opponentRating[0] + (S.opponentRating[1] - S.opponentRating[0]) * i / 2))));
+    if (Rivals.beatenCount(c) >= EVENT_DATA.phantom.rivalsBeaten) {
+      const f = this._fixture(c, 'invitational', 0, side(E.phantom, S.finalOpponentRating - 2));
+      f.rival = 'phantom'; f.objective = Rivals.objective(c, 'phantom');
+      c.fixtures.push(f);
+    }
+    c.fixtures.push(this._fixture(c, 'final', 0, side(E.champion, S.finalOpponentRating, true)));
+  },
+  // After the Champion match: play him again (the career stays complete either way).
+  rematch(c) {
+    const S = this.stage(c);
+    if (!S.final || c.phase !== 'complete') return false;
+    c.fixtures.push(this._fixture(c, 'final', 0, Object.assign({}, c.fixtures.filter((f) => f.kind === 'final').pop().opp)));
+    c.phase = 'season';
+    return true;
   },
   next(c) { return c.fixtures.find((f) => !f.played) || null; },
 
@@ -253,10 +297,17 @@ const Career = {
       c.phase = 'offers';
       return 'offers';
     }
-    c.team = S.team === 'stage' ? this._stageTeam(c) : null;
+    c.team = S.team === 'stage' ? this._stageTeam(c) : S.team === 'devxi' || S.team === 'national' ? this._nationalTeam(c, S) : null;
     c.phase = 'season';
     this.startStage(c, S.id);
     return 'season';
+  },
+
+  // Stages 5–8: your country (its Development XI in Stage 5).
+  _nationalTeam(c, S) {
+    const t = CAREER_DATA.world.teams.find((x) => x.id === c.origin), O = ORIGIN_PACKS.origins[c.origin];
+    return { name: O.pathwayLabels[S.team === 'devxi' ? 4 : 5], nation: c.origin, colours: t.colours.slice(), crest: { image: 'badge_' + c.origin, colours: t.colours.slice() },
+      rating: S.teamRating, batPos: (c.team && c.team.batPos) || c.club.batPos, spell: (c.team && c.team.spell) || c.club.spell, emphasis: c.club.emphasis };
   },
 
   // ---- Stage 4 contract offers (plan 5.5C, 8.10) ----
@@ -296,7 +347,9 @@ const Career = {
 
   objectiveFor(c, f) {
     const O = CAREER_DATA.objectives;
-    if (f.kind === 'final' || f.kind === 'qualifier' || f.kind === 'semi') return Object.assign({}, O.final);
+    // Stage 5's final trial is about your role, not the result (plan 8.11).
+    const trialFinal = this.stage(c).trials && f.kind === 'final';
+    if (!trialFinal && ['final', 'qualifier', 'semi', 'quarter'].includes(f.kind)) return Object.assign({}, O.final);
     return this.roll(c, (r) => {
       const pool = c.player.role === 'batter' ? O.bat : c.player.role === 'bowler' ? O.bowl : r.chance(0.5) ? O.bat : O.bowl;
       return Object.assign({}, r.pick(pool));
@@ -435,13 +488,15 @@ const Career = {
     c.block = { preps: 0, log: [] };
     c.matchInProgress = null;
     c.matchBuff = null;                            // a rival build-up boost lasts one match
+    const S0 = this.stage(c);
     const rec = { stage: c.stage, n: fixture.n, kind: fixture.kind, opp: fixture.opp.name, grade: G.grade, won: !!perf.won,
+      tour: S0.tournament ? (S0.tournament === 'world' ? 'world' : 'franchise') : null, rival: fixture.rival || null, facts: perf.facts || null,
       bat: perf.bat, bowl: perf.bowl, selection: sel, xp };
     c.history.push(rec);
     const out = Object.assign({}, G, { xp, levels, selection: sel, selBefore, selAfter: c.selection, formBefore, formAfter: c.form,
       energyAfter: c.energy, objective: fixture.objective, kind: fixture.kind, won: !!perf.won, coins, crowd, formSaved });
     // Stage 4: the tournament moves on (it may add your semi-final / final).
-    if (c.tour && c.tour.phase !== 'done' && ['group', 'semi', 'final'].includes(fixture.kind) && fixture.opp.franchise) {
+    if (c.tour && c.tour.phase !== 'done' && ['group', 'quarter', 'semi', 'final'].includes(fixture.kind) && fixture.opp.franchise) {
       const nx = Tournament.afterMatch(c, fixture.kind, fixture.round, fixture.opp.franchise, {
         won: !!perf.won, runs: perf.teamRuns || 0, balls: perf.teamBalls || 30, oppRuns: perf.oppRuns || 0, oppBalls: perf.oppBalls || 30 });
       out.tour = { phase: c.tour.phase, best: c.tour.best };
@@ -451,8 +506,15 @@ const Career = {
         c.fixtures.push(f);
       }
     }
-    // Stage gate after the last fixture of the block.
-    if (!this.next(c)) out.gate = this.gate(c, fixture);
+    // Trophies (plan 8.20: for the Legacy): a stage final won, a tournament won, the Champion beaten.
+    c.trophies = c.trophies || [];
+    const S8 = this.stage(c);
+    if (fixture.kind === 'final' && perf.won) {
+      const id = S8.tournament ? (S8.tournament === 'world' ? 'world' : 'franchise') + '_champion' : S8.elite ? 'elite_champion' : S8.id + '_final';
+      if (!c.trophies.includes(id)) { c.trophies.push(id); out.trophy = id; }
+    }
+    // Stage gate after the last fixture of the block (Stage 8 has none: the career is complete).
+    if (!this.next(c)) out.gate = S8.final ? this.complete(c) : this.gate(c, fixture);
     return out;
   },
 
@@ -471,17 +533,26 @@ const Career = {
     if (c.selection >= G.threshold && keyMet) return this.promote(c);
     if (c.selection >= G.nearMiss) {
       c.fixtures.push(this._fixture(c, 'qualifier', S.finalOpponentRating));
+      c.gateMisses = (c.gateMisses || 0) + 1; c.stageMisses = (c.stageMisses || 0) + 1;
       return { result: 'qualifier' };
     }
     return this._extraBlock(c);
   },
   _extraBlock(c) {
     const S = this.stage(c);
+    c.gateMisses = (c.gateMisses || 0) + 1; c.stageMisses = (c.stageMisses || 0) + 1;
     for (let i = 0; i < S.extraBlock.matches; i++) c.fixtures.push(this._fixture(c, i === S.extraBlock.matches - 1 ? 'final' : 'extra', S.opponentRating[1]));
     return { result: 'extra', matches: S.extraBlock.matches };
   },
+  // Stage 8 over: time to retire (or a rematch with the Champion).
+  complete(c) {
+    c.phase = 'complete';
+    return { result: 'complete' };
+  },
   promote(c) {
     const S = this.stage(c);
+    if (S.id === 'national') c.nationalSelected = true;     // plan 8.11: once earned, it's permanent
+    if (c.stageMisses) c.comebacks = (c.comebacks || 0) + 1;   // promoted after missing a gate this stage
     SkillTree.earn(c, 'promotion', CAREER_DATA.levels.skillTokensPerPromotion);
     c.promotedFrom = S.id;
     c.promotedSelection = c.selection;             // (a strong finish earns an extra contract offer)

@@ -60,6 +60,11 @@ const CareerHomeScene = {
     const S = Career.stage(c);
     if (promoted && !S.comingSoon) b.add('career.startStage', s.right - 520, y - 10, 490, 160, () => this._startStage(), { size: 40, color: '#ffd23f',
       sub: () => CareerUI.pathwayLabel(c) });
+    // Stage 8 over: retire (plan 8.21), or face the Champion again.
+    if (c.phase === 'complete') {
+      b.add('legacy.retireBtn', s.right - 520, y - 10, 490, 160, () => Scenes.go('careerretire', { slot: this.slot, career: c }), { size: 44, color: '#ffd23f' });
+      if (!(c.hooks.rivals && c.hooks.rivals.champion && c.hooks.rivals.champion.beaten)) b.add('career.rematch', s.left + 710, 680, 560, 90, () => { Career.rematch(c); this._save(); this._layout(); this._checkEvent(); }, { size: 30, color: '#ff9d7a' });
+    }
     if (c.phase === 'offers') b.add('career.seeOffers', s.right - 520, y - 10, 490, 160, () => Scenes.go('careeroffers', { slot: this.slot, career: c }), { size: 40, color: '#ffd23f', icon: 'stage_contract_offer' });
     // The Wicket Tree and the technique loadout (M06)
     b.add('career.skillTree', s.right - 520, 130, 490, 170, () => Scenes.go('careertree', { slot: this.slot, career: c }), {
@@ -77,7 +82,8 @@ const CareerHomeScene = {
     // The coach (M08); Records is still to come.
     b.add('career.coach', s.right - 520, 734, 240, 90, () => Scenes.go('careercoach', { slot: this.slot, career: c }), { size: 24, color: '#c9b3ff', icon: 'meta_coach',
       sub: () => (Coaches.active(c) ? T('coach.' + Coaches.active(c)) : T('coach.noneShort')) });
-    b.add('career.records', s.right - 270, 734, 240, 90, () => {}, { size: 22, icon: 'meta_records', disabled: true, sub: 'career.comingSoon' });
+    b.add('career.records', s.right - 270, 734, 240, 90, () => Scenes.go('records', { back: 'careerhome', slot: this.slot, career: c }), { size: 22, color: '#e9eef5', icon: 'meta_records',
+      sub: () => T('ach.short', { n: Object.keys(Save.data.achievements || {}).length }) });
     // tap the portrait area for the player panel
     b.add(() => '', s.left + 40, 150, 470, 470, () => this._open('player'), { color: 'rgba(0,0,0,0)' });
     b.items[b.items.length - 1].invisible = true;
@@ -201,7 +207,7 @@ const CareerHomeScene = {
     R.panel(x0, 115, w, 170, 'rgba(10,22,40,0.88)');
     R.text(T('career.selection'), x0 + 30, 150, 28, '#ffd23f', 'left');
     R.text(String(c.selection), x0 + w - 30, 150, 34, '#ffffff', 'right');
-    if (!S.comingSoon) {
+    if (S.gate) {
       CareerUI.meter(x0 + 30, 180, w - 60, 34, c.selection, CAREER_DATA.selection.max, '#ffb400',
         [{ at: S.gate.nearMiss, color: '#9be7ff', label: T('career.qualifierMark') }, { at: S.gate.threshold, color: '#9cff6a', label: T('career.promotionMark') }]);
     }
@@ -233,6 +239,10 @@ const CareerHomeScene = {
     } else if (c.phase === 'promoted') {
       Sprites.ui(S.art, x0 + w / 2, 530, 200, 180);
       R.text(T('career.readyForStage', { n: S.n, stage: CareerUI.pathwayLabel(c) }), x0 + w / 2, 660, 30, '#ffd23f');
+    } else if (c.phase === 'complete') {
+      Sprites.ui('milestone_career_retirement', x0 + w / 2, 520, 260, 200);
+      const beat = c.hooks.rivals && c.hooks.rivals.champion && c.hooks.rivals.champion.beaten;
+      R.text(T(beat ? 'career.completeChamp' : 'career.complete'), x0 + w / 2, 650, 30, '#ffd23f');
     } else if (c.phase === 'offers') {
       Sprites.ui('stage_contract_offer', x0 + w / 2, 530, 200, 180);
       R.text(T('career.offersWaiting'), x0 + w / 2, 660, 30, '#ffd23f');

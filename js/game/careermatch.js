@@ -72,7 +72,7 @@ const CareerMatch = {
     const fx = Career.next(c);
     if (!fx) return null;
     this.on = true; this.career = c; this.slot = slot; this.fixture = fx;
-    this.ticker = [];
+    this.ticker = []; this.tactic = 'steady';
     fx.attempt = (fx.attempt || 0) + 1;
     const S = Career.stage(c);
     const fmt = Dev.matchFormat || S.format;
@@ -122,6 +122,12 @@ const CareerMatch = {
     if (!this.assigned.length) this.assigned.push(0);
   },
 
+  // ---- captaincy (plan 8.12): simple between-over tactic calls in International+ matches ----
+  tactic: 'steady',
+  isCaptain() { return !!(this.on && this.career && this.career.captain && Career.stage(this.career).n >= 6); },
+  tacticFx() { return this.isCaptain() ? CAREER_DATA.captaincy.effects[this.tactic] : null; },
+  setTactic(t) { if (CAREER_DATA.captaincy.tactics.includes(t)) this.tactic = t; },
+
   ctx() { return this.on ? { slot: this.slot, n: this.fixture.n, pid: this.pid, assigned: this.assigned, tech: Tech.snapshot() } : null; },
 
   // ---- routing: live or simulated? ----
@@ -140,7 +146,9 @@ const CareerMatch = {
         bw = BowlerRules.aiPick(inn, others, Match.fatigue, rng);
       }
       const fam = Bowling.family(bw.family);
-      const field = Fielding.aiChoose({ phase: BowlerRules.phase(inn), kind: fam.kind, family: fam.id, wicketsFell: false }, rng);
+      let field = Fielding.aiChoose({ phase: BowlerRules.phase(inn), kind: fam.kind, family: fam.id, wicketsFell: false }, rng);
+      const tac = inn.bowlingSide === 'player' && this.tacticFx();
+      if (tac && tac.field) field = tac.field;                     // the captain's call sets the field (plan 8.12)
       Match.setBowler(inn, bw.id, field);
     }
     if (inn.battingSide === 'player') {
@@ -176,8 +184,9 @@ const CareerMatch = {
     Fielding.setPreset(inn.field, BowlerRules.phase(inn) === 'powerplay');
     Fielding.mods = Duel.fieldMods(Match.team(inn.bowlingSide), Fielding.preset);
     const r = SimMatch._streams('career:' + inn.index);
+    const tac = inn.battingSide === 'player' && this.tacticFx();
     const b = SimMatch.ball({ inn, bat, bowl, fatigue: Match.fatigue[bowl.id] || 0, cond: Match.cond,
-      fielding: Fielding.mods.fielding, phase: BowlerRules.phase(inn), index: inn.legal }, r);
+      fielding: Fielding.mods.fielding, phase: BowlerRules.phase(inn), index: inn.legal, aggression: tac ? tac.aggression : 0 }, r);
     const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, wicket: b.wicket });
     if (res.overDone || inn.ended) Match.overDone(inn);
     Fielding.clear();
@@ -222,6 +231,10 @@ const CareerMatch = {
   finish() {
     const c = this.career, fx = this.fixture;
     const perf = this.performance();
+    // What you did this match (ball-by-ball): for achievements and the Legacy Traits.
+    const mf = MatchFacts.of({ pid: this.pid });
+    perf.facts = { ppRuns: mf.ppRuns, spinRuns: mf.spinRuns, paceWickets: mf.paceWickets, newBallWickets: mf.newBallWickets, deathWickets: mf.deathWickets,
+      hatTricks: mf.hatTricks, chaseWinNotOut: mf.chaseWinNotOut, closerWin: mf.closerWin };
     const stageId = c.stage;                        // (a final can promote the career, so note the stage first)
     const summary = Career.finishMatch(c, fx, perf);
     // Match drops (plan 12.7): sometimes a league match, the Local Final when you win.
@@ -229,6 +242,12 @@ const CareerMatch = {
     summary.drop = Gear.matchDrop(c, Save.data, stageId, fx, summary.grade, summary.won);
     // Salary, contract, sponsor, rival, coach mastery, coach unlocks, events (M08).
     summary.life = CareerLife.afterMatch(c, Save.data, fx, summary, perf, stageId);
+    // Achievements (M09): this match, then the career and the account.
+    if (summary.grade === 'S') { const L = Achievements.life(Save.data); L.sGrades = (L.sGrades || 0) + 1; }
+    const rivalP = fx.rival && summary.life.rival && summary.life.rival.beaten && Match.teams.ai.players.find((p) => p.isRival);
+    const meP = Match.teams.player.players.find((p) => p.id === this.pid);
+    const extra = rivalP && meP ? { rivalGap: Teams.overall(rivalP) - Teams.overall(meP) } : {};
+    summary.achievements = Achievements.afterMatch(Save.data, { pid: this.pid }, c, extra).got.concat(Achievements.checkCareer(Save.data, c));
     summary.perf = perf;
     summary.opp = fx.opp;
     // Techniques used this match count toward their mastery (plan 11.4).
@@ -281,7 +300,15 @@ const CareerMatch = {
 // Career slot saving (plan 33): the career object in career.N, its summary
 // in the global save for the Career Select screen.
 const CareerSave = {
-  save(c, slot) { return Save.saveCareer(slot, c, Career.summary(c)); },
-  load(slot) { return Save.loadCareer(slot).then((c) => { if (c) { SkillTree.ensure(c); Gear.ensureCareer(c); } return c; }); },
+  save(c, slot) {
+    if (typeof Achievements !== 'undefined' && Save.data) Achievements.checkCareer(Save.data, c);   // career / account achievements
+    return Save.saveCareer(slot, c, Career.summary(c));
+  },
+  load(slot) {
+    return Save.loadCareer(slot).then((c) => {
+      if (c) { SkillTree.ensure(c); Gear.ensureCareer(c); if (typeof Achievements !== 'undefined' && Save.data) Achievements.claimBanked(Save.data, c); }
+      return c;
+    });
+  },
   remove(slot) { return Save.saveCareer(slot, null, null); },
 };

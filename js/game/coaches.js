@@ -48,6 +48,7 @@ const Coaches = {
     if (!chk.ok) return chk;
     c.hooks = c.hooks || {};
     c.hooks.coach = id;
+    const S = this.store(save); S.hired = S.hired || {}; S.hired[id] = 1;   // (achievement: hire every coach)
     return { ok: true };
   },
 

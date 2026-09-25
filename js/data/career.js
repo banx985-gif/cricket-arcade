@@ -195,10 +195,84 @@ const CAREER_DATA = {
       next: 'national',
     },
     {
-      id: 'national', n: 5, nameKey: 'career.stage.national', art: 'stage_national_development', comingSoon: true,
+      // Plan 8.11: the Development XI. 3 trial matches (role objectives), the last
+      // is the final trial. A miss: a short domestic qualifier block, then another
+      // trial (extra blocks keep the Selection Meter). Selection is permanent once earned.
+      id: 'national', n: 5, nameKey: 'career.stage.national', art: 'stage_national_development', format: 'quick5',
+      matches: 3,
+      teamRating: 66, opponentRating: [64, 69], finalOpponentRating: 71,
+      gate: { threshold: 70, nearMiss: 52, keyObjective: { finalGrade: 'B' } },
+      qualifier: { passGrade: 'B' },
+      extraBlock: { matches: 2 },
+      team: 'devxi', trials: true, sponsors: true, scouts: true, rival: { n: 2, id: 'technician' },
       milestone: 'milestone_national_callup',
+      next: 'international',
+    },
+    {
+      // International cricket: 5 matches against rotating national sides; a
+      // captaincy offer for exceptional careers (plan 8.12).
+      id: 'international', n: 6, nameKey: 'career.stage.international', art: 'stage_international_cricket', format: 'quick5',
+      matches: 5,
+      teamRating: 72, opponentRating: [70, 77], finalOpponentRating: 79,
+      gate: { threshold: 72, nearMiss: 54, keyObjective: { finalGrade: 'C' } },
+      qualifier: { passGrade: 'B' },
+      extraBlock: { matches: 2 },
+      team: 'national', captaincy: true, sponsors: true, rival: [{ n: 2, id: 'magician' }, { n: 4, id: 'veteran' }],
+      milestone: 'milestone_national_callup',
+      next: 'world',
+    },
+    {
+      // The World Nations Championship (CAREER_DATA.world): groups of 3, top two to the quarter-finals.
+      id: 'world', n: 7, nameKey: 'career.stage.world', art: 'stage_world_stage', format: 'quick5',
+      matches: 5,                               // 2 group matches + quarter + semi + final (going all the way)
+      teamRating: 78, opponentRating: [75, 84], finalOpponentRating: 86,
+      gate: { threshold: 70, nearMiss: 52, keyObjective: { reach: 'semi' } },
+      qualifier: { passGrade: 'B' },
+      extraBlock: { matches: 2 },
+      team: 'national', tournament: 'world', sponsors: true, rival: [{ n: 1, id: 'giant' }, { kind: 'quarter', id: 'trickster' }, { kind: 'final', id: 'captain' }],
+      milestone: 'milestone_world_stage_selection',
+      next: 'elite',
+    },
+    {
+      // The Elite Invitational: 3 gauntlet matches, then the Champion. The
+      // Phantom's secret invitation (EVENT_DATA.phantom) adds one match before the
+      // final. After the final the career is complete: retire (or a rematch).
+      id: 'elite', n: 8, nameKey: 'career.stage.elite', art: 'stage_elite_invitational', format: 'quick5',
+      matches: 4,
+      teamRating: 84, opponentRating: [82, 88], finalOpponentRating: 92,
+      team: 'national', elite: true, rival: { kind: 'final', id: 'champion' },
+      milestone: 'milestone_world_stage_selection',
+      final: true,
     },
   ],
+  // Stage 8's gauntlet sides (elite crests) and the Champion's XI.
+  elite: {
+    gauntlet: [
+      { id: 'masters', crest: 'elite_invitational_crest_02', colours: ['#16325c', '#e8b21c'] },
+      { id: 'legends', crest: 'elite_invitational_crest_01', colours: ['#6a3ab8', '#e8b21c'] },
+      { id: 'allstars', crest: 'elite_invitational_crest_02', colours: ['#b0122a', '#e8b21c'] },
+    ],
+    phantom: { id: 'phantoms', crest: 'elite_invitational_crest_01', colours: ['#1b1b1b', '#6a3ab8'] },
+    champion: { id: 'champions', crest: 'elite_invitational_crest_01', colours: ['#e8b21c', '#f2f2f2'] },
+  },
+  // The World Nations Championship (plan 8.6 Stage 7): the 12 origins' national sides.
+  world: {
+    groups: 4, perGroup: 3, pointsWin: 2,
+    simRuns: { base: 50, spread: 14, perRating: 0.9 },
+    teams: [
+      { id: 'australia', rating: 84, colours: ['#f5d020', '#1f8a4c'] }, { id: 'england', rating: 83, colours: ['#16325c', '#c8202f'] },
+      { id: 'india', rating: 85, colours: ['#2447b8', '#f39c12'] }, { id: 'newzealand', rating: 80, colours: ['#1b1b1b', '#f2f2f2'] },
+      { id: 'pakistan', rating: 81, colours: ['#0f9d58', '#f2f2f2'] }, { id: 'southafrica', rating: 82, colours: ['#1f8a4c', '#f5d020'] },
+      { id: 'srilanka', rating: 78, colours: ['#16325c', '#f5d020'] }, { id: 'bangladesh', rating: 76, colours: ['#1f8a4c', '#c8202f'] },
+      { id: 'afghanistan', rating: 77, colours: ['#2447b8', '#c8202f'] }, { id: 'westindies', rating: 79, colours: ['#7f1734', '#f5d020'] },
+      { id: 'ireland', rating: 74, colours: ['#0f9d58', '#2447b8'] }, { id: 'zimbabwe', rating: 73, colours: ['#c8202f', '#f5d020'] },
+    ],
+  },
+  // Captaincy (plan 8.12): offered in International cricket after this many
+  // matches, if you've had enough A/S grades in the stage or strong Composure.
+  captaincy: { afterMatches: 3, gradesA: 2, composure: 70, tactics: ['attack', 'steady', 'defend'],
+    // what a tactic call does in the simulated balls: batting aggression / the field
+    effects: { attack: { aggression: 0.18, field: 'attacking' }, steady: { aggression: 0, field: null }, defend: { aggression: -0.15, field: 'defensive' } } },
   // Names for generated representative sides (team: 'stage'): a town from the
   // origin pack + the stage's teamSuffix; 'domestic' picks one of these.
   domesticSuffixes: ['Titans', 'Royals', 'Strikers', 'Stallions', 'Hawks', 'Knights', 'Warriors'],

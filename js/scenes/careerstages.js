@@ -111,6 +111,7 @@ const EventText = {
     if (fx.coins) out.push('+' + fx.coins + ' ' + T('event.fx.coins'));
     if (fx.match) out.push(Object.entries(fx.match.stats).map(([k, v]) => '+' + v + ' ' + T('stat.' + k)).join(' ') + ' ' + T('event.fx.thisMatch'));
     if (fx.sponsor) out.push(T('event.fx.sponsor'));
+    if (fx.captain) out.push(T('event.fx.captain'));
     return out.join(' · ') || T('event.fx.none');
   },
   applied(list) {
@@ -239,9 +240,11 @@ const CareerTableScene = {
   render(ctx) {
     const c = this.career, tour = c.tour, cx = CONFIG.LOGICAL_W / 2;
     CareerUI.bg(ctx, 'bg_scout_room', 0.7);
-    R.text(T('table.title'), cx, 60, 50, '#ffffff');
+    const world = Tournament.fmt(tour) === 'world', F = Tournament.F(Tournament.fmt(tour));
+    R.text(T(world ? 'table.titleWorld' : 'table.title'), cx, 60, 50, '#ffffff');
     if (!tour) return this.buttons.draw();
-    R.text(T('table.sub'), cx, 112, 22, '#ffe28a', 'center', false);
+    R.text(T(world ? 'table.subWorld' : 'table.sub'), cx, 112, 22, '#ffe28a', 'center', false);
+    const adv = world ? 2 : 1, rowH = F.perGroup === 3 ? 96 : 78;
     // the four groups
     for (let gi = 0; gi < tour.groups.length; gi++) {
       const x = cx - 900 + (gi % 2) * 620, y = 150 + Math.floor(gi / 2) * 440, rows = Tournament.standings(tour, gi);
@@ -249,41 +252,45 @@ const CareerTableScene = {
       R.text(T('table.group', { g: 'ABCD'[gi] }), x + 24, y + 34, 28, '#ffd23f', 'left');
       ['P', 'W', 'L', 'PTS', 'NRR'].forEach((h, i) => R.text(T('table.h.' + h.toLowerCase()), x + 330 + i * 56, y + 34, 16, '#9be7ff', 'center', false));
       rows.forEach((r, i) => {
-        const ry = y + 92 + i * 78, me = r.id === tour.mine;
-        if (i === 0) { R.roundRect(x + 10, ry - 34, 580, 68, 16, 'rgba(255,210,63,0.16)'); }
-        Sprites.ui(Tournament.team(r.id).crest, x + 52, ry, 60, 60);
+        const ry = y + 92 + i * rowH, me = r.id === tour.mine;
+        if (i < adv) R.roundRect(x + 10, ry - 34, 580, 68, 16, 'rgba(255,210,63,0.16)');
+        Sprites.ui(Tournament.crest(r.id), x + 52, ry, 60, 60);
         CareerTreeScene._fit(Tournament.name(r.id), x + 92, ry, 200, 22, me ? '#9cff6a' : '#ffffff');
         [r.p, r.w, r.l, r.pts, (r.nrr >= 0 ? '+' : '') + r.nrr.toFixed(2)].forEach((v, j) => R.text(String(v), x + 330 + j * 56, ry, j === 3 ? 24 : 18, j === 3 ? '#ffd23f' : '#ffffff', 'center', false));
       });
-      R.line(x + 20, y + 131, x + 580, y + 131, '#ffd23f', 2);
-      R.text(T('table.qualify'), x + 580, y + 146, 14, '#ffd23f', 'right', false);
+      const ly = y + 92 + (adv - 0.5) * rowH;
+      R.line(x + 20, ly, x + 580, ly, '#ffd23f', 2);
+      R.text(T(world ? 'table.qualifyWorld' : 'table.qualify'), x + 580, ly + 15, 14, '#ffd23f', 'right', false);
     }
-    // the knockouts
-    const bx = cx + 360;
-    R.panel(bx, 150, 540, 860, 'rgba(10,22,40,0.94)', '#ffd23f');
-    R.text(T('table.knockouts'), bx + 270, 190, 30, '#ffd23f');
-    const semi = tour.results.filter((m) => m.round === 'semi'), fin = tour.results.find((m) => m.round === 'final');
-    const box = (m, y, label, pending) => {
-      R.text(label, bx + 270, y - 26, 20, '#9be7ff', 'center', false);
-      R.roundRect(bx + 30, y, 480, 150, 18, 'rgba(20,34,56,0.95)', 'rgba(255,255,255,0.3)', 2);
-      const sides = m ? [m.a, m.b] : pending || [];
-      sides.forEach((id, i) => {
-        if (!id) return;
-        const yy = y + 42 + i * 66, won = m && m.winner === id;
-        Sprites.ui(Tournament.team(id).crest, bx + 76, yy, 52, 52);
-        CareerTreeScene._fit(Tournament.name(id), bx + 112, yy, 250, 22, id === tour.mine ? '#9cff6a' : won ? '#ffd23f' : '#ffffff');
-        if (m) R.text(String(i ? m.rb : m.ra), bx + 470, yy, 26, won ? '#ffd23f' : '#b8c6d6', 'right');
-      });
-      if (!sides.length) R.text(T('table.tbd'), bx + 270, y + 75, 24, '#8a96a3', 'center', false);
-    };
-    const groupsDone = tour.results.filter((m) => /^g/.test(m.round)).length >= 24;
-    const w = groupsDone ? [0, 1, 2, 3].map((gi) => Tournament.winner(tour, gi)) : [];
-    box(semi.find((m) => w.length && (m.a === w[0] || m.b === w[0])), 260, T('table.semi', { a: 'A', b: 'B' }), w.length ? [w[0], w[1]] : null);
-    box(semi.find((m) => w.length && (m.a === w[2] || m.b === w[2])), 480, T('table.semi', { a: 'C', b: 'D' }), w.length ? [w[2], w[3]] : null);
-    box(fin, 720, T('table.final'), null);
+    // the knockouts (quarter-finals only in the World Nations Championship)
+    const bx = cx + 360, rounds = (world ? ['quarter', 'semi', 'final'] : ['semi', 'final']);
+    R.panel(bx, 150, 540, 880, 'rgba(10,22,40,0.94)', '#ffd23f');
+    R.text(T('table.knockouts'), bx + 270, 185, 28, '#ffd23f');
+    const size = { quarter: 4, semi: 2, final: 1 };
+    const bh = world ? 76 : 150;
+    let y = 225;
+    for (const rd of rounds) {
+      R.text(T('table.round.' + rd), bx + 270, y + 6, 18, '#9be7ff', 'center', false);
+      y += 20;
+      const pairs = tour.bracket[rd] || [];
+      for (let i = 0; i < size[rd]; i++) {
+        const pr = pairs[i], m = pr && tour.results.find((q) => q.round === rd && ((q.a === pr[0] && q.b === pr[1]) || (q.a === pr[1] && q.b === pr[0])));
+        R.roundRect(bx + 30, y, 480, bh - 8, 14, 'rgba(20,34,56,0.95)', 'rgba(255,255,255,0.3)', 2);
+        if (!pr) R.text(T('table.tbd'), bx + 270, y + (bh - 8) / 2, 20, '#8a96a3', 'center', false);
+        else pr.forEach((id, j) => {
+          if (!id) return;
+          const yy = y + (world ? 18 + j * 32 : 42 + j * 66), won = m && m.winner === id, sz = world ? 28 : 52;
+          Sprites.ui(Tournament.crest(id), bx + 70, yy, sz, sz);
+          CareerTreeScene._fit(Tournament.name(id), bx + 100, yy, 280, world ? 18 : 22, id === tour.mine ? '#9cff6a' : won ? '#ffd23f' : '#ffffff');
+          if (m) R.text(String(m.a === id ? m.ra : m.rb), bx + 470, yy, world ? 20 : 26, won ? '#ffd23f' : '#b8c6d6', 'right');
+        });
+        y += bh;
+      }
+      y += 10;
+    }
     const champ = Tournament.champion(tour);
-    if (champ) R.text(T('table.champion', { name: Tournament.name(champ) }), bx + 270, 925, 26, champ === tour.mine ? '#9cff6a' : '#ffd23f');
-    if (tour.phase === 'done' && champ !== tour.mine) R.text(T('table.youReached', { r: T('table.reach.' + tour.best) }), bx + 270, 965, 20, '#d8e4f0', 'center', false);
+    if (champ) R.text(T('table.champion', { name: Tournament.name(champ) }), bx + 270, 990, 24, champ === tour.mine ? '#9cff6a' : '#ffd23f');
+    if (tour.phase === 'done' && champ !== tour.mine) R.text(T('table.youReached', { r: T('table.reach.' + tour.best) }), bx + 270, 1018, 18, '#d8e4f0', 'center', false);
     this.buttons.draw();
   },
 };

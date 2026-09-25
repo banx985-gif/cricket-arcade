@@ -14,6 +14,8 @@ const CareerAssets = {
     Sprites.loadGroup('skilltree');              // technique icons (M06)
     Sprites.loadGroup('skilltreeArt');           // Wicket Tree art
     Sprites.loadGroup('careerWorld');            // stages 2–4, coaches, rivals, franchises, sponsors (M08)
+    Sprites.loadGroup('careerLate');             // stages 5–8 (M09)
+    Sprites.loadGroup('legacy');                 // Legacy traits, medals, Hall of Fame (M09)
   },
 };
 
@@ -51,6 +53,9 @@ const CareerSelectScene = {
     const b = this.buttons;
     b.clear();
     b.add('common.back', s.left + 24, s.top + 24, 220, 96, () => Scenes.go('title'), { size: 40, color: '#e9eef5' });
+    // Retired careers live in the Hall of Fame (the archive, plan 5.4).
+    b.add('hof.button', s.right - 420, s.top + 24, 390, 96, () => Scenes.go('halloffame', { back: 'careerselect' }), { size: 28, color: '#ffd23f',
+      sub: () => T('hof.count', { n: (Save.data.hallOfFame || []).length }) });
     const w = 540, gap = 30, x0 = cx - (w * 3 + gap * 2) / 2;
     this.cards = [];
     for (let i = 0; i < CAREER_DATA.slots; i++) {

@@ -313,7 +313,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     let wicket = null;
     if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') wicket = key;
     else if (run && run.runOut) wicket = 'runout';
-    const res = inn.apply({ kind, batRuns, boundary, wicket });
+    const res = inn.apply({ kind, batRuns, boundary, wicket, contact: this.shot ? this.shot.grade : null });
     if (res.overDone || inn.ended) Match.overDone(inn);
     if (Tech.mine(this.batterP)) Tech.batBallEnd(key, kind === 'legal', res.wicket ? wicket : null);
     TechUI.btns = [];

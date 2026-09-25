@@ -191,6 +191,7 @@ const MatchResultScene = {
       return;
     }
     Save.recordMatch(Match.fmt.id, this.won);
+    Achievements.afterMatch(Save.data, {}, null); Achievements.checkAccount(Save.data, null);   // (M09)
     // Anything earned by this result (e.g. field settings at Quick Match win milestones).
     this.unlocked = Unlocks.check();
     if (this.unlocked.length) Save.write();

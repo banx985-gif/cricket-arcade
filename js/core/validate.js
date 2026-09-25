@@ -262,6 +262,27 @@ const Validate = {
       for (const r of ['group', 'semi', 'final', 'champion']) str('table.reach.' + r, 'tournament');
     }
 
+    // Legacy Traits and achievements (M09)
+    if (typeof LEGACY_DATA !== 'undefined' && typeof ACHIEVEMENT_DATA !== 'undefined') {
+      dupes('legacy traits', LEGACY_DATA.traits, 'id');
+      if (LEGACY_DATA.traits.length !== 18) p.push('there must be 18 Legacy Traits (plan 8.22)');
+      for (const t of Object.values(LEGACY_DATA.roleDefault)) if (!LEGACY_DATA.traits.some((x) => x.id === t)) p.push('trait role default "' + t + '" is not a trait');
+      for (const t of LEGACY_DATA.traits) { cart(t.icon, 'trait ' + t.id); str('trait.' + t.id, 'trait'); str('trait.' + t.id + '.desc', 'trait'); if (!(t.need > 0)) p.push('trait "' + t.id + '" needs a threshold'); }
+      const A = ACHIEVEMENT_DATA, ids = dupes('achievements', A.list, 'id');
+      if (ids.size !== 100) p.push('there must be 100 achievements (docs/ACHIEVEMENTS_v1.md), not ' + ids.size);
+      for (const t of Object.values(A.tiers)) cart(t, 'medal');
+      for (const k of A.cats) str('ach.cat.' + k, 'achievement category');
+      for (const a of A.list) {
+        str('ach.' + a.id, 'achievement'); str('ach.' + a.id + '.desc', 'achievement');
+        if (!A.tiers[a.tier]) p.push('achievement "' + a.id + '" has unknown tier');
+        if (!A.cats.includes(a.cat)) p.push('achievement "' + a.id + '" has unknown category');
+        if (!['match', 'life', 'career', 'account'].includes(a.cond.on) || !a.cond.stat || !(a.cond.min > 0)) p.push('achievement "' + a.id + '" has a bad condition');
+        if (a.reward.item && !EQUIPMENT_DATA.items.some((it) => it.id === a.reward.item)) p.push('achievement "' + a.id + '" rewards unknown item');
+      }
+      for (const r of EVENT_DATA.rivals) if (!CAREER_DATA.stages.some((st) => [].concat(st.rival || []).some((x) => x.id === r.id)) && r.id !== 'phantom') p.push('rival "' + r.id + '" never appears in a stage');
+      if (EVENT_DATA.rivals.length !== 12) p.push('there must be 12 rivals (plan 14.1)');
+    }
+
     // Manifest: every entry needs a file path, every id once (object keys are unique by nature)
     for (const [gname, g] of Object.entries(ASSET_MANIFEST.groups)) {
       for (const [id, e] of Object.entries(g)) if (!e || !e.src) p.push(`asset "${id}" in group ${gname} has no file path`);

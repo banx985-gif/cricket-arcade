@@ -29,6 +29,9 @@ const EVENT_DATA = {
     // A sponsor offer is an event too (plan 8.13): only when the stage allows sponsors.
     { id: 'sponsor_offer',    portrait: 'sponsor', minStage: 2, sponsor: true, weight: 2,
       choices: [{ id: 'accept', fx: { sponsor: true } }, { id: 'decline', fx: {} }] },
+    // Special: never random. Offered in International cricket (CAREER_DATA.captaincy).
+    { id: 'captaincy_offer',  portrait: 'support_umpire', minStage: 6, special: true,
+      choices: [{ id: 'accept', fx: { captain: true } }, { id: 'decline', fx: { selection: 3 } }] },
   ],
 
   // ---- sponsors (plan 8.16): fictional, 1–3 fixtures, one objective, one reward ----
@@ -63,5 +66,35 @@ const EVENT_DATA = {
     { id: 'cannon',   art: 'rival_cannon',   slot: 8, boost: 24, stats: ['delivery', 'accuracy', 'fitness'], family: 'fast',
       objective: { bat: { id: 'runs', n: 20 }, bowl: { id: 'economy', n: 8 }, all: { id: 'runs', n: 15 } }, reward: { item: 'acc_rival_token' },
       buildUp: [{ id: 'hook', fx: { match: { stats: { power: 5, timing: 3 } } } }, { id: 'duck', fx: { match: { stats: { contact: 5, composure: 3 } } } }] },
+    // ---- M09: the rest (Stages 5–8) ----
+    { id: 'technician', art: 'rival_technician', slot: 3, boost: 24, stats: ['placement', 'timing', 'contact'],
+      objective: { bat: { id: 'runs', n: 25 }, bowl: { id: 'wickets', n: 2 }, all: { id: 'win' } }, reward: { technique: 'cover_drive_mastery' },
+      buildUp: [{ id: 'mirror', fx: { match: { stats: { placement: 5, timing: 3 } } } }, { id: 'tight', fx: { match: { stats: { accuracy: 5, control: 4 } } } }] },
+    { id: 'magician',   art: 'rival_magician',   slot: 9, boost: 26, stats: ['deception', 'movement', 'control'], family: 'legspin',
+      objective: { bat: { id: 'runs', n: 22 }, bowl: { id: 'wickets', n: 2 }, all: { id: 'runs', n: 15 } }, reward: { technique: 'googly_mastery' },
+      buildUp: [{ id: 'read', fx: { match: { stats: { timing: 5, contact: 4 } } } }, { id: 'feet', fx: { match: { stats: { running: 4, power: 4 } } } }] },
+    { id: 'veteran',    art: 'rival_veteran',    slot: 4, boost: 26, stats: ['composure', 'contact', 'timing'],
+      objective: { bat: { id: 'notOut' }, bowl: { id: 'dots', n: 7 }, all: { id: 'win' } }, reward: { technique: 'iron_focus' },
+      buildUp: [{ id: 'respect', fx: { match: { stats: { composure: 6, control: 3 } } } }, { id: 'rattle', fx: { match: { stats: { delivery: 5, deception: 3 } } } }] },
+    { id: 'giant',      art: 'rival_giant',      slot: 5, boost: 28, stats: ['power', 'running', 'fitness'],
+      objective: { bat: { id: 'boundaries', n: 3 }, bowl: { id: 'economy', n: 8 }, all: { id: 'win' } }, reward: { technique: 'power_surge' },
+      buildUp: [{ id: 'fullbalance', fx: { match: { stats: { accuracy: 6, control: 3 } } } }, { id: 'slug', fx: { match: { stats: { power: 6, timing: 2 } } } }] },
+    { id: 'trickster',  art: 'rival_trickster',  slot: 7, boost: 28, stats: ['deception', 'delivery', 'movement'], family: 'swing',
+      objective: { bat: { id: 'runs', n: 25 }, bowl: { id: 'wickets', n: 2 }, all: { id: 'win' } }, reward: { technique: 'reverse_break' },
+      buildUp: [{ id: 'watch', fx: { match: { stats: { timing: 5, composure: 3 } } } }, { id: 'swing', fx: { match: { stats: { movement: 5, deception: 3 } } } }] },
+    { id: 'captain',    art: 'rival_captain',    slot: 4, boost: 28, stats: ['composure', 'timing', 'accuracy', 'control', 'fielding'],
+      objective: { bat: { id: 'win' }, bowl: { id: 'win' }, all: { id: 'win' } }, reward: { technique: 'field_general' },
+      buildUp: [{ id: 'lead', fx: { match: { stats: { composure: 5, timing: 3, accuracy: 3 } } } }, { id: 'outthink', fx: { match: { stats: { deception: 4, placement: 4 } } } }] },
+    // The Phantom: the secret invitational rival (hidden until met). The Champion: the final boss.
+    { id: 'phantom',    art: 'rival_phantom',    slot: 6, boost: 30, stats: ['timing', 'power', 'deception', 'delivery', 'composure'], secret: true,
+      objective: { bat: { id: 'runs', n: 25 }, bowl: { id: 'wickets', n: 2 }, all: { id: 'win' } }, reward: { item: 'bat_phantom_grip' },
+      buildUp: [{ id: 'accept', fx: { match: { stats: { timing: 5, delivery: 5 } } } }, { id: 'focus', fx: { match: { stats: { composure: 8 } } } }] },
+    { id: 'champion',   art: 'rival_champion',   slot: 3, boost: 30, stats: ['timing', 'power', 'placement', 'composure', 'delivery', 'accuracy'], final: true,
+      objective: { bat: { id: 'win' }, bowl: { id: 'win' }, all: { id: 'win' } }, reward: { item: 'acc_champion_crest', coach: 'legendary' },
+      buildUp: [{ id: 'everything', fx: { match: { stats: { power: 5, delivery: 5, composure: 4 } } } }, { id: 'legacy', fx: { match: { stats: { timing: 5, accuracy: 5, composure: 4 } } } }] },
   ],
+  // The Phantom's secret invitation: when Stage 8 starts, a career that has
+  // beaten at least this many different rivals gets one extra match (before the
+  // Champion) against The Phantom.
+  phantom: { rivalsBeaten: 6 },
 };

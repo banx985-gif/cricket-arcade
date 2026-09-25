@@ -40,6 +40,8 @@ const TitleScene = {
       { size: 34, color: '#e9eef5' });
     this.topBtns.add('title.collection', s.left + 24, s.top + 24, 330, 96, () => Scenes.go('collection', { back: 'title' }),
       { size: 28, color: '#9be7ff', icon: 'icon_collection' });
+    this.topBtns.add('title.records', s.left + 24, s.top + 132, 330, 90, () => Scenes.go('records', { back: 'title' }), { size: 28, color: '#e9eef5', icon: 'meta_records' });
+    this.topBtns.add('title.hof', s.left + 24, s.top + 232, 330, 80, () => Scenes.go('halloffame', { back: 'title' }), { size: 24, color: '#ffd23f' });
     this.resumeBtns.clear();
     this.resumeBtns.add('resume.resume', cx - 430, 640, 420, 120, () => this._resume(), { size: 38 });
     this.resumeBtns.add('resume.abandon', cx + 10, 640, 420, 120, () => this._abandon(), { size: 40, color: '#e9eef5' });

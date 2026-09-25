@@ -292,8 +292,10 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     let wicket = null;
     if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') wicket = key;
     else if (run && run.runOut) wicket = 'runout';
+    const thr = ThrowMeter.m && ThrowMeter.m.tapped;
+    const fam = this.bowler && Bowling.family(this.bowler.family), dtype = fam && fam.deliveries[this.typeIdx] ? fam.deliveries[this.typeIdx].id : null;
     ThrowMeter.stop();
-    const res = inn.apply({ kind, batRuns, boundary, wicket });
+    const res = inn.apply({ kind, batRuns, boundary, wicket, dtype, thr });
     if (res.overDone || inn.ended) Match.overDone(inn);
     if (Tech.mine(this.bowler)) Tech.bowlBallEnd(key, kind === 'legal', !!res.wicket, res.runs);
     TechUI.btns = [];

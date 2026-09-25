@@ -90,6 +90,9 @@ const Main = {
     Scenes.register('careeroffers', CareerOffersScene);
     Scenes.register('careertable', CareerTableScene);
     Scenes.register('careercoach', CareerCoachScene);
+    Scenes.register('careerretire', CareerRetireScene);
+    Scenes.register('halloffame', HallOfFameScene);
+    Scenes.register('records', RecordsScene);
     Scenes.go('boot');
 
     this._lastT = performance.now();
@@ -126,10 +129,12 @@ const Main = {
         Effects.updateReal(dt);
         Dev.update(dt);
         Scenes.update(dt * scale, dt);
+        AchievementToast.update(dt);
       }
       Display.beginFrame();
       Scenes.render(Display.ctx);
       Stadium.drawLayerOverlay(Display.ctx);
+      AchievementToast.draw(Display.ctx);           // an achievement just earned (M09)
       Dev.render(Display.ctx, this.fps);
       if (typeof Validate !== 'undefined') Validate.render(Display.ctx);
       if (this.tapToContinue) this._drawTapToContinue(Display.ctx, dt);

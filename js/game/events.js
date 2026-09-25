@@ -17,7 +17,7 @@ const Events = {
   eligible(c) {
     const S = Career.stage(c), last = c.hooks && c.hooks.events && c.hooks.events.last;
     return EVENT_DATA.events.filter((e) => {
-      if (e.id === last || S.n < e.minStage) return false;
+      if (e.special || e.id === last || S.n < e.minStage) return false;
       if (e.sponsor && (!S.sponsors || c.sponsor)) return false;
       const w = e.when || {};
       if (w.energyBelow !== undefined && c.energy >= w.energyBelow) return false;
@@ -77,6 +77,7 @@ const Events = {
       out.push({ k: 'stat', stat: key, n: fx.stat.n });
     }
     if (fx.match) { c.matchBuff = { stats: Object.assign({}, fx.match.stats) }; out.push({ k: 'match', stats: fx.match.stats }); }
+    if (fx.captain) { c.captain = { stage: c.stage, since: (c.history || []).length }; out.push({ k: 'captain', n: 1 }); }
     return out;
   },
 };
@@ -142,12 +143,14 @@ const Rivals = {
   rival(id) { return EVENT_DATA.rivals.find((r) => r.id === id) || null; },
   flags(c) { c.hooks.rivals = c.hooks.rivals || {}; return c.hooks.rivals; },
   beatenOnAccount(save, id) { return !!(save && save.collection && save.collection.rivals && save.collection.rivals[id]); },
-  // The rival scheduled for fixture number n in this stage (or null).
-  forFixture(stage, n) {
+  // The rival scheduled for this fixture (by number in the stage, or by kind: 'final', 'quarter').
+  forFixture(stage, n, kind) {
     const list = [].concat(stage.rival || []);
-    const hit = list.find((x) => x.n === n);
+    const hit = list.find((x) => (x.n !== undefined && x.n === n && !x.kind) || (x.kind && x.kind === kind));
     return hit ? hit.id : null;
   },
+  // Different rivals this career has beaten.
+  beatenCount(c) { return Object.values((c.hooks && c.hooks.rivals) || {}).filter((f) => f.beaten).length; },
   // The boss objective for this career's role.
   objective(c, id) {
     const O = this.rival(id).objective, role = c.player.role;
@@ -190,11 +193,13 @@ const Rivals = {
     if (rc.length) out.coachUnlocked = rc;
     return out;
   },
+  // A reward can have several parts (the Champion: an item and a coach).
   giveReward(save, rw) {
-    if (rw.coach) { Coaches.unlock(save, rw.coach); return { coach: rw.coach }; }
-    if (rw.item) { Gear.grant(save, rw.item, 'rival'); return { item: rw.item }; }
-    if (rw.technique) { SkillTree.discover(save, rw.technique); return { technique: rw.technique }; }
-    return {};
+    const out = {};
+    if (rw.coach) { Coaches.unlock(save, rw.coach); out.coach = rw.coach; }
+    if (rw.item) { Gear.grant(save, rw.item, 'rival'); out.item = rw.item; }
+    if (rw.technique) { SkillTree.discover(save, rw.technique); out.technique = rw.technique; }
+    return out;
   },
 };
 
@@ -220,8 +225,20 @@ const CareerLife = {
     if (coach) Coaches.addUse(save, coach, 1);
     if (summary.gate && summary.gate.result === 'promoted') {
       out.coachesUnlocked = Coaches.unlockForStage(save, Career.stage(c).n);
-    } else if (c.phase === 'season') Events.roll(c);
+    } else if (c.phase === 'season') {
+      if (this.captaincyDue(c, stageId)) { c.pendingEvent = { id: 'captaincy_offer' }; c.captainOffered = true; out.captaincyOffer = true; }
+      else Events.roll(c);
+    }
     return out;
+  },
+  // Plan 8.12: exceptional International careers are offered the captaincy (once).
+  captaincyDue(c, stageId) {
+    const S = CAREER_DATA.stages.find((x) => x.id === stageId), K = CAREER_DATA.captaincy;
+    if (!S || !S.captaincy || c.captain || c.captainOffered || c.stage !== stageId) return false;
+    const here = c.history.filter((h) => h.stage === stageId);
+    if (here.length < K.afterMatches) return false;
+    const good = here.filter((h) => h.grade === 'A' || h.grade === 'S').length;
+    return good >= K.gradesA || Career.effectiveStats(c).composure >= K.composure;
   },
   // The contract objective (checked when the tournament is over).
   contractMet(c) {

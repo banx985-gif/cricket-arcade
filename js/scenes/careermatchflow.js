@@ -86,6 +86,9 @@ const CareerSimScene = {
     const s = Display.safe;
     this.buttons.clear();
     this.buttons.add('career.skip', s.right - 360, s.bottom - 150, 330, 120, () => { this.fast = true; }, { size: 44, color: '#ffd23f' });
+    // Captain's calls (plan 8.12): attack / steady / defend, any time between balls.
+    if (CareerMatch.isCaptain()) CAREER_DATA.captaincy.tactics.forEach((t, i) => this.buttons.add(() => T('captain.' + t), s.left + 30 + i * 250, s.bottom - 140, 230, 110,
+      () => CareerMatch.setTactic(t), { size: 30, color: '#e9eef5' }).tag = 'tactic_' + t);
     Stadium.setConditions(Match.cond);
   },
 
@@ -154,7 +157,12 @@ const CareerSimScene = {
       R.text(T(this.handover.kind === 'bat' ? 'career.yourTurnBat' : 'career.yourTurnBowl'), 0, 0, 64, '#9cff6a');
       ctx.restore();
       R.text(T('career.getReady'), cx, 610, 28, '#ffffff', 'center', false);
-    } else this.buttons.draw();
+    } else {
+      this.buttons.draw();
+      // the captain's call in force
+      const on = this.buttons.items.find((b) => b.tag === 'tactic_' + CareerMatch.tactic);
+      if (on) { R.roundRect(on.x - 6, on.y - 6, on.w + 12, on.h + 12, 24, null, '#ffd23f', 6); R.text(T('captain.title'), s.left + 400, s.bottom - 170, 24, '#ffd23f', 'center'); }
+    }
   },
 };
 

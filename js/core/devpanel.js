@@ -77,7 +77,7 @@ const Dev = {
       b.add(() => T('dev.tab.' + t), cx - 775 + i * 310, 150, 300, 88, () => { this.tab = t; this._layout(); },
         { size: 30, color: this.tab === t ? '#ffd23f' : '#6b7a8c', textColor: this.tab === t ? '#000' : '#fff' });
     });
-    const w = 600, h = 92, gap = 16;
+    const w = 600, h = 88, gap = 6;                 // (rows 94 apart: the CAREER tab has 8 rows)
     const L = cx - w - gap / 2, Rr = cx + gap / 2;
     const row = (i) => 270 + i * (h + gap);
     const opts = { size: 30, color: '#e9eef5' };
@@ -134,6 +134,10 @@ const Dev = {
       // match instantly, force an event / a sponsor offer, promote now.
       const home = () => { if (Scenes.currentName === 'careerhome') { CareerHomeScene._layout(); CareerHomeScene._checkEvent(); } };
       ['regional', 'domestic', 'franchise'].forEach((id, i) => add(1, 1 + i, () => T('dev.career.jump', { n: i + 2 }), withCareer((c) => { this._jumpStage(c, id); this.hide(); home(); })));
+      // M09: Stages 5–8, and retire now
+      ['national', 'international', 'world', 'elite'].forEach((id, i) => add(i % 2, 5 + Math.floor(i / 2), () => T('dev.career.jump', { n: i + 5 }), withCareer((c) => { this._jumpStage(c, id); this.hide(); home(); })));
+      add(0, 7, () => T('dev.career.retire'), withCareer((c) => { c.phase = 'complete'; c.fixtures.forEach((f) => { f.played = true; }); this.hide(); Scenes.go('careerretire', { slot: CareerHomeScene.slot, career: c }); }));
+      add(1, 7, () => T('dev.career.captain'), withCareer((c) => { c.captain = { stage: c.stage, since: c.history.length }; }));
       add(1, 4, () => T('dev.career.promote'), withCareer((c) => {
         if (c.phase !== 'season') return;
         Career.promote(c); const got = Coaches.unlockForStage(Save.data, Career.stage(c).n); Save.write();

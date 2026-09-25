@@ -28,7 +28,7 @@ const SimMatch = {
     const freeHit = s.inn.freeHit || noBall;
 
     const dec = AIBatter.decide(del, {
-      releaseGrade: ch.grade, pressure: Duel.pressure(s.inn), freeHit, timingBias: del.timingBias,
+      releaseGrade: ch.grade, pressure: Duel.pressure(s.inn), freeHit, timingBias: del.timingBias, chaseBoost: s.aggression || 0,
       bat, bowl, fatigue: s.fatigue,
     }, r.ai);
     const tIdeal = del.sim.contactIdx * CONFIG.PHYSICS_STEP;

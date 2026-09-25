@@ -451,7 +451,7 @@ const CareerTreeScene = {
       TreeArt.draw(SKILL_TREE_DATA.art.token, cx - 330, 260, 110);
       R.text(T('tree.pointsTitle'), cx + 40, 260, 52, '#ffd23f');
       const rows = [
-        [T('tree.src.level'), t.sources.level || 0], [T('tree.src.promotion'), t.sources.promotion || 0], [T('tree.src.rival'), t.sources.rival || 0],
+        [T('tree.src.level'), t.sources.level || 0], [T('tree.src.promotion'), t.sources.promotion || 0], [T('tree.src.rival'), t.sources.rival || 0], [T('tree.src.achievement'), t.sources.achievement || 0],
       ];
       for (const [b, n] of Object.entries(t.free)) if (n + (t.freeUsed[b] || 0) > 0) rows.push([T('tree.src.free', { branch: T('tree.branch.' + b) }), n + (t.freeUsed[b] || 0)]);
       rows.push([T('tree.src.spent'), -(t.spent + Object.values(t.freeUsed).reduce((a, z) => a + z, 0))]);

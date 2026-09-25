@@ -30,6 +30,11 @@ class Innings {
     this.overBowlers = [];
     this.bowlerFigs = {};
     this.field = null;                         // field preset for this over
+    // Ball-by-ball log (M09: achievements, Legacy Traits): one small entry per ball.
+    //   b striker no · w bowler id · k 'l'|'w'|'n' · r runs · x boundary · o wicket
+    //   fh free hit · n legal balls after · tot innings total after
+    //   c contact grade · d delivery type · t throw grade (live play only)
+    this.log = [];
     this.ended = false;
     this.endReason = null;
   }
@@ -49,8 +54,10 @@ class Innings {
   }
 
   // b: { kind: 'legal'|'wide'|'noball', batRuns (ran), boundary: 0|4|6,
-  //      wicket: null|'bowled'|'caught'|'lbw'|'hitwicket'|'runout' }
+  //      wicket: null|'bowled'|'caught'|'lbw'|'hitwicket'|'runout',
+  //      contact / dtype / thr: optional details for the log }
   apply(b) {
+    const sNo = this.striker;
     const PR = WICKET_RUSH_DATA.classic.pressure;
     const kind = b.kind || 'legal';
     const batRuns = b.batRuns || 0, boundary = b.boundary || 0;
@@ -99,6 +106,15 @@ class Innings {
         if (this.wickets < this.maxWickets && this.nextBatter <= 11) this.striker = this.nextBatter++;
       }
     }
+
+    if (!this.log) this.log = [];
+    const e = { b: sNo, w: bid || null, k: kind === 'legal' ? 'l' : kind === 'wide' ? 'w' : 'n', r: res.runs, x: boundary, n: this.legal, tot: this.runs };
+    if (res.wicket) e.o = b.wicket;
+    if (wasFreeHit) e.fh = 1;
+    if (b.contact) e.c = b.contact;
+    if (b.dtype) e.d = b.dtype;
+    if (b.thr) e.t = b.thr;
+    this.log.push(e);
 
     res.symbol = res.wicket ? 'W' : kind === 'wide' ? 'Wd' : kind === 'noball' ? 'Nb'
       : boundary ? String(boundary) : batRuns ? String(batRuns) : '•';
