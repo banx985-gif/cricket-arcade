@@ -240,6 +240,7 @@ const PitchScene = {
   _ballPos() {
     if (this.hit && this.hit.throw && this.hit.t >= this.hit.throw.t0) return this._throwPos(this.hit.throw, this.hit.t, this._ball);
     if (this.hit) return this.hit.plan.path.at(this.hit.t, this._ball);
+    if (!this.del) return null;
     if (this.state === 'delivery' || this.state === 'outcome') {
       const t = this.ballStopT !== null ? Math.min(this.dT, this.ballStopT) : this.dT;
       return this.del.sim.path.at(t, this._ball);

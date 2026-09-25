@@ -24,8 +24,9 @@ const TossScene = {
   _t: 0,
   phase: 'flip',
 
-  enter() {
-    Match.start(MATCH_DATA.defaultFormat);
+  enter(params) {
+    Save.clearResume();                      // a new match replaces any unfinished one
+    Match.start((params && params.format) || Dev.matchFormat || MATCH_DATA.defaultFormat);
     Match.flipToss();
     this._t = 0;
     this.phase = 'flip';
@@ -115,6 +116,7 @@ const MatchBreakScene = {
     this.data = params;
     this._t = 0;
     if (params.next === 'result') { Scenes.go('matchresult'); return; }
+    Match.checkpoint('break', params.next);   // resume point: the innings break
     Effects.init();
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();
@@ -167,6 +169,7 @@ const MatchResultScene = {
     Effects.init();
     const r = Match.result;
     this.won = r.winner === 'player';
+    Save.clearResume();
     Save.recordMatch(Match.fmt.id, this.won);
     const cx = CONFIG.LOGICAL_W / 2;
     this.buttons.clear();

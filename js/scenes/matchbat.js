@@ -40,6 +40,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
 
   // The AI bowler: a normal seeded delivery, sometimes turned into a wide or no-ball.
   _startBall() {
+    Match.overStart();                       // resume checkpoint at the start of each over
     const A = MATCH_DATA.aiBowler, rng = this._bowlRng;
     let d = Delivery.make(this.inn.legal, rng);
     const roll = rng.next();
@@ -236,7 +237,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     this.outcome = Object.assign(look, {
       key: lookKey, res, t: 0,
       hold: F.outcomeHold + (res.wicket ? 0.4 : 0) + (res.overDone ? F.overBreak : 0) + (this.inn.ended ? 0.6 : 0),
-      showText: !!wicket || res.notOut || key === 'wide',
+      showText: !!wicket || res.notOut,        // six/four/wide markers already say it
       umpire: res.wicket && (wicket === 'caught' || wicket === 'lbw'),
     });
     this._setState('outcome');

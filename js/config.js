@@ -1,13 +1,14 @@
-// Cricket Arcade — global configuration.
+﻿// Cricket Arcade â€” global configuration.
 // All gameplay/UI layout uses ONE logical coordinate system: 1920 x 1080.
 // The Display module maps it onto any real landscape screen without distortion.
-// Gameplay tuning lives in js/data/, not here — this file is engine/app level.
+// Gameplay tuning lives in js/data/, not here â€” this file is engine/app level.
 
 const CONFIG = {
-  BUILD_VERSION: '0.1.0-m01',
+  BUILD_VERSION: '0.4.0-m04',
+  BUILD_STAMP: '20260925-084345',            // filled in by publish.ps1 (date-time of the published build)
   CONTENT_VERSION: 1,
-  SAVE_SCHEMA_VERSION: 1,
-  DEBUG_BUILD: true,          // dev panel available (turn off for release)
+  SAVE_SCHEMA_VERSION: 2,
+  DEBUG_BUILD: true,          // dev panel + content checks. publish.ps1 -Release turns this off.
 
   LOGICAL_W: 1920,
   LOGICAL_H: 1080,

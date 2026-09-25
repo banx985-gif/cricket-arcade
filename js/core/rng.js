@@ -13,6 +13,9 @@ function makeRng(seed) {
   let a = seed >>> 0;
   const rng = {
     seed: seed >>> 0,
+    // Saveable position in the sequence (for mid-match resume).
+    getState() { return a >>> 0; },
+    setState(v) { a = v >>> 0; },
     next() {
       a = (a + 0x6D2B79F5) >>> 0;
       let t = a;
@@ -66,6 +69,21 @@ const RNG = {
       this.streams[name] = makeRng(hashString(name + ':' + this.seed));
     }
     return this.streams[name];
+  },
+
+  // Save / restore every stream exactly (mid-match resume).
+  snapshot() {
+    const streams = {};
+    for (const k of Object.keys(this.streams)) streams[k] = this.streams[k].getState();
+    return { seed: this.seed, streams };
+  },
+  restore(snap) {
+    this.seed = snap.seed >>> 0;
+    this.streams = {};
+    for (const k of Object.keys(snap.streams || {})) {
+      const r = this.stream(k);
+      r.setState(snap.streams[k]);
+    }
   },
 
   // A new seed when none is fixed. Uses the clock, not Math.random, so every

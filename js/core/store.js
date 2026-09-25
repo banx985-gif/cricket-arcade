@@ -1,9 +1,8 @@
-// Cricket Arcade — tiny save (IndexedDB, with fallbacks).
+// Cricket Arcade — key/value storage (IndexedDB, with fallbacks).
 // Order of preference: IndexedDB -> localStorage -> memory only.
 // Some browsers block IndexedDB on file:// pages or in private mode; the game
 // must still work, it just may not remember scores between visits.
-//
-// Save data is one versioned object. Unknown/invalid fields are ignored on load.
+// The save logic itself (versions, backups, validation) lives in save.js.
 
 const Store = {
   DB_NAME: 'cricket-arcade',
@@ -62,7 +61,7 @@ const Store = {
         }
         if (this.backend === 'localStorage') {
           const raw = localStorage.getItem(this.LS_PREFIX + key);
-          resolve(raw ? JSON.parse(raw) : null);
+          resolve(raw === null ? null : JSON.parse(raw));
           return;
         }
       } catch (e) { /* fall through */ }
@@ -70,121 +69,40 @@ const Store = {
     });
   },
 
-  set(key, value) {
-    this._mem[key] = value;
+  set(key, value) { return this.setMany({ [key]: value }); },
+
+  // Write several keys in ONE transaction: either all land or none do
+  // (plan 43A.10 "write transactionally where practical").
+  // A value of undefined deletes that key.
+  setMany(entries) {
+    for (const k of Object.keys(entries)) {
+      if (entries[k] === undefined) delete this._mem[k]; else this._mem[k] = entries[k];
+    }
     return new Promise((resolve) => {
       try {
         if (this.backend === 'indexedDB' && this._db) {
           const tx = this._db.transaction(this.STORE, 'readwrite');
-          tx.objectStore(this.STORE).put(value, key);
+          const os = tx.objectStore(this.STORE);
+          for (const k of Object.keys(entries)) {
+            if (entries[k] === undefined) os.delete(k); else os.put(entries[k], k);
+          }
           tx.oncomplete = () => resolve(true);
           tx.onerror = () => resolve(false);
+          tx.onabort = () => resolve(false);
           return;
         }
         if (this.backend === 'localStorage') {
-          localStorage.setItem(this.LS_PREFIX + key, JSON.stringify(value));
+          for (const k of Object.keys(entries)) {
+            if (entries[k] === undefined) localStorage.removeItem(this.LS_PREFIX + k);
+            else localStorage.setItem(this.LS_PREFIX + k, JSON.stringify(entries[k]));
+          }
           resolve(true);
           return;
         }
       } catch (e) { /* quota etc. — never crash */ }
-      resolve(false);
+      resolve(this.backend === 'memory');
     });
   },
 
-  remove(key) {
-    delete this._mem[key];
-    return new Promise((resolve) => {
-      try {
-        if (this.backend === 'indexedDB' && this._db) {
-          const tx = this._db.transaction(this.STORE, 'readwrite');
-          tx.objectStore(this.STORE).delete(key);
-          tx.oncomplete = () => resolve(true);
-          tx.onerror = () => resolve(false);
-          return;
-        }
-        if (this.backend === 'localStorage') localStorage.removeItem(this.LS_PREFIX + key);
-      } catch (e) { /* ignore */ }
-      resolve(true);
-    });
-  },
-};
-
-// The game's save profile: best scores + settings.
-const Save = {
-  KEY: 'profile',
-  data: null,
-
-  defaults() {
-    return {
-      version: CONFIG.SAVE_SCHEMA_VERSION,
-      best: {},                // modeId -> { score, streak, sixes }
-      settings: { muted: false },
-    };
-  },
-
-  async load() {
-    this.data = this.defaults();
-    const raw = await Store.get(this.KEY);
-    if (!raw || typeof raw !== 'object') return this.data;
-    if ((raw.version || 0) > CONFIG.SAVE_SCHEMA_VERSION) return this.data; // future save: don't half-read it
-    if (raw.best && typeof raw.best === 'object') {
-      for (const k of Object.keys(raw.best)) {
-        const b = raw.best[k];
-        if (b && typeof b.score === 'number' && b.score >= 0) {
-          // keep only plain non-negative numbers
-          const rec = {};
-          for (const f of Object.keys(b)) {
-            if (typeof b[f] === 'number' && isFinite(b[f]) && b[f] >= 0) rec[f] = Math.floor(b[f]);
-          }
-          this.data.best[k] = rec;
-        }
-      }
-    }
-    if (raw.settings && typeof raw.settings.muted === 'boolean') {
-      this.data.settings.muted = raw.settings.muted;
-    }
-    return this.data;
-  },
-
-  write() {
-    Log.add('save', 'write');
-    return Store.set(this.KEY, JSON.parse(JSON.stringify(this.data)));
-  },
-
-  best(mode) { return this.data.best[mode] || null; },
-
-  // Record a finished game. stats = { name: number } — each is kept as a
-  // personal best too (e.g. best streak). Returns true for a new best score.
-  submit(mode, score, stats) {
-    const prev = this.data.best[mode];
-    const isBest = !prev || score > prev.score;
-    const rec = prev ? Object.assign({}, prev) : { score: 0 };
-    if (isBest) rec.score = score;
-    for (const k of Object.keys(stats || {})) rec[k] = Math.max(rec[k] || 0, stats[k]);
-    this.data.best[mode] = rec;
-    this.write();
-    return isBest;
-  },
-
-  // Quick Match record: matches played / won per format.
-  recordMatch(formatId, won) {
-    const rec = Object.assign({ score: 0, played: 0, won: 0 }, this.data.best[formatId] || {});
-    rec.played += 1;
-    if (won) rec.won += 1;
-    rec.score = rec.won;
-    this.data.best[formatId] = rec;
-    this.write();
-    return rec;
-  },
-
-  setMuted(m) {
-    this.data.settings.muted = !!m;
-    this.write();
-  },
-
-  async wipe() {
-    this.data = this.defaults();
-    await Store.remove(this.KEY);
-    Log.add('save', 'wiped');
-  },
+  remove(key) { return this.setMany({ [key]: undefined }); },
 };

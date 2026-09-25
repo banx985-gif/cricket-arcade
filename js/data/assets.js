@@ -51,6 +51,7 @@ const ASSET_MANIFEST = {
       icon_run:         { src: 'assets/icons/batting/run.png' },
       icon_cancel_run:  { src: 'assets/icons/batting/cancel_run.png' },
       icon_quick_match: { src: 'assets/icons/modes/quick_match_icon.png' },
+      icon_settings:    { src: 'assets/icons/modes/settings_icon.png' },
 
       // Starting kit (shown on the mode card)
       kit_bat:     { src: 'assets/equipment/standard_cricket_bat.png' },

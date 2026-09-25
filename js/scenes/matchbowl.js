@@ -34,6 +34,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
   },
 
   _startBall() {
+    Match.overStart();                       // resume checkpoint at the start of each over
     this._setState('aim');
     this._resetBall();
     this.del = null;

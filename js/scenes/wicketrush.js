@@ -308,7 +308,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     this.outcome = Object.assign(look, {
       key, res, t: 0,
       hold: F.outcomeHold + (wicket ? F.wicketHoldExtra : 0),
-      showText: wicket || res.notOut || key === 'wide',
+      showText: wicket || res.notOut,          // six/four/wide markers already say it
       umpire: wicket && key !== 'bowled',
     });
     this._setState('outcome');

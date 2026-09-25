@@ -1,8 +1,11 @@
-// Cricket Arcade — Boot scene: open storage, load the save, then go to Title.
+// Cricket Arcade — Boot scene: open storage, load the save (with backup
+// recovery), look for an unfinished match, run the content check (debug
+// builds), then go to the Title / Home screen.
 
 const BootScene = {
   _t: 0,
   _ready: false,
+  pendingResume: null,       // an unfinished match found at start-up
 
   enter() {
     this._t = 0;
@@ -11,9 +14,12 @@ const BootScene = {
     Sprites.loadGroup('match-common');
     Store.open()
       .then(() => Save.load())
-      .catch(() => { Save.data = Save.defaults(); })
+      .catch((e) => { Log.add('error', 'save load failed: ' + e); Save.data = Save.defaults(); })
+      .then(() => Save.loadResume())
+      .then((r) => { this.pendingResume = r; })
+      .catch(() => { this.pendingResume = null; })
       .then(() => {
-        Sound.setMuted(Save.data.settings.muted);
+        if (CONFIG.DEBUG_BUILD && typeof Validate !== 'undefined') Validate.run();
         this._ready = true;
       });
   },

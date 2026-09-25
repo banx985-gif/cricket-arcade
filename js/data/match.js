@@ -8,6 +8,8 @@ const MATCH_DATA = {
     // 10 / 20 over matches are just more overs once this plays well:
     quick10: { id: 'quick10', overs: 10, wickets: 10 },
     quick20: { id: 'quick20', overs: 20, wickets: 10 },
+    // Developer/test format: 1 over a side, so the test gates finish quickly.
+    test1: { id: 'test1', overs: 1, wickets: 10, devOnly: true },
   },
   defaultFormat: 'quick5',
   superOver: { overs: 1, wickets: 2 },

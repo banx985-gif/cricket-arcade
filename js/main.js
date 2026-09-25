@@ -8,6 +8,9 @@ const Main = {
   _lastT: 0,
   _fpsAcc: 0,
   _fpsFrames: 0,
+  frozen: false,          // app is in the background: nothing updates, no input
+  tapToContinue: false,   // back from the background: waiting for a tap
+  _tapT: 0,
 
   start() {
     document.getElementById('rotate-text').textContent = T('app.rotate');
@@ -18,24 +21,40 @@ const Main = {
     Effects.init();
 
     PointerHub.init(canvas, {
-      down: (id, x, y) => Scenes.pointerDown(id, x, y),
-      move: (id, x, y) => Scenes.pointerMove(id, x, y),
-      up: (id) => Scenes.pointerUp(id),
+      down: (id, x, y) => {
+        if (this.frozen) return;
+        if (this.tapToContinue) { this._continue(); return; }
+        if (Validate.dismiss()) return;
+        Scenes.pointerDown(id, x, y);
+      },
+      move: (id, x, y) => { if (!this.frozen && !this.tapToContinue) Scenes.pointerMove(id, x, y); },
+      up: (id) => { if (!this.frozen && !this.tapToContinue) Scenes.pointerUp(id); },
     });
     Keys.init((code) => {
+      if (this.frozen) return;
+      if (this.tapToContinue) { this._continue(); return; }
       if (code === 'Backquote' && Dev.enabled) { Dev.toggle(); return; }
       if (Dev.open) { if (code === 'Escape') Dev.hide(); return; }
       Sound.unlock();
       Scenes.keyDown(code);
-    }, (code) => { if (!Dev.open) Scenes.keyUp(code); });
+    }, (code) => { if (!Dev.open && !this.frozen && !this.tapToContinue) Scenes.keyUp(code); });
 
-    // Plan 43A.6: going to the background pauses play and audio.
+    // Plan 43A.6 — background: block input, autosave at the nearest safe point
+    // (the save + the start-of-over match checkpoint), pause audio, freeze.
     Platform.onPause(() => {
+      this.frozen = true;
       PointerHub.releaseAll();
       Scenes.appHidden();
+      Save.write();
       Sound.suspend();
     });
-    Platform.onResume(() => Sound.resume());
+    // Back again: never fast-forward; wait for a tap before sound comes back.
+    Platform.onResume(() => {
+      this.frozen = false;
+      this.tapToContinue = true;
+      this._tapT = 0;
+      this._lastT = performance.now();
+    });
 
     Display.onResize(() => {
       const sc = Scenes.current;
@@ -45,6 +64,7 @@ const Main = {
 
     Scenes.register('boot', BootScene);
     Scenes.register('title', TitleScene);
+    Scenes.register('settings', SettingsScene);
     Scenes.register('sixsmash', SixSmashScene);
     Scenes.register('wicketrush', WicketRushScene);
     Scenes.register('result', ResultScene);
@@ -57,6 +77,13 @@ const Main = {
 
     this._lastT = performance.now();
     requestAnimationFrame((t) => this._tick(t));
+  },
+
+  _continue() {
+    this.tapToContinue = false;
+    Sound.unlock();
+    Sound.resume();
+    this._lastT = performance.now();
   },
 
   _tick(t) {
@@ -77,18 +104,39 @@ const Main = {
     if (Dev.slowmo) scale *= 0.3;
 
     try {
-      Effects.updateReal(dt);
-      Dev.update(dt);
-      Scenes.update(dt * scale, dt);
+      const running = !this.frozen && !this.tapToContinue;
+      if (running) {
+        Effects.updateReal(dt);
+        Dev.update(dt);
+        Scenes.update(dt * scale, dt);
+      }
       Display.beginFrame();
       Scenes.render(Display.ctx);
       Dev.render(Display.ctx, this.fps);
+      if (typeof Validate !== 'undefined') Validate.render(Display.ctx);
+      if (this.tapToContinue) this._drawTapToContinue(Display.ctx, dt);
     } catch (e) {
       Log.add('error', e && e.stack ? e.stack.split('\n')[0] : String(e));
       console.error(e);
     }
 
     requestAnimationFrame((tt) => this._tick(tt));
+  },
+
+  _drawTapToContinue(ctx, dt) {
+    this._tapT += dt;
+    const v = Display.viewRect();
+    ctx.fillStyle = 'rgba(4,12,8,0.93)';
+    ctx.fillRect(v.x, v.y, v.w, v.h);
+    const cx = CONFIG.LOGICAL_W / 2;
+    R.panel(cx - 560, 380, 1120, 300, 'rgba(12,28,48,0.97)', '#ffd23f');
+    const s = 1 + Math.sin(this._tapT * 4) * 0.04;
+    ctx.save();
+    ctx.translate(cx, 500);
+    ctx.scale(s, s);
+    R.text(T('app.tapToContinue'), 0, 0, 90, '#ffffff');
+    ctx.restore();
+    R.text(T('app.welcomeBack'), cx, 610, 34, '#ffd23f', 'center', false);
   },
 };
 

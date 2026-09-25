@@ -12,17 +12,26 @@ const Sprites = {
 
   // Load every entry of an asset group. Missing files are simply skipped and
   // the placeholder keeps drawing.
+  status: {},       // id -> 'loading' | 'ok' | 'missing'   (read by the content check)
+  _pending: [],
+
   loadGroup(name) {
     const group = (ASSET_MANIFEST.groups || {})[name] || {};
     for (const id of Object.keys(group)) {
       const e = group[id];
       if (!e || !e.src) continue;
-      const img = new Image();
-      img.onload = () => { this.images[id] = Object.assign({ img }, e); };
-      img.onerror = () => Log.add('asset', 'missing ' + e.src);
-      img.src = e.src;
+      this.status[id] = 'loading';
+      this._pending.push(new Promise((done) => {
+        const img = new Image();
+        img.onload = () => { this.images[id] = Object.assign({ img }, e); this.status[id] = 'ok'; done(); };
+        img.onerror = () => { this.status[id] = 'missing'; Log.add('asset', 'missing ' + e.src); done(); };
+        img.src = e.src;
+      }));
     }
   },
+
+  // Resolves when every requested image has loaded or failed.
+  settled() { return Promise.all(this._pending); },
 
   has(id) { return !!this.images[id]; },
 

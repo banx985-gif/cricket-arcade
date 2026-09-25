@@ -1,13 +1,16 @@
-// Cricket Arcade — Title / mode select. Two challenge modes:
-// Six Smash (batting) and Wicket Rush (bowling). The stadium drifts behind.
+// Cricket Arcade — Title / Home: pick Six Smash, Quick Match or Wicket Rush.
+// Offers to resume an unfinished match (M04). The stadium drifts behind.
 
 const TitleScene = {
   _t: 0,
   cards: [],
-  soundBtn: new ButtonList(),
+  topBtns: new ButtonList(),      // top-right SETTINGS button
+  resumeBtns: new ButtonList(),
+  resume: null,                   // unfinished match checkpoint, if any
 
   enter() {
     this._t = 0;
+    this.resume = BootScene.pendingResume;
     Effects.init();
     this._layout();
   },
@@ -29,11 +32,29 @@ const TitleScene = {
         strip: BOWLING_DATA.deliveries.map(d => d.icon) }),
     ];
     const s = Display.safe;
-    this.soundBtn.clear();
-    this.soundBtn.add(() => T(Sound.muted ? 'common.soundOff' : 'common.soundOn'), s.right - 360, s.top + 24, 330, 96, () => {
-      Sound.setMuted(!Sound.muted);
-      Save.setMuted(Sound.muted);
-    }, { size: 34, color: '#e9eef5' });
+    this.topBtns.clear();
+    this.topBtns.add('settings.title', s.right - 400, s.top + 24, 370, 96, () => Scenes.go('settings'),
+      { size: 34, color: '#e9eef5' });
+    this.resumeBtns.clear();
+    this.resumeBtns.add('resume.resume', cx - 430, 640, 420, 120, () => this._resume(), { size: 38 });
+    this.resumeBtns.add('resume.abandon', cx + 10, 640, 420, 120, () => this._abandon(), { size: 40, color: '#e9eef5' });
+  },
+
+  _resume() {
+    const cp = this.resume.checkpoint;
+    this.resume = BootScene.pendingResume = null;
+    try {
+      const [scene, params] = Match.restore(cp);
+      Scenes.go(scene, params);
+    } catch (e) {
+      Log.add('error', 'resume failed: ' + e.message);
+      Save.clearResume();
+    }
+  },
+
+  _abandon() {
+    this.resume = BootScene.pendingResume = null;
+    Save.clearResume();
   },
 
   update(dt) {
@@ -50,18 +71,21 @@ const TitleScene = {
     if (Dev.pointerDown(id, x, y)) return;
     Sound.unlock();
     Fullscreen.request();
-    if (this.soundBtn.down(id, x, y)) return;
+    if (this.resume) { this.resumeBtns.down(id, x, y); return; }
+    if (this.topBtns.down(id, x, y)) return;
     const c = this._cardAt(x, y);
     if (c && c.id === null) { c.id = id; c.pressed = true; }
   },
   pointerMove(id, x, y) {
     if (Dev.pointerMove(id, x, y)) return;
-    this.soundBtn.move(id, x, y);
+    if (this.resume) { this.resumeBtns.move(id, x, y); return; }
+    this.topBtns.move(id, x, y);
     for (const c of this.cards) if (c.id === id) c.pressed = this._cardAt(x, y) === c;
   },
   pointerUp(id) {
     if (Dev.pointerUp(id)) return;
-    if (this.soundBtn.up(id)) return;
+    if (this.resume) { this.resumeBtns.up(id); return; }
+    if (this.topBtns.up(id)) return;
     for (const c of this.cards) {
       if (c.id !== id) continue;
       const go = c.pressed;
@@ -70,9 +94,15 @@ const TitleScene = {
     }
   },
   keyDown(code) {
+    if (this.resume) {
+      if (code === 'Enter' || code === 'KeyR') this._resume();
+      if (code === 'Escape') this._abandon();
+      return;
+    }
     if (code === 'Digit1' || code === 'Enter') { Sound.unlock(); Scenes.go('sixsmash'); }
     if (code === 'Digit2') { Sound.unlock(); Scenes.go('toss'); }
     if (code === 'Digit3') { Sound.unlock(); Scenes.go('wicketrush'); }
+    if (code === 'KeyO') Scenes.go('settings');
   },
 
   render(ctx) {
@@ -96,8 +126,30 @@ const TitleScene = {
 
     for (const c of this.cards) this._drawCard(ctx, c);
 
-    this.soundBtn.draw();
+    this.topBtns.draw();
+    Sprites.ui('icon_settings', Display.safe.right - 356, Display.safe.top + 72, 60, 60);
     R.text(T('title.pcHint2'), cx, 1010, 24, '#b8c6d6', 'center', false);
+    if (this.resume) this._drawResume(ctx);
+  },
+
+  // "You have a match in progress" box.
+  _drawResume(ctx) {
+    const v = Display.viewRect();
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(v.x, v.y, v.w, v.h);
+    const cx = CONFIG.LOGICAL_W / 2;
+    R.panel(cx - 560, 250, 1120, 560, 'rgba(12,28,48,0.97)', '#ffb400');
+    Sprites.ui('icon_quick_match', cx, 340, 220, 150);
+    R.text(T('resume.title'), cx, 450, 60, '#ffffff');
+    const s = this.resume.checkpoint.summary;
+    const team = T(MATCH_DATA.teams[s.battingSide].nameKey);
+    let line = T('resume.score', { team, runs: s.runs, wkts: s.wickets, overs: s.overs });
+    if (s.target) line += '  ·  ' + T('match.targetN', { n: s.target });
+    if (s.isSuper) line = T('match.superOver') + '  ·  ' + line;
+    R.text(line, cx, 530, 38, '#ffd23f', 'center', false);
+    R.text(T(this.resume.checkpoint.phase === 'break' ? 'resume.fromBreak' : 'resume.fromOver'),
+      cx, 585, 28, '#d8e4f0', 'center', false);
+    this.resumeBtns.draw();
   },
 
   _drawCard(ctx, c) {

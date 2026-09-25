@@ -104,6 +104,19 @@ class Innings {
 
   _swap() { const s = this.striker; this.striker = this.nonStriker; this.nonStriker = s; }
 
+  // Plain copy for the mid-match checkpoint (and back again).
+  toJSON() {
+    const o = {};
+    for (const k of Object.keys(this)) o[k] = JSON.parse(JSON.stringify(this[k]));
+    return o;
+  }
+  static fromJSON(o) {
+    const inn = new Innings({ index: o.index, battingSide: o.battingSide, overs: o.maxBalls / 6,
+      wickets: o.maxWickets, target: o.target, isSuper: o.isSuper });
+    for (const k of Object.keys(o)) inn[k] = JSON.parse(JSON.stringify(o[k]));
+    return inn;
+  }
+
   topScorer() {
     let best = this.batters[0];
     for (const b of this.batters) if (b.runs > best.runs) best = b;
@@ -129,6 +142,7 @@ const Match = {
     this.over = false;
     this.result = null;
     this.toss = null;
+    this._lastCp = null;
     Log.add('match', `start ${this.fmt.id} seed ${this.seed}`);
   },
 
@@ -152,6 +166,55 @@ const Match = {
   },
 
   current() { return this.innings[this.innings.length - 1] || null; },
+
+  // ---- Mid-match resume (plan 33): checkpoint at the start of each over and
+  // at the innings break. Animations are never saved — a resumed match simply
+  // restarts from that over.
+  checkpoint(phase, next) {
+    const inn = this.current();
+    if (!inn || this.over) return null;
+    const cp = {
+      label: phase === 'break' ? 'break before ' + next : 'innings ' + (inn.index + 1) + ' at ' + inn.overs + ' overs',
+      phase, next: next || null,
+      fmt: this.fmt.id, seed: this.seed, toss: this.toss, mainBattedFirst: this.mainBattedFirst,
+      superOvers: this.superOvers,
+      innings: this.innings.map((i) => i.toJSON()),
+      rng: RNG.snapshot(),
+      summary: { battingSide: inn.battingSide, runs: inn.runs, wickets: inn.wickets, overs: inn.overs,
+        target: inn.target, index: inn.index, isSuper: inn.isSuper },
+    };
+    Save.saveResume(cp);
+    return cp;
+  },
+
+  // Called as each ball is set up: checkpoints once at the start of every over.
+  overStart() {
+    const inn = this.current();
+    if (!inn || inn.ended || inn.legal % 6 !== 0) return;
+    const key = inn.index + ":" + inn.legal;
+    if (this._lastCp === key) return;
+    this._lastCp = key;
+    this.checkpoint("over");
+  },
+
+  // Rebuild the match from a checkpoint. Returns [sceneName, params].
+  restore(cp) {
+    this.fmt = MATCH_DATA.formats[cp.fmt];
+    if (!this.fmt) throw new Error('unknown match format ' + cp.fmt);
+    this.seed = cp.seed;
+    this.toss = cp.toss;
+    this.mainBattedFirst = cp.mainBattedFirst;
+    this.superOvers = cp.superOvers || 0;
+    this.innings = cp.innings.map((o) => Innings.fromJSON(o));
+    this.over = false;
+    this.result = null;
+    RNG.restore(cp.rng);
+    const cur = this.current();
+    this._lastCp = cp.phase === "break" ? null : cur.index + ":" + cur.legal;
+    Log.add('match', 'resumed: ' + cp.label);
+    if (cp.phase === 'break') return ['matchbreak', { next: cp.next, resumed: true }];
+    return [this.current().battingSide === 'player' ? 'matchbat' : 'matchbowl', { resumed: true }];
+  },
 
   // Which side bats in the innings about to start?
   _nextBatting() {
