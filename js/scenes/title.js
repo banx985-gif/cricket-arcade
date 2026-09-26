@@ -168,7 +168,11 @@ const TitleScene = {
 
     const cx = CONFIG.LOGICAL_W / 2;
     const bob = Math.sin(this._t * 2) * 5;
-    R.text(T('title.game'), cx, 150 + bob, 120, '#ffffff');
+    // The game's name fits between the button columns whatever it is (M14: it's one setting).
+    const s = Display.safe, room = 2 * Math.min(cx - (s.left + 354), (s.right - 400) - cx) - 40;
+    ctx.font = `900 120px ${CONFIG.FONT}`;
+    const titleSize = Math.max(56, Math.min(120, Math.floor(120 * room / (ctx.measureText(T('title.game')).width + 24))));
+    R.text(T('title.game'), cx, 150 + bob, titleSize, '#ffffff');
     R.text(T('title.pick'), cx, 265, 40, '#ffd23f');
 
     for (const c of this.cards) this._drawCard(ctx, c);

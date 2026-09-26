@@ -23,7 +23,8 @@ const WelcomePanel = {
     ctx.fillStyle = 'rgba(4,10,18,0.9)'; ctx.fillRect(v.x, v.y, v.w, v.h);
     R.panel(cx - 900, 60, 1800, 960, 'rgba(12,26,44,0.97)', '#ffd23f');
     Sprites.ui('logo_banx_gamex', cx - 820, 150, 120, 144);
-    R.text(T('welcome.title'), cx, 140, 60, '#ffffff');
+    ctx.font = `900 60px ${CONFIG.FONT}`;              // shrinks to fit a longer game name (M14)
+    R.text(T('welcome.title'), cx, 140, Math.min(60, Math.floor(60 * 1440 / ctx.measureText(T('welcome.title')).width)), '#ffffff');
     R.text(T('welcome.sub'), cx, 205, 26, '#d8e4f0', 'center', false);
     if (!Sprites.ui('tutorial_intro', cx - 440, 560, 760, 560)) R.panel(cx - 820, 280, 760, 560);
     R.text(T('welcome.setup'), cx + 230, 390, 30, '#ffd23f');

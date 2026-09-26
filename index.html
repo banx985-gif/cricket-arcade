@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0d2a1a">
-<title>Cricket Arcade</title>
+<title>Cricket Arcade RPG</title>
 <link rel="stylesheet" href="css/main.css">
 <!-- Installable web app ("Add to Home screen"). -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -143,8 +143,15 @@
     // address, so it is skipped when the game is opened as a file on a PC.
     // (Not inside the store app: it already has every file.)
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) {
+      // It saves the whole game for offline play, so it starts once the home screen's art is in
+      // (M14): the first start isn't slowed down by that download.
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch((e) => console.warn('service worker not registered', e));
+        const t0 = Date.now();
+        const start = () => {
+          if (!(typeof Sprites !== 'undefined' && Sprites.groupReady('home')) && Date.now() - t0 < 8000) { setTimeout(start, 250); return; }
+          navigator.serviceWorker.register('sw.js').catch((e) => console.warn('service worker not registered', e));
+        };
+        start();
       });
     }
   </script>

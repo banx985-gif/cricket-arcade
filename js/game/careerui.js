@@ -18,6 +18,7 @@ const Tint = {
     const w = art.img.width, h = art.img.height;
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
+    c._artId = id;                // which art it came from (the M14 size check)
     const g = c.getContext('2d');
     g.drawImage(art.img, 0, 0);
     g.globalCompositeOperation = 'multiply';
@@ -50,6 +51,7 @@ const Portrait = {
     const w = art.img.width, h = art.img.height;
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
+    c._artId = id;
     const g = c.getContext('2d');
     g.drawImage(art.img, 0, 0);
     const layer = (maskId, tone) => {

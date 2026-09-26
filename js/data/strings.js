@@ -9,7 +9,7 @@ const STRINGS = {
 
     'boot.loading': 'LOADING…',
 
-    'title.game': 'CRICKET ARCADE',
+    'title.game': CONFIG.TITLE.toUpperCase(),          // the game's name lives in config.js (M14)
     'title.mode': 'SIX SMASH',
     'title.play': 'PLAY',
     'title.best': 'BEST: {score}',
@@ -2223,7 +2223,7 @@ const STRINGS = {
     'qm.play': 'PLAY',
     'qm.coinsWon': '+{n} COINS ({d})',
 
-    'welcome.title': 'WELCOME TO CRICKET ARCADE',
+    'welcome.title': 'WELCOME TO ' + CONFIG.TITLE.toUpperCase(),
     'welcome.sub': 'Make a cricketer, learn the game one step at a time, then play it your way.',
     'welcome.setup': 'BEFORE WE START',
     'welcome.sound': 'SOUND: {s}',
@@ -2352,7 +2352,7 @@ const STRINGS = {
     'settings.defaultsConfirm': 'RESTORE DEFAULT SETTINGS?',
     'settings.defaultsDone': 'Settings back to their defaults',
     'settings.legalTitle': 'PRIVACY & LEGAL',
-    'settings.legalText': 'Cricket Arcade keeps everything on this device.|No account, no tracking, no ads, nothing sent anywhere.|Your saves live in this browser\'s storage: clearing site data removes them.|All teams, players and names are made up.|© Banx Gamex. All rights reserved.',
+    'settings.legalText': CONFIG.TITLE + ' keeps everything on this device.|No account, no tracking, no ads, nothing sent anywhere.|Your saves live in this browser\'s storage: clearing site data removes them.|All teams, players and names are made up.|© Banx Gamex. All rights reserved.',
     'settings.tapClose': 'Tap anywhere to close',
 
     'trophy.title': 'TROPHY ROOM',

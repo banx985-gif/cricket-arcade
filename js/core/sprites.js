@@ -15,15 +15,20 @@ const Sprites = {
   // aren't there are not reported as missing.
   status: {},       // id -> 'loading' | 'ok' | 'missing'   (read by the content check)
   _pending: [],
+  _byId: {},        // id -> promise (settles when that picture has loaded or failed)
+  _groups: {},      // group name -> promise (every picture in it settled)  (M14)
 
+  // Start loading a group. Returns a promise that settles when all of it has.
+  // Calling it again only retries pictures that failed last time.
   loadGroup(name) {
     const group = (ASSET_MANIFEST.groups || {})[name] || {};
+    const list = [];
     for (const id of Object.keys(group)) {
       const e = group[id];
       if (!e || !e.src) continue;
-      if (this.status[id] === 'ok' || this.status[id] === 'loading') continue;   // already here (or on its way)
+      if (this.status[id] === 'ok' || this.status[id] === 'loading') { list.push(this._byId[id]); continue; }   // already here (or on its way)
       this.status[id] = 'loading';
-      this._pending.push(new Promise((done) => {
+      const p = new Promise((done) => {
         const img = new Image();
         img.onload = () => { this.images[id] = Object.assign({ img }, e); this.status[id] = 'ok'; done(); };
         img.onerror = () => {
@@ -32,12 +37,23 @@ const Sprites = {
           done();
         };
         img.src = e.src;
-      }));
+      });
+      this._byId[id] = p;
+      this._pending.push(p);
+      list.push(p);
     }
+    return (this._groups[name] = Promise.all(list));
   },
 
   // Resolves when every requested image has loaded or failed.
   settled() { return Promise.all(this._pending); },
+
+  // Has every picture of this group finished loading (or failed)?
+  groupReady(name) {
+    if (!this._groups[name]) return false;
+    const group = (ASSET_MANIFEST.groups || {})[name] || {};
+    return Object.keys(group).every((id) => !group[id] || !group[id].src || (this.status[id] && this.status[id] !== 'loading'));
+  },
 
   has(id) { return !!this.images[id]; },
 

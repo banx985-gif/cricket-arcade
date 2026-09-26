@@ -17,6 +17,7 @@ const GearUI = {
     if (!art || typeof document === 'undefined') return null;
     const cv = document.createElement('canvas');
     cv.width = art.img.width; cv.height = art.img.height;
+    cv._artId = id;
     const g = cv.getContext('2d');
     g.drawImage(art.img, 0, 0);
     g.globalCompositeOperation = 'source-in';

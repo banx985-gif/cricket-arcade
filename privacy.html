@@ -27,5 +27,8 @@
 
 <h2>Contact</h2>
 <p>Questions? Contact Banx Gamex at the email address shown on the game's store page.</p>
+<!-- The game's name comes from js/config.js (M14). The web build fills it in; this fills it in when the file is opened straight from game/. -->
+<script src="js/config.js"></script>
+<script>if (document.title.indexOf('{{') >= 0 && typeof CONFIG !== 'undefined') { document.title = document.title.split('Cricket Arcade RPG').join(CONFIG.TITLE); document.body.innerHTML = document.body.innerHTML.split('Cricket Arcade RPG').join(CONFIG.TITLE); }</script>
 </body>
 </html>

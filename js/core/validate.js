@@ -27,7 +27,7 @@ const Validate = {
       return seen;
     };
     const str = (key, where) => { if (STRINGS.en[key] === undefined) p.push(`missing string "${key}" (${where})`); };
-    const art = (id, where) => { if (!ASSET_MANIFEST.groups['match-common'][id]) p.push(`sprite id "${id}" (${where}) is not in the asset manifest`); };
+    const art = (id, where) => { if (!Object.values(ASSET_MANIFEST.groups).some((g) => g[id])) p.push(`sprite id "${id}" (${where}) is not in the asset manifest`); };
 
     // Batting
     const lengths = dupes('delivery lengths', BATTING_DATA.delivery.lengths, 'id');

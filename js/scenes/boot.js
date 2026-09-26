@@ -10,8 +10,12 @@ const BootScene = {
   enter() {
     this._t = 0;
     this._ready = false;
-    Sprites.loadGroup('boot');
-    Sprites.loadGroup('match-common');
+    this._artIn = false;
+    // M14: only the home screen's art at start-up. Once it's in, the match art follows in
+    // the background (every other screen's art loads when that screen first opens).
+    const home = Sprites.loadGroup('home');
+    home.then(() => { this._artIn = true; Sprites.loadGroup('match-common'); });
+    setTimeout(() => { this._artIn = true; }, 6000);     // slow connection: don't hold the home screen back
     Store.open()
       .then(() => Save.load())
       .catch((e) => { Log.add('error', 'save load failed: ' + e); Save.data = Save.defaults(); })
@@ -28,7 +32,7 @@ const BootScene = {
 
   update(dt) {
     this._t += dt;
-    if (this._ready && this._t > 0.25) Scenes.go('title');
+    if (this._ready && this._artIn && this._t > 0.25) Scenes.go('title');
   },
 
   render(ctx) {

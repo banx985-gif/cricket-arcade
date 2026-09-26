@@ -14,6 +14,7 @@ const Main = {
 
   start() {
     document.getElementById('rotate-text').textContent = T('app.rotate');
+    document.title = CONFIG.TITLE;       // the one game-name setting (M14)
     const canvas = document.getElementById('game-canvas');
     Display.init(canvas);
     R.init(Display.ctx);
