@@ -7,11 +7,11 @@ const CONFIG = {
   // The game's name: the ONE place to change it (M14). The home screen, welcome panel,
   // settings, browser tab, installed web app, Android and iOS app names and the store
   // text (docs/store/) all read it. After changing it, run the publish / app build as usual.
-  TITLE: 'Cricket Arcade RPG',
-  TITLE_SHORT: 'Cricket Arcade',  // under the phone's home-screen icon (keep it short, about 12 letters)
+  TITLE: 'Cricket Legends',
+  TITLE_SHORT: 'Cricket Legends', // under the phone's home-screen icon (some phones cut names over ~12 letters)
 
   BUILD_VERSION: '0.14.0-m14',
-  BUILD_STAMP: '20260926-195826',            // filled in by publish.ps1 (date-time of the published build)
+  BUILD_STAMP: '20260926-234417',            // filled in by publish.ps1 (date-time of the published build)
   CONTENT_VERSION: 8,
   SAVE_SCHEMA_VERSION: 2,
   DEBUG_BUILD: true,          // dev panel + content checks. publish.ps1 -Release turns this off.

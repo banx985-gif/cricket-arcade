@@ -25,10 +25,18 @@ const Scenes = {
     if (!this.registry[name]) { console.error('Unknown scene', name); return; }
     const missing = this._artMissing(name);
     if (!missing.length || !this.current) { this.pending = null; this._switch(name, params); return; }
-    const p = this.pending = { name, params, t: 0 };
-    Promise.all(missing.map((g) => Sprites.loadGroup(g))).then(() => {
-      if (this.pending === p) { this.pending = null; this._switch(name, params); }
-    });
+    // Keep the game's random numbers exactly as they are now (a resumed match must carry on
+    // with the same next ball), whatever the old screen does while the art loads.
+    const rng = typeof RNG !== 'undefined' ? RNG.snapshot() : null;
+    const p = this.pending = { name, params, t: 0, rng };
+    Promise.all(missing.map((g) => Sprites.loadGroup(g))).then(() => { if (this.pending === p) this._finishPending(); });
+  },
+
+  _finishPending() {
+    const p = this.pending;
+    this.pending = null;
+    if (p.rng) RNG.restore(p.rng);
+    this._switch(p.name, p.params);
   },
 
   _switch(name, params) {
@@ -47,7 +55,7 @@ const Scenes = {
   update(dt, realDt) {
     if (this.pending) {
       this.pending.t += realDt || dt;
-      if (this.pending.t > this.LOAD_WAIT_MAX) { const p = this.pending; this.pending = null; this._switch(p.name, p.params); }
+      if (this.pending.t > this.LOAD_WAIT_MAX) this._finishPending();
       return;
     }
     if (this.current && this.current.update) this.current.update(dt, realDt);

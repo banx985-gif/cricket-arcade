@@ -1,6 +1,6 @@
 {
-  "name": "Cricket Arcade RPG",
-  "short_name": "Cricket Arcade",
+  "name": "Cricket Legends",
+  "short_name": "Cricket Legends",
   "description": "Arcade cricket: Six Smash, Wicket Rush and Quick Match.",
   "start_url": "./index.html",
   "scope": "./",
