@@ -5,7 +5,7 @@
 
 const CONFIG = {
   BUILD_VERSION: '0.13.0-m13',
-  BUILD_STAMP: '20260926-031414',            // filled in by publish.ps1 (date-time of the published build)
+  BUILD_STAMP: '20260926-182820',            // filled in by publish.ps1 (date-time of the published build)
   CONTENT_VERSION: 8,
   SAVE_SCHEMA_VERSION: 2,
   DEBUG_BUILD: true,          // dev panel + content checks. publish.ps1 -Release turns this off.
