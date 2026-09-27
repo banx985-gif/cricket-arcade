@@ -11,7 +11,7 @@ const CONFIG = {
   TITLE_SHORT: 'Cricket Legends', // under the phone's home-screen icon (some phones cut names over ~12 letters)
 
   BUILD_VERSION: '0.14.0-m14',
-  BUILD_STAMP: '20260926-234417',            // filled in by publish.ps1 (date-time of the published build)
+  BUILD_STAMP: '20260927-135228',            // filled in by publish.ps1 (date-time of the published build)
   CONTENT_VERSION: 8,
   SAVE_SCHEMA_VERSION: 2,
   DEBUG_BUILD: true,          // dev panel + content checks. publish.ps1 -Release turns this off.
