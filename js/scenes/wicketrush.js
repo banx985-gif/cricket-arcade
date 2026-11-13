@@ -298,6 +298,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
         releaseGrade: this.release.grade, pressure: this._pressure(),
         freeHit: this.rules.freeHit || this.release.noBall,
         timingBias: this.del.timingBias, bat, bowl, fatigue: this._fatigue(), sigmaK: tk.sigmaK, readK: tk.readK,
+        smartLoft: !!this._sixCtx,          // real matches only (MatchBowlScene); Wicket Rush keeps its own AI
       }, RNG.stream('ai'));
     this.ai = ai;
     this._duelPlayers = { bat, bowl };

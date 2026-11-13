@@ -40,7 +40,8 @@ const CareerHomeScene = {
     const c = this.career;
     if (!c || c.phase !== 'season') return;
     if (!c.pendingEvent) Rivals.pendingFor(c);
-    if (c.pendingEvent) EventPanel.open(c, this.slot, () => this._layout());
+    // After an event closes, check again: a rival's build-up for the next match must not be skipped (M15 robot find).
+    if (c.pendingEvent) EventPanel.open(c, this.slot, () => { this._layout(); this._checkEvent(); });
   },
 
   _save() { return CareerSave.save(this.career, this.slot); },
@@ -189,7 +190,7 @@ const CareerHomeScene = {
     // ---- left: the player ----
     R.panel(s.left + 30, 130, 500, 740, 'rgba(10,22,40,0.9)', '#ffd23f');
     Portrait.draw(ctx, p, s.left + 280, 330, 330);
-    R.text(p.name, s.left + 280, 540, 40, '#ffffff');
+    R.text(p.name, s.left + 280, 540, 40, '#ffffff', 'center', true, 500);     // long names shrink to fit (M15 Job 5)
     const arch = T('create.arch.' + p.archetype);
     R.text(T('career.role.' + p.role) + ' · ' + arch, s.left + 280, 588, 19, '#9be7ff', 'center', false);
     R.text(T('career.ovr', { n: Career.overall(c) }), s.left + 150, 650, 44, '#ffd23f');

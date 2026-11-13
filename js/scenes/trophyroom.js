@@ -64,8 +64,8 @@ const CreditsScene = {
   pointerUp(id) { if (!Dev.pointerUp(id)) this.buttons.up(id); },
   keyDown(code) { if (code === 'Escape' || code === 'Enter') Scenes.go(this.back); },
   render(ctx) {
-    const v = Display.viewRect(), cx = CONFIG.LOGICAL_W / 2;
-    ctx.fillStyle = '#05080f'; ctx.fillRect(v.x, v.y, v.w, v.h);
+    const cx = CONFIG.LOGICAL_W / 2;
+    CareerUI.bg(ctx, 'bg_hall_of_fame', 0.85);          // Rule A: art fills the whole screen
     // the studio logo on top (the art is about 180 x 220: never above ~2x)
     const a = Math.min(1, this._t / 0.6);
     ctx.save(); ctx.globalAlpha = a;

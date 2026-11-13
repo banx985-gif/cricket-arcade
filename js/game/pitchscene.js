@@ -154,12 +154,12 @@ const PitchScene = {
     const tIdeal = sim.contactIdx * CONFIG.PHYSICS_STEP;
     // Late contacts meet the ball a touch behind the ideal point.
     const pos = sim.path.at(Math.min(this.dT, tIdeal + 0.035), {});
-    let mods = this._duelPlayers ? BallPlay.mods(this._duelPlayers.bat, this._duelPlayers.bowl, sh.id) : null;
+    let mods = this._duelPlayers ? BallPlay.mods(this._duelPlayers.bat, this._duelPlayers.bowl, sh.id, this._sixCtx ? this._sixCtx(aim) : null) : null;
     // Career techniques (game/techniques.js) adjust the contact, then the hit.
     if (this._techMods) mods = this._techMods(mods || { edge: 1, power: 1, jitter: 1 }, sh, aim);
     const c = Contact.resolve({ shotId: sh.id, grade: sh.grade, err: sh.err, aim, ball: pos, mods }, battingRng);
     if (this._techContact) this._techContact(c, sh);
-    const plan = Fielding.resolve(pos, c, sh.id, fieldingRng);
+    const plan = Fielding.resolve(pos, c, sh.id, fieldingRng, this._fieldOpts ? this._fieldOpts() : undefined);
     this.hit = { c, plan, t: 0, pos, grade: sh.grade, perfect: sh.grade === 'perfect', dropShown: false };
     this._setState('inplay');
     this._contactFeel(pos, c, sh.grade, this.feelScale === undefined ? 1 : this.feelScale);
@@ -459,14 +459,28 @@ const PitchScene = {
       bz = D.releaseZ + 0.5 - (D.releaseZ + 0.5 - F.bowlerFollowThroughZ) * (1 - (1 - slow) * (1 - slow));
       bopts = { run: 16 + slow * 6, arm: ph.after < 0.25 ? -Math.PI / 2 + ph.after * 6 : 1.4 };
     }
-    add('bowler', bx, 0, bz, bopts);
+    // M16: the rendered fast-bowling action, when its frames are in (else the art / stand-in above).
+    const ba = this._bowlerAnim(ph, bz);
+    if (ba) add('anim_bowl_fast:' + ba.frame, bx, 0, ba.z, { scale: BATTING_DATA.anim.sizeK });
+    else add('bowler', bx, 0, bz, bopts);
 
     // Fielders
     const hitT = this.hit ? this.hit.t : 0;
     const active = this.hit && this.hit.plan.fielder;
+    const dv = this.hit && this.hit.dive && this.hit.dive.result ? this.hit.dive : null;   // a diving stop (M15)
     for (const f of Fielding.fielders()) {
-      let fx = f.x, fz = f.z, running = false, catching = false;
-      if (active && active.id === f.id) {
+      let fx = f.x, fz = f.z, running = false, catching = false, rot = 0;
+      if (dv && dv.id === f.id && !(dv.result === 'missed' && active && active.id === f.id && hitT > dv.t + 0.6)) {
+        // Run toward the ball, then slide the last bit on the ground (all the way if it was stopped).
+        const dx = dv.x - f.x, dz = dv.z - f.z, dist = Math.hypot(dx, dz);
+        const ranTo = Math.min(dist, Math.max(0, hitT - F.reaction) * F.fielderSpeed);
+        const k = Math.max(0, Math.min(1, (hitT - dv.t + 0.3) / 0.3));
+        const to = dist * (dv.result === 'saved' ? 1 : 0.85);
+        const moved = ranTo + Math.max(0, to - ranTo) * k;
+        if (dist > 0) { fx += dx / dist * moved; fz += dz / dist * moved; }
+        running = k === 0 && ranTo < dist;
+        rot = (dv.dir || 1) * 1.35 * k;
+      } else if (active && active.id === f.id) {
         const dx = active.to.x - f.x, dz = active.to.z - f.z;
         const dist = Math.hypot(dx, dz);
         const need = active.chase ? dist : Math.max(0, dist - F.reach * 0.6);
@@ -475,12 +489,13 @@ const PitchScene = {
         running = moved > 0 && moved < need;
         catching = this.hit.plan.result === 'caught' && hitT > this.hit.plan.endT - 0.4;
       }
-      add(f.keeper ? 'keeper' : 'fielder', fx, 0, fz, { run: running ? hitT * 14 : 0, catching });
+      add(f.keeper ? 'keeper' : 'fielder', fx, 0, fz, { run: running ? hitT * 14 : 0, catching, rot });
     }
 
     // Batter
     const swing = this._swingProgress();
-    const batterItemOpts = { bat: this._batAngle(swing), lean: this.shot && this.shot.id !== 'defend' ? 0.4 : 0 };
+    const bp = this._batPose(swing);
+    const batterItemOpts = { bat: bp.a, batLen: bp.len, lean: this.shot && this.shot.id !== 'defend' ? 0.4 : 0 };
     if (Sprites.has('batter')) {
       // Single-pose art: lean into the shot while swinging.
       const s = swing === null ? 0 : Math.sin(Math.min(1, swing) * Math.PI);
@@ -488,7 +503,10 @@ const PitchScene = {
     }
     const pos = this._batterPositions();
     if (pos.running) { batterItemOpts.rot = Math.sin(this.hit.t * 18) * 0.06; }
-    add('batter', pos.striker.x, 0, pos.striker.z, batterItemOpts);
+    // M16: the rendered cover drive frames (stance, backlift, swing, finish) while batting at the crease.
+    const bf = pos.running ? null : this._batterAnimFrame(swing);
+    if (bf !== null) add('anim_bat_cover_drive:' + bf, pos.striker.x, 0, pos.striker.z, { scale: BATTING_DATA.anim.sizeK });
+    else add('batter', pos.striker.x, 0, pos.striker.z, batterItemOpts);
     const batterItem = items[items.length - 1];
     if (pos.nonStriker) {
       add('batter', pos.nonStriker.x, 0, pos.nonStriker.z,
@@ -527,9 +545,46 @@ const PitchScene = {
         R.circle(it.p.x, it.p.y, it.opts.r + 5, null, '#000000', 5);
         R.circle(it.p.x, it.p.y, it.opts.r + 10, null, '#fff35c', 4);
       }
-      if (it === batterItem && Sprites.has('batter')) this._drawSwoosh(ctx, it.p, swing);
+      if (it === batterItem && it.id === 'batter' && Sprites.has('batter')) this._drawSwoosh(ctx, it.p, swing);
     }
     if (!ballItem) this._drawTrail(ctx);
+  },
+
+  // ---- M16: rendered action frames (data/anims.js); null = not in yet, use the single pose ----
+  // Only once EVERY frame has loaded (a half-loaded set would make the player blink out).
+  _anim(id) {
+    const A = typeof ANIM_DATA !== 'undefined' && ANIM_DATA[id];
+    if (!A) return null;
+    for (let i = 0; i < A.frames; i++) if (!Sprites.has('anim_' + id + ':' + i)) return null;
+    return A;
+  },
+  // Stance -> backlift while the ball comes, then the swing with bat-on-ball on the contact frame
+  // (the swing reaches the ball half way through, see _swingProgress), then the finish.
+  _batterAnimFrame(swing) {
+    const A = this._anim('bat_cover_drive');
+    if (!A) return null;
+    const lift = BATTING_DATA.anim.backliftFrame, last = A.frames - 1, hit = A.contact;
+    let f;
+    if (swing === null) f = this.state === 'delivery' ? lift * Math.min(1, this.dT / BATTING_DATA.swing.backliftTime) : 0;
+    else {
+      const p = Math.min(1.2, swing);
+      f = p <= 0.5 ? lift + (hit - lift) * (p / 0.5) : hit + (last - hit) * Math.min(1, (p - 0.5) / 0.6);
+      if (this.shot && this.shot.id === 'defend') f = Math.min(f, hit);         // a block stops at the ball
+    }
+    return Math.max(0, Math.min(last, Math.round(f)));
+  },
+  // The delivery stride plays over the end of the run-up (the frames carry the bowler forward
+  // themselves, so he's drawn from the release spot), release on the release frame, then the follow-through.
+  _bowlerAnim(ph, runZ) {
+    const A = this._anim('bowl_fast');
+    if (!A) return null;
+    const D = BATTING_DATA.delivery, M = BATTING_DATA.anim, at = D.releaseZ + 0.5, rel = A.release, last = A.frames - 1;
+    if (ph.after < 0) {
+      const e = Math.max(0, Math.min(1, ph.runT));
+      if (e < M.strideFrom) return { frame: 0, z: runZ - M.strideBack };
+      return { frame: Math.round(rel * (e - M.strideFrom) / (1 - M.strideFrom)), z: at };
+    }
+    return { frame: Math.min(last, Math.round(rel + (last - rel) * Math.min(1, ph.after / M.followTime))), z: at };
   },
 
   // 0..1 through the swing, or null when not swinging.
@@ -541,27 +596,42 @@ const PitchScene = {
     return p < 0 ? null : Math.min(1.2, p);
   },
 
-  _batAngle(swing) {
-    const sh = this.shot;
+  // M16: a cricket swing, not a baseball one. The bat moves in a plane that runs straight down the
+  // pitch: up into the backlift, down past the front pad at contact, then up into a high finish.
+  // th = the bat's angle in that plane (0 = pointing straight down, + = back towards the keeper,
+  // - = towards the bowler and up). Seen from the bowler's end the bat mostly goes up and down,
+  // and looks shorter as it points at us or away. Tuning: BATTING_DATA.swing.
+  _batPose(swing) {
+    const sh = this.shot, W = BATTING_DATA.swing;
+    let th, side;
     if (swing === null) {
-      if (this.state === 'delivery') return 1.9 + (4.0 - 1.9) * Math.min(1, this.dT / 0.35);   // backlift
-      return 1.9 + Math.sin(this.stateT * 3) * 0.06;                                         // stance tap
+      if (this.state === 'delivery') { const k = Math.min(1, this.dT / W.backliftTime); th = W.stance + (W.backlift - W.stance) * k; side = W.stanceSide + (W.backliftSide - W.stanceSide) * k; }
+      else { th = W.stance + Math.sin(this.stateT * 3) * 0.05; side = W.stanceSide; }
+    } else {
+      const p = Math.min(1, swing), F = sh.id === 'defend' ? W.defend : sh.id === 'power' ? W.power : W.control;
+      // ease in: the bat speeds up into the ball, then slows into the finish
+      const e = p < F.contactAt ? (p / F.contactAt) ** 1.6 * F.contactAt : p;
+      th = e <= F.contactAt ? W.backlift + (0 - W.backlift) * (e / F.contactAt)
+        : 0 + (F.finish - 0) * ((e - F.contactAt) / (1 - F.contactAt));
+      side = e <= F.contactAt ? W.backliftSide * (1 - e / F.contactAt) : F.finishSide * ((e - F.contactAt) / (1 - F.contactAt));
     }
-    const p = Math.min(1, swing);
-    if (sh.id === 'defend') return 4.0 + (1.7 - 4.0) * Math.min(1, p * 1.4);
-    return 4.0 + (-0.9 - 4.0) * p;
+    const dx = side, dy = Math.cos(th);
+    return { a: Math.atan2(dy, dx), len: Math.hypot(dx, dy) };
   },
+  _batAngle(swing) { return this._batPose(swing).a; },
 
   // Code-drawn swing arc for the single-pose batter art (a trail effect, not art).
   _drawSwoosh(ctx, p, swing) {
     if (swing === null || swing > 1.15) return;
     const s = p.s;
-    const cx = p.x + 0.1 * s, cy = p.y - 1.05 * s;
-    const r = 0.95 * s;
+    // M16: the bat comes straight down the line, so the trail is a tall, thin loop (down at the
+    // front pad, up into the finish), not a flat circle round the body (that looked like baseball).
+    const cx = p.x + 0.06 * s, cy = p.y - 1.15 * s;
+    const ry = 0.95 * s, rx = 0.2 * s;
     const defend = this.shot.id === 'defend';
-    const a0 = defend ? 2.4 : 3.9, a1 = defend ? 1.6 : -0.7;
-    const head = a0 + (a1 - a0) * Math.min(1, swing);
-    const tail = a0 + (a1 - a0) * Math.max(0, Math.min(1, swing) - 0.45);
+    const t0 = -Math.PI / 2, t1 = defend ? 0.35 * Math.PI : 1.45 * Math.PI;
+    const head = t0 + (t1 - t0) * Math.min(1, swing);
+    const tail = t0 + (t1 - t0) * Math.max(0, Math.min(1, swing) - 0.4);
     const fade = swing > 1 ? 1 - (swing - 1) / 0.15 : 1;
     ctx.save();
     ctx.globalAlpha = 0.75 * fade;
@@ -569,7 +639,7 @@ const PitchScene = {
     ctx.strokeStyle = this.hit && this.hit.perfect ? '#ffd23f' : '#ffffff';
     ctx.lineWidth = Math.max(4, 0.12 * s);
     ctx.beginPath();
-    ctx.arc(cx, cy, r, head, tail, head < tail ? false : true);
+    ctx.ellipse(cx, cy, rx, ry, 0, tail, head, false);
     ctx.stroke();
     ctx.restore();
   },

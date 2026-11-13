@@ -50,6 +50,15 @@ const Scenes = {
     if (next.enter) next.enter(params || {});
     if (typeof Sound !== 'undefined' && Sound.forScene) Sound.forScene(name);     // the screen's music + crowd (M12)
     if (typeof Platform !== 'undefined' && Platform.keepAwake && typeof SOUND_DATA !== 'undefined') Platform.keepAwake(SOUND_DATA.crowdScenes.includes(name));   // screen on in matches (M13)
+    // Notifications (Rule B): a tapped notification opens its screen once the game is on a menu;
+    // after the first win, the one friendly question shows on the next calm screen.
+    if (typeof Notify !== 'undefined' && typeof Save !== 'undefined' && Save.data) {
+      if (name === 'missions') Notify.ensure(Save.data).missionsSeen = Notify._missionsOpen(Save.data);
+      if (Notify.pendingRoute && name === 'title' && !(Scenes.registry.title.resume)) { Notify.follow(); return; }
+      // Never over the title's resume or welcome panels.
+      const busy = name === 'title' && (next.resume || next.welcome);
+      if (!busy && Notify.shouldAsk(Save.data, name)) NotifyAsk.show();
+    }
   },
 
   update(dt, realDt) {
@@ -60,8 +69,10 @@ const Scenes = {
     }
     if (this.current && this.current.update) this.current.update(dt, realDt);
   },
+  _ask() { return typeof NotifyAsk !== 'undefined' && NotifyAsk.open; },
   render(ctx) {
     if (this.current && this.current.render) this.current.render(ctx);
+    if (this._ask()) NotifyAsk.render(ctx);
     if (this.pending && this.pending.t > 0.15) {        // a quick loading moment (only if it takes a while)
       const v = Display.viewRect();
       ctx.fillStyle = 'rgba(5,12,22,0.6)';
@@ -69,10 +80,10 @@ const Scenes = {
       R.text(T('boot.loading'), CONFIG.LOGICAL_W / 2, CONFIG.LOGICAL_H / 2, 48, '#ffffff');
     }
   },
-  pointerDown(id, x, y) { if (this.pending) return; if (this.current && this.current.pointerDown) this.current.pointerDown(id, x, y); },
-  pointerMove(id, x, y) { if (this.current && this.current.pointerMove) this.current.pointerMove(id, x, y); },
-  pointerUp(id) { if (this.current && this.current.pointerUp) this.current.pointerUp(id); },
-  keyDown(code) { if (this.current && this.current.keyDown) this.current.keyDown(code); },
+  pointerDown(id, x, y) { if (this.pending) return; if (this._ask()) { NotifyAsk.pointerDown(id, x, y); return; } if (this.current && this.current.pointerDown) this.current.pointerDown(id, x, y); },
+  pointerMove(id, x, y) { if (this._ask()) { NotifyAsk.pointerMove(id, x, y); return; } if (this.current && this.current.pointerMove) this.current.pointerMove(id, x, y); },
+  pointerUp(id) { if (this._ask()) { NotifyAsk.pointerUp(id); return; } if (this.current && this.current.pointerUp) this.current.pointerUp(id); },
+  keyDown(code) { if (this._ask()) { if (code === 'Escape') NotifyAsk.dismiss(); return; } if (this.current && this.current.keyDown) this.current.keyDown(code); },
   keyUp(code) { if (this.current && this.current.keyUp) this.current.keyUp(code); },
   appHidden() { if (this.current && this.current.onAppHidden) this.current.onAppHidden(); },
 };

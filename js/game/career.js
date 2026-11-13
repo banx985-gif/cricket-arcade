@@ -570,6 +570,7 @@ const Career = {
       overall: this.overall(c), level: c.player.level, stage: S.id, stageN: S.n,
       fixture: nx ? nx.n : null, fixtures: c.fixtures.length, club: c.club ? this.team(c).name : null, origin: c.origin,
       phase: c.phase, savedAt: new Date().toISOString(),
+      rival: nx && nx.rival ? nx.rival : null, tokens: c.player.skillTokens || 0,     // for notifications (Rule B)
     };
   },
 };

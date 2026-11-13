@@ -118,6 +118,7 @@ const Missions = {
     st.plays = (st.plays || 0) + 1;
     const got = m.stars.map((s) => (cleared && this.starMet(s, f) ? 1 : 0));
     const before = st.stars.reduce((a, b) => a + b, 0);
+    if (cleared && typeof Notify !== 'undefined') Notify.won(save);         // Rule B: a cleared mission counts as a win
     if (cleared) { st.cleared = 1; st.stars = st.stars.map((v, i) => (v || got[i] ? 1 : 0)); }
     const out = { cleared, got, stars: st.stars.slice(), newStars: st.stars.reduce((a, b) => a + b, 0) - before, rewards: [], milestones: [] };
     const rw = this.reward(m);

@@ -342,7 +342,7 @@ const CareerShopScene = {
     b.add('shop.equipNow', rx + 380, s.bottom - 128, 230, 108, () => this._equipNow(), { size: 26, color: '#9be7ff',
       disabled: () => !(this.pick && Gear.owns(Save.data, this.pick) && Gear.equipped(c)[Gear.item(this.pick).slot] !== this.pick && Gear.canEquip(c, Save.data, this.pick).ok) }).tag = 'equipNow';
   },
-  _gx() { return CONFIG.LOGICAL_W / 2 - 900; },
+  _gx() { return Math.max(CONFIG.LOGICAL_W / 2 - 900, Display.safe.left + 10); },     // Rule A: clear of a notch
   _rx() { return Math.min(Display.safe.right, CONFIG.LOGICAL_W + 60) - 660; },
   _buyLabel() {
     if (!this.pick) return T('shop.buy', { n: '-' });

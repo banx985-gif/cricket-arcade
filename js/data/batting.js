@@ -96,6 +96,32 @@ const BATTING_DATA = {
     gapAssist: 9,            // aimed shots are nudged up to this many degrees away from a fielder
   },
 
+  // ---- Sixes are earned (M15 Job 3b; game/sixrules.js). Real matches only, not Six Smash. ----
+  // A lofted hit's speed is multiplied by: grade x matchup x fit x release (x same-spot) +- spread.
+  // Range grows with speed squared: about 0.77 is needed to clear a 66-75 m rope.
+  sixes: {
+    lofted: 18,                     // launch angle (degrees) from which a hit counts as a loft
+    grade: { perfect: 0.805, good: 0.68 },
+    notPerfectCap: 0.72,            // a not-perfect loft never carries the rope (2, 4 or a catch out deep)
+    goodLoftAdd: -9,                // ...and it comes out flatter: over the infield, into the deep
+    power: 0.07,                    // Power on a loft: speed +-7% from Power 1 to 99 (replaces the duel's power boost)
+    skied: { speed: 0.55, loftAdd: 18 },   // a mistimed loft goes straight up
+    spread: 0.05,                   // +- this much from ball to ball
+    gap: { perPoint: 0.0018, min: 0.9, max: 1.12 },    // batting v this bowler's bowling
+    release: { perfect: 0.95, good: 1, loose: 1.05, ai: 1 },
+    fit: {                          // is a loft the right shot for this ball?
+      length: { yorker: 0.8, full: 1, good: 0.92, short: 0.88 },
+      pull: 0.98,                   // a short ball pulled or hooked to leg
+      crossDeg: 20, wideOff: 0.35, onLegs: -0.08, crossLine: 0.93, variation: 0.95,
+    },
+    repeat: { withinDeg: 22, k: 0.95 },   // the same spot as the last boundary
+    // Perfect-timing window in matches (x the duel's window): base, matchup, difficulty.
+    window: { base: 0.72, perGap: 0.008, min: 0.7, max: 1.35, difficulty: { rookie: 1.1, pro: 1, legend: 0.85 } },
+    // After a boundary: the bowler changes plan for a few balls, the captain moves a fielder back.
+    fightBack: { balls: 2, sameType: 0.25, favour: ['slower', 'bouncer', 'yorker', 'cutter', 'armball', 'googly', 'flipper'], favourK: 1.8,
+      widerChance: 0.45, widerLine: [0.3, 0.5], deepRadius: 61 },
+  },
+
   // ---- Field --------------------------------------------------------------
   field: {
     boundaryRadius: 66,
@@ -107,6 +133,9 @@ const BATTING_DATA = {
     catchMinHeight: 0.15,
     catchSkill: 0.82,          // chance a comfortable catch is held
     hardCatchPenalty: 0.35,    // taken off catchSkill for a full-stretch catch
+    // M15 3b: running catches are harder the further the fielder ran (up to penalty at metres),
+    // and a catch within ropeWithin metres of the rope loses rope more.
+    runCatch: { metres: 18, penalty: 0.3, ropeWithin: 4, rope: 0.12 },
     groundPickupMaxHeight: 1.1,
     // Hard-hit ground balls can beat a fielder (misfield / through the hands).
     cleanStop: [
@@ -133,6 +162,20 @@ const BATTING_DATA = {
   },
 
   // ---- Camera / presentation ---------------------------------------------
+  // M16: the code-drawn swing (straight bat, down the line). Angles in radians in the swing plane:
+  // 0 = bat pointing straight down, + = back towards the keeper, - = towards the bowler / up.
+  // side = how far the bat leans across the screen (+ = off side).
+  swing: {
+    stance: 0.3, stanceSide: -0.3, backlift: 2.55, backliftSide: 0.22, backliftTime: 0.35,
+    control: { contactAt: 0.55, finish: -2.0, finishSide: -0.3 },      // checked drive: finish high
+    power:   { contactAt: 0.5, finish: -2.75, finishSide: -0.4 },      // lofted hit: big, full finish over the shoulder
+    defend:  { contactAt: 0.85, finish: -0.25, finishSide: -0.05 },    // dead bat: stops at the ball
+  },
+  // M16: playing the rendered action frames. backliftFrame = the backlift pose in the batting frames;
+  // the bowler's stride starts at strideFrom of the run-up (its first frame shows him strideBack metres
+  // behind the release spot), followTime = seconds for the follow-through frames.
+  // sizeK: drawn this much bigger than life, like the rest of the game's players.
+  anim: { sizeK: 1.3, backliftFrame: 2.5, strideFrom: 0.8, strideBack: 2.0, followTime: 0.4 },
   camera: {
     pitch: { pos: [1.3, 7.5, 33], target: [0.1, 0.3, 3.5], focal: 2700 },
     follow: { height: 20, back: 34, focal: 1350, lead: 0.3, cutDelay: 0.18 },

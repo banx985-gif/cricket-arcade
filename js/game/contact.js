@@ -75,6 +75,12 @@ const Contact = {
     loftDeg = Math.max(0, loftDeg);
 
     let speed = S.speed[m.speedGrade || grade] * rng.range(0.97, 1.03) * (m.power || 1);
+    // M15 Job 3b: in real matches a lofted hit only clears the rope when everything is right
+    // (game/sixrules.js). Six Smash / Wicket Rush don't pass m.six and keep their own rules.
+    if (m.six && o.shotId !== 'defend' && loftDeg >= BATTING_DATA.sixes.lofted && typeof SixRules !== 'undefined') {
+      const k = SixRules.carry(m.six, m.speedGrade || grade, dirDeg, rng, m.power || 1);
+      speed *= k.speedK; loftDeg += k.loftAdd;
+    }
     return this._pack(o.shotId === 'defend' ? 'defend' : 'hit', dirDeg, loftDeg, speed);
   },
 

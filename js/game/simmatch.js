@@ -16,7 +16,7 @@ const SimMatch = {
   // s: { inn, bat, bowl, fatigue, cond, fielding (avg stat), phase, index }
   ball(s, r) {
     const bowl = s.bowl, bat = s.bat;
-    const ch = Bowling.aiChoose(bowl, { phase: s.phase, fatigue: s.fatigue }, r.bowl);
+    const ch = Bowling.aiChoose(bowl, { phase: s.phase, fatigue: s.fatigue, memory: s.memory }, r.bowl);
     const del = Bowling.release({ bowler: bowl, family: bowl.family, typeIdx: ch.typeIdx, target: ch.target,
       grade: ch.grade, power: ch.power, fatigue: s.fatigue, cond: s.cond, index: s.index || 0 }, r.bowl);
     const A = MATCH_DATA.aiBowler;
@@ -29,7 +29,7 @@ const SimMatch = {
 
     const dec = AIBatter.decide(del, {
       releaseGrade: ch.grade, pressure: Duel.pressure(s.inn), freeHit, timingBias: del.timingBias, chaseBoost: s.aggression || 0,
-      bat, bowl, fatigue: s.fatigue,
+      bat, bowl, fatigue: s.fatigue, smartLoft: !!s.memory,
     }, r.ai);
     const tIdeal = del.sim.contactIdx * CONFIG.PHYSICS_STEP;
     const at = del.sim.path.at(tIdeal, {});
@@ -42,8 +42,10 @@ const SimMatch = {
       return out;
     }
     const pos = del.sim.path.at(Math.min(tIdeal + Math.max(0, dec.err), tIdeal + 0.035), {});
-    const c = Contact.resolve({ shotId: dec.shot, grade, err: dec.err, aim: dec.aim, ball: pos, mods: BallPlay.mods(bat, bowl, dec.shot) }, r.bat);
+    const six = s.memory ? { del, aim: dec.aim, releaseGrade: ch.grade, memory: s.memory } : null;      // real-match six rules (M15 3b)
+    const c = Contact.resolve({ shotId: dec.shot, grade, err: dec.err, aim: dec.aim, ball: pos, mods: BallPlay.mods(bat, bowl, dec.shot, six) }, r.bat);
     const plan = Fielding.resolve(pos, c, dec.shot, r.field);
+    if (s.memory) SixRules.afterBall(s.memory, { result: plan.result, c, typeIdx: ch.typeIdx });
     if (plan.result === 'six' || plan.result === 'four') { out.boundary = plan.runs; return out; }
     if (plan.result === 'caught') { out.wicket = 'caught'; return out; }
     // Fielded: the throw, and the batters run.
@@ -80,6 +82,7 @@ const SimMatch = {
   innings(o) {
     const inn = o.inn, r = this._streams(o.tag || inn.index);
     const fieldMods = Duel.fieldMods(o.bowling);
+    const memory = typeof SixRules !== 'undefined' && !o.noSixRules ? SixRules.newMemory() : null;
     let lastWkts = 0;
     while (!inn.ended) {
       if (inn.legal % 6 === 0 && (inn.overBowlers || []).length === inn.legal / 6) {
@@ -89,13 +92,14 @@ const SimMatch = {
         const fam = Bowling.family(bw.family);
         Fielding.setPreset(Fielding.aiChoose({ phase: ph, kind: fam.kind, family: fam.id, wicketsFell: inn.wickets > lastWkts }, r.field), ph === 'powerplay');
         Fielding.mods = Duel.fieldMods(o.bowling, Fielding.preset);
+        Fielding.moved = null; if (memory) SixRules.newOver(memory);
         lastWkts = inn.wickets;
       }
       const bowlerId = inn.overBowlers[inn.overBowlers.length - 1];
       const bowl = o.bowling.players.find((p) => p.id === bowlerId);
       const bat = o.batting.players[inn.striker - 1];
       const b = this.ball({ inn, bat, bowl, fatigue: o.fatigue[bowlerId] || 0, cond: o.cond,
-        fielding: fieldMods.fielding, phase: BowlerRules.phase(inn, o.fmt), index: inn.legal }, r);
+        fielding: fieldMods.fielding, phase: BowlerRules.phase(inn, o.fmt), index: inn.legal, memory }, r);
       const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, wicket: b.wicket });
       if (o.onBall) o.onBall(b, res);
       if (res.overDone) BowlerRules.overDone(o.fatigue, o.bowling, bowlerId, 0);

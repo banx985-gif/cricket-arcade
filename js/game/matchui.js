@@ -245,6 +245,75 @@ const ThrowMeter = {
   },
 };
 
+// Diving stop (M15, plan 6.3): a hard-hit ball is about to beat a fielder. A ring
+// closes around them; a short swipe the way the ball is going (arrow) before it
+// closes = a stop. Wrong way, too late or no swipe = it gets past. Pure input +
+// drawing; the scene swaps in the saved ball (plan.dive.alt).
+const DiveMoment = {
+  m: null,           // { t (real secs), win, dir (-1 left / 1 right on screen), world {x,z}, result }
+  touch: null,       // { id, x, y }
+
+  // fielding = the side's Fielding stat (a wider window when good); zoneK = a perk's widening.
+  start(dive, dir, fielding, zoneK) {
+    this.m = { t: 0, win: Fielding.diveWindow(fielding, zoneK), dir: dir < 0 ? -1 : 1, world: { x: dive.x, z: dive.z }, from: dive.from, result: null };
+    this.touch = null;
+  },
+  stop() { this.m = null; this.touch = null; },
+  get active() { return !!this.m; },
+
+  // 'saved' | 'missed' once decided (or timed out), else null.
+  update(realDt) {
+    const m = this.m;
+    if (!m) return null;
+    m.t += realDt;
+    if (!m.result && m.t > m.win) m.result = 'missed';
+    return m.result;
+  },
+  // dx = the swipe's sideways move in logical px (keyboard: ±1).
+  swipe(dx) {
+    const m = this.m;
+    if (!m || m.result || !dx) return false;
+    m.result = Fielding.diveJudge(dx, m.dir, m.t, m.win);
+    return true;
+  },
+  down(id, x, y) { if (!this.m) return false; this.touch = { id, x, y }; return true; },
+  move(id, x, y) {
+    const t = this.touch;
+    if (!this.m || !t || t.id !== id) return !!this.m;
+    const dx = x - t.x;
+    if (Math.abs(dx) >= MATCH_DATA.dive.swipeMin && Math.abs(dx) > Math.abs(y - t.y) * 0.6) { this.swipe(dx); this.touch = null; }
+    return true;
+  },
+  up(id) { if (this.touch && this.touch.id === id) this.touch = null; return !!this.m; },
+
+  draw(ctx) {
+    const m = this.m;
+    if (!m || m.result) return;
+    const s = Display.safe, cx = CONFIG.LOGICAL_W / 2;
+    const sp = View3D.project(m.from.x, 0.9, m.from.z) || { x: cx, y: CONFIG.LOGICAL_H / 2 };
+    const fx = Math.max(s.left + 200, Math.min(s.right - 200, sp.x)), fy = Math.max(s.top + 260, Math.min(s.bottom - 200, sp.y));
+    const k = Math.min(1, m.t / m.win);
+    // the closing timing ring around the fielder
+    ctx.save();
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.arc(fx, fy, 70 + 190 * (1 - k), 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#ffd23f';
+    ctx.beginPath(); ctx.arc(fx, fy, 70, 0, Math.PI * 2); ctx.stroke();
+    // the arrow: which way to swipe
+    const ax = fx + m.dir * 150, pulse = 1 + Math.sin(m.t * 18) * 0.08;
+    ctx.translate(ax, fy); ctx.scale(m.dir * pulse, pulse);
+    ctx.beginPath();
+    ctx.moveTo(70, 0); ctx.lineTo(0, -60); ctx.lineTo(0, -26); ctx.lineTo(-70, -26); ctx.lineTo(-70, 26); ctx.lineTo(0, 26); ctx.lineTo(0, 60); ctx.closePath();
+    ctx.fillStyle = '#ffd23f'; ctx.fill();
+    ctx.lineWidth = 6; ctx.strokeStyle = CONFIG.COLOR.ink; ctx.stroke();
+    ctx.restore();
+    R.text(T('moment.dive'), cx, s.top + 250, 96, '#ffd23f');
+    R.text(T('moment.diveHint'), cx, s.top + 330, 36, '#ffffff');
+  },
+};
+
 const ReadChip = {
   // del = the computer's delivery; runT = run-up progress 0..1; show = when it appears (0..1) or null = hidden
   draw(ctx, del, runT, showAt) {

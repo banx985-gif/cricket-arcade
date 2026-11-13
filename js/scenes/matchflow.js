@@ -208,7 +208,7 @@ const MatchResultScene = {
     // Quick Match (plan 19): modest Coins (x difficulty) and a little profile XP for a win.
     this.coins = QuickMatch.coins(this.won, Match.difficulty);
     Save.data.currencies.coins = (Save.data.currencies.coins || 0) + this.coins;
-    if (this.won) Profile.add(Save.data, PROFILE_DATA.xp.quickWin, 'quick');
+    if (this.won) { Profile.add(Save.data, PROFILE_DATA.xp.quickWin, 'quick'); if (typeof Notify !== 'undefined') Notify.won(Save.data); }
     Sound.play('ui_currency');
     Achievements.afterMatch(Save.data, {}, null); Achievements.checkAccount(Save.data, null);   // (M09)
     // Anything earned by this result (e.g. field settings at Quick Match win milestones).

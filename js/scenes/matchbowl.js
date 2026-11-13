@@ -27,12 +27,13 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     Effects.init();
     MatchupCard.hide();
     ThrowMeter.stop();
+    DiveMoment.stop();
     this._initControls();
     this._layout();
     this._startBall();
   },
 
-  exit() { BowlControls.reset(); BowlerPicker.hide(); ThrowMeter.stop(); Fielding.clear(); TechUI.btns = []; },
+  exit() { BowlControls.reset(); BowlerPicker.hide(); ThrowMeter.stop(); DiveMoment.stop(); Fielding.clear(); TechUI.btns = []; },
 
   // ---- career techniques (game/techniques.js) ----
   // Release bands with the bowler's stats for this ball, then the techniques.
@@ -79,6 +80,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     BowlControls.enabled = true;
     BowlControls.swipeOpen = false;
     ThrowMeter.stop();
+    DiveMoment.stop();
     const prevBatter = this.batterP;
     this.batterP = Match.batter(this.inn);
     if (prevBatter && prevBatter !== this.batterP && !Match.needsBowler(this.inn)) MatchupCard.show(this.batterP, this.bowler, 'bowl');
@@ -128,8 +130,21 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
   },
 
   // ---- the AI batters run; you throw it back ----
+  // Your side fields, so hard-hit balls can bring a diving stop (not in the tutorial).
+  _fieldOpts() { return MissionMatch.on && MissionMatch.m && MissionMatch.m.tutorial ? undefined : { dive: RNG.stream('dive') }; },
+
+  // Real-match six rules (M15 3b): the AI batter's lofts depend on its stats v YOURS and your release.
+  _sixCtx(aim) { return { del: this.del, aim, releaseGrade: (this.release && this.release.grade) || 'good', memory: null }; },
+
   _connect(aim, battingRng, fieldingRng) {
     const h = PitchScene._connect.call(this, aim, battingRng, fieldingRng);
+    if (h.plan.dive) h.dive = h.plan.dive;
+    this._setupRunning(h);
+    return h;
+  },
+
+  // Fielded: the throw waits for the pick-up and the AI batters plan their runs.
+  _setupRunning(h) {
     const plan = h.plan;
     if (plan.result === 'fielded') {
       const n = plan.path.n - 1;
@@ -143,7 +158,30 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
       const want = Running.aiPlan(expect, RNG.stream('ai'), h.running.runTime);
       for (let i = 0; i < want; i++) h.running.run(0);
     }
-    return h;
+  },
+
+  // The dive is decided: a stop swaps in the saved ball; a miss lets it run on.
+  _dive(result) {
+    const h = this.hit, dv = h.dive;
+    dv.result = result;
+    DiveMoment.stop();
+    Sound.play('sfx_dive');
+    const sp = View3D.project(dv.x, 0, dv.z);
+    if (result === 'saved') {
+      h.plan = dv.alt;
+      h.throwPending = null;
+      h.running = null;
+      this._setupRunning(h);
+      Effects.text(T('moment.diveSaved'), CONFIG.LOGICAL_W / 2, 330, '#3ddc5a', 80, { life: 1.2 });
+      if (sp) Effects.dust(sp.x, sp.y, 10, 1.4);
+      Stadium.cheer(0.5);
+      Sound.play('crowdCheer', { gain: 0.5 });
+      Platform.haptic('light');
+    } else {
+      Effects.text(T('moment.diveMissed'), CONFIG.LOGICAL_W / 2, 330, '#ffb36b', 64, { life: 1.1 });
+      if (sp) Effects.dust(sp.x, sp.y, 6, 1);
+    }
+    Log.add('ball', `dive ${result} (saves ${dv.saves})`);
   },
 
   _throw(grade) {
@@ -174,6 +212,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     Fullscreen.request();
     if (this._pauseDown(id, x, y)) return;
     if (BowlerPicker.down(id, x, y)) return;
+    if (DiveMoment.down(id, x, y)) return;
     if (!ThrowMeter.active && TechUI.down(id, x, y, () => { BowlControls.bands = this._bands(); })) return;
     if (MyXIMatch.on && !BowlerPicker.open && !ThrowMeter.active && TacticBar.down(x, y)) return;
     if (ThrowMeter.active) {
@@ -188,12 +227,14 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     if (Dev.pointerMove(id, x, y)) return;
     if (this._pauseMove(id, x, y)) return;
     if (BowlerPicker.move(id, x, y)) return;
+    if (DiveMoment.move(id, x, y)) return;
     BowlControls.move(id, x, y);
   },
   pointerUp(id) {
     if (Dev.pointerUp(id)) return;
     if (this._pauseUp(id)) return;
     if (BowlerPicker.up(id)) return;
+    if (DiveMoment.up(id)) return;
     if (ThrowMeter.btn.id === id) { ThrowMeter.btn.id = null; ThrowMeter.btn.pressed = false; return; }
     BowlControls.up(id);
   },
@@ -201,6 +242,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     if (code === 'Escape' || code === 'KeyP') { this.setPaused(!this.paused); return; }
     if (this.paused) return;
     if (BowlerPicker.keyDown(code)) return;
+    if (DiveMoment.active && (code === 'ArrowLeft' || code === 'ArrowRight' || code === 'KeyA' || code === 'KeyD')) { DiveMoment.swipe(code === 'ArrowLeft' || code === 'KeyA' ? -1 : 1); return; }
     if (ThrowMeter.active && (code === 'Space' || code === 'KeyT' || code === 'Enter')) { ThrowMeter.tap(); return; }
     BowlControls.keyDown(code);
   },
@@ -248,6 +290,20 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
         break;
       case 'inplay': {
         const h = this.hit;
+        // The dive: the game slows right down while the ring closes.
+        if (h.dive && !h.dive.result) {
+          const D = MATCH_DATA.dive;
+          if (!DiveMoment.active && h.t >= h.dive.t - D.lead) {
+            const a = View3D.project(h.dive.from.x, 0, h.dive.from.z), b = View3D.project(h.dive.x, 0, h.dive.z);
+            h.dive.dir = a && b ? Math.sign(b.x - a.x) || 1 : 1;
+            DiveMoment.start(h.dive, h.dive.dir, Duel.fieldMods(this.team).fielding);
+            Sound.play('uiTap');
+          }
+          if (DiveMoment.active) {
+            const r = DiveMoment.update(realDt);
+            if (r) this._dive(r); else dt *= D.slowMo;
+          }
+        }
         // The throw: the game slows while you stop the marker.
         if (h.throwPending && h.t >= h.throwPending.ready) {
           if (!ThrowMeter.active && !h.meterDone) { h.meterDone = true; ThrowMeter.start(Duel.fieldMods(this.team).fielding, Tech.throwZone()); Sound.play('uiTap'); }
@@ -299,6 +355,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') wicket = key;
     else if (run && run.runOut) wicket = 'runout';
     const thr = ThrowMeter.m && ThrowMeter.m.tapped;
+    DiveMoment.stop();
     const fam = this.bowler && Bowling.family(this.bowler.family), dtype = fam && fam.deliveries[this.typeIdx] ? fam.deliveries[this.typeIdx].id : null;
     ThrowMeter.stop();
     const res = inn.apply({ kind, batRuns, boundary, wicket, dtype, thr });
@@ -316,8 +373,9 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     if (this.paused) return;
     MatchupCard.draw(ctx, this.state === 'aim' || this.state === 'charge');
     ThrowMeter.draw(ctx);
+    DiveMoment.draw(ctx);
     MatchBatScene._drawFlashMarker.call(this, ctx);
-    if (!BowlerPicker.open && !ThrowMeter.active) TechUI.draw(ctx);
+    if (!BowlerPicker.open && !ThrowMeter.active && !DiveMoment.active) TechUI.draw(ctx);
     if (MyXIMatch.on && !BowlerPicker.open && !ThrowMeter.active) TacticBar.draw(ctx);
     if (MissionMatch.on && !BowlerPicker.open) { if (MissionMatch.m.tutorial) TutorialCoach.draw(ctx, this); else MissionHud.draw(ctx, this); }
     BowlerPicker.draw(ctx);

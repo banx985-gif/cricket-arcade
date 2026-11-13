@@ -60,11 +60,11 @@ const Sprites = {
   // opts: frame, alpha, flip, rot (radians, around the feet), shadow
   draw(id, x, y, ppm, opts) {
     const o = opts || {};
-    const key = o.frame ? id + ':' + o.frame : id;
+    const key = o.frame !== undefined && o.frame !== null ? id + ':' + o.frame : id;     // (frame 0 is a frame too)
     const art = this.images[key] || this.images[id];
     const ctx = R.ctx;
     if (art) {
-      const h = art.heightM ? art.heightM * ppm : (art.heightPx || art.img.height);
+      const h = (art.heightM ? art.heightM * ppm : (art.heightPx || art.img.height)) * (o.scale || 1);
       const w = h * (art.img.width / art.img.height);
       if (art.heightM && o.shadow !== false) R.ellipse(x, y, 0.5 * ppm, 0.13 * ppm, 'rgba(0,0,0,0.28)');
       ctx.save();
@@ -80,6 +80,7 @@ const Sprites = {
     if (fn) {
       ctx.save();
       if (o.alpha !== undefined) ctx.globalAlpha = o.alpha;
+      if (o.rot) { ctx.translate(x, y); ctx.rotate(o.rot); ctx.translate(-x, -y); }
       fn(ctx, x, y, ppm, o);
       ctx.restore();
     }
@@ -132,15 +133,19 @@ const Sprites = {
       ctx.fill();
       R.rect(hx - 0.16 * s, hy + 0.01 * s, 0.32 * s, 0.03 * s, '#9aa4b5'); // grille
       // hands + bat
-      const hxh = tx + 0.12 * s, hyh = y - 1.08 * s;
       const a = o.bat !== undefined ? o.bat : 1.9;
-      const len = 0.92 * s;
+      // M16: the hands rise with the bat (backlift and the high finish).
+      const lift = Math.max(0, -Math.sin(a)) * (o.batLen === undefined ? 1 : o.batLen) * 0.24 * s;
+      const hxh = tx + 0.12 * s, hyh = y - 1.08 * s - lift;
+      // M16: batLen < 1 = the bat points towards / away from us (a straight bat swinging down the line).
+      const len = 0.92 * s * (o.batLen === undefined ? 1 : Math.max(0.22, Math.min(1, o.batLen)));
       const bx = hxh + Math.cos(a) * len, by = hyh + Math.sin(a) * len;
       ctx.save();
       ctx.translate(hxh, hyh);
       ctx.rotate(a);
-      R.roundRect(0, -0.035 * s, 0.3 * s, 0.07 * s, 0.03 * s, '#2b2b2b');           // handle
-      R.roundRect(0.28 * s, -0.07 * s, len - 0.28 * s, 0.14 * s, 0.04 * s, '#e8cf93', '#9c7b3c', Math.max(1, 0.02 * s)); // blade
+      const hl = Math.min(0.3 * s, len * 0.33);
+      R.roundRect(0, -0.035 * s, hl, 0.07 * s, 0.03 * s, '#2b2b2b');           // handle
+      R.roundRect(hl - 0.02 * s, -0.07 * s, len - hl + 0.02 * s, 0.14 * s, 0.04 * s, '#e8cf93', '#9c7b3c', Math.max(1, 0.02 * s)); // blade
       ctx.restore();
       R.circle(hxh, hyh, 0.08 * s, '#f0f0f0'); // gloves
       o._batTip = { x: bx, y: by };

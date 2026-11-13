@@ -30,6 +30,7 @@ const Platform = {
       App.addListener('resume', show);
       App.addListener('backButton', () => this._back(App));
     }
+    this._initNotify();
   },
 
   // Running inside the store app (not a browser)?
@@ -77,6 +78,94 @@ const Platform = {
   onPause(fn) { this._pauseHandlers.push(fn); },
   // Called when the app comes back.
   onResume(fn) { this._resumeHandlers.push(fn); },
+
+  // ---- notifications (Rule B). Game code calls these, never the plugin / browser API. ----
+  // App: Capacitor Local Notifications. Web: browser notifications if allowed (they can only
+  // fire while the page is still alive in the background); otherwise everything is a quiet no-op.
+  _notifyTimers: {},
+  _localNotif() { return this.native() && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications || null; },
+  _webNotif() { return typeof window !== 'undefined' && 'Notification' in window ? window.Notification : null; },
+  // Can we ask at all on this device (the phone hasn't blocked us)? True if already allowed too.
+  notifyCanAsk() {
+    // Automated test browsers can't answer a question: skip quietly (tests switch it on with __notifyTest).
+    if (typeof navigator !== 'undefined' && navigator.webdriver && !window.__notifyTest) return false;
+    if (this._localNotif()) return this._nativePerm !== 'denied';
+    const N = this._webNotif();
+    return !!N && N.permission !== 'denied';
+  },
+  // Has the player (and the phone) said yes?
+  notifyAllowed() {
+    if (this._localNotif()) return this._nativePerm === 'granted';
+    const N = this._webNotif();
+    return !!N && N.permission === 'granted';
+  },
+  _nativePerm: 'prompt',
+  _initNotify() {
+    const LN = this._localNotif();
+    if (LN) {
+      try {
+        LN.checkPermissions().then((p) => { this._nativePerm = p.display; }).catch(() => {});
+        LN.addListener('localNotificationActionPerformed', (a) => {
+          const extra = a && a.notification && a.notification.extra;
+          if (typeof Notify !== 'undefined') Notify.tapped(extra);
+        });
+      } catch (e) { /* optional */ }
+    }
+    // Web: a tap on a service-worker notification comes back as a message, or a ?notify= address.
+    try {
+      if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', (e) => {
+        if (e.data && e.data.notifyTap && typeof Notify !== 'undefined') Notify.tapped(e.data.notifyTap);
+      });
+      const q = new URLSearchParams(location.search), k = q.get('notify');
+      if (k && typeof Notify !== 'undefined') Notify.pendingRoute = { kind: k, slot: +q.get('slot') || null };
+    } catch (e) { /* optional */ }
+  },
+  notifyRequest() {
+    const LN = this._localNotif();
+    if (LN) return LN.requestPermissions().then((p) => { this._nativePerm = p.display; return p.display === 'granted'; });
+    const N = this._webNotif();
+    if (!N) return Promise.resolve(false);
+    try {
+      const r = N.requestPermission();
+      return (r && r.then ? r : Promise.resolve(N.permission)).then((p) => p === 'granted');
+    } catch (e) { return Promise.resolve(false); }
+  },
+  // list: [{ id, at, title, body, extra }]
+  notifySchedule(list) {
+    if (!list || !list.length || !this.notifyAllowed()) return;
+    const LN = this._localNotif();
+    if (LN) {
+      LN.schedule({ notifications: list.map((n) => ({ id: n.id, title: n.title, body: n.body, extra: n.extra,
+        schedule: { at: new Date(n.at), allowWhileIdle: true } })) }).catch((e) => Log.add('error', 'notify: ' + e));
+      return;
+    }
+    for (const n of list) {
+      const wait = n.at - Date.now();
+      if (wait > 2147483000) continue;                       // too far ahead for a browser timer
+      clearTimeout(this._notifyTimers[n.id]);
+      this._notifyTimers[n.id] = setTimeout(() => this._webShow(n), Math.max(0, wait));
+    }
+  },
+  _webShow(n) {
+    delete this._notifyTimers[n.id];
+    const N = this._webNotif();
+    if (!N || N.permission !== 'granted') return;
+    const opts = { body: n.body, icon: 'assets/branding/pwa/icon-192.png', tag: 'cl-' + n.extra.kind, data: n.extra };
+    const plain = () => {
+      try {
+        const x = new N(n.title, opts);
+        x.onclick = () => { try { window.focus(); } catch (e) { /* ignore */ } x.close(); if (typeof Notify !== 'undefined') Notify.tapped(n.extra); };
+      } catch (e) { /* phones' browsers only allow service-worker notifications */ }
+    };
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+      navigator.serviceWorker.getRegistration().then((reg) => (reg ? reg.showNotification(n.title, opts) : plain())).catch(plain);
+    } else plain();
+  },
+  notifyCancel(ids) {
+    const LN = this._localNotif();
+    if (LN) { LN.cancel({ notifications: ids.map((id) => ({ id })) }).catch(() => {}); return; }
+    for (const id of ids) { clearTimeout(this._notifyTimers[id]); delete this._notifyTimers[id]; }
+  },
 
   // Plan 6.4: light on Good, stronger on Perfect, pulse on a wicket.
   haptic(kind) {

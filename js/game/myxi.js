@@ -404,7 +404,8 @@ const MyXI = {
     const club = this.club(save), run = club.run, C = this.comp(run.comp), fx = this.next(save), out = {};
     fx.played = true; fx.won = !!mine.won; fx.score = (mine.runs || 0) + ' v ' + (mine.oppRuns || 0);
     const st = club.stats, rec = club.comps[run.comp];
-    rec.played++; if (mine.won) { rec.won++; st.wins++; st.streak++; st.bestStreak = Math.max(st.bestStreak, st.streak); } else st.streak = 0;
+    rec.played++; if (mine.won && typeof Notify !== 'undefined') Notify.won(save);
+    if (mine.won) { rec.won++; st.wins++; st.streak++; st.bestStreak = Math.max(st.bestStreak, st.streak); } else st.streak = 0;
     if (mine.won) { save.currencies.coins = (save.currencies.coins || 0) + MYXI_DATA.winRewards.coins; out.coins = MYXI_DATA.winRewards.coins; }
     if (mine.won && typeof Profile !== 'undefined') Profile.add(save, PROFILE_DATA.xp.myxiWin, 'myxi');
     if (fx.rival && mine.won) { club.rivalsBeaten = club.rivalsBeaten || {}; club.rivalsBeaten[fx.rival] = 1; }

@@ -41,7 +41,10 @@ const BallPlay = {
   },
 
   // The duel's contact modifiers for Contact.resolve().
-  mods(bat, bowl, shotId) {
-    return { edge: Duel.edgeMult(bat, bowl), power: Duel.powerMult(bat, shotId), jitter: Duel.jitterMult(bat) };
+  // six (real matches only, M15 Job 3b): { del, aim, releaseGrade, memory } -> SixRules decides how far lofts carry.
+  mods(bat, bowl, shotId, six) {
+    const m = { edge: Duel.edgeMult(bat, bowl), power: Duel.powerMult(bat, shotId), jitter: Duel.jitterMult(bat) };
+    if (six) m.six = Object.assign({ bat, bowl }, six);
+    return m;
   },
 };

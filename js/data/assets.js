@@ -695,8 +695,19 @@ const ASSET_MANIFEST = {
     careertree: ['skilltree', 'skilltreeArt'], careerloadout: ['skilltree', 'skilltreeArt'],
     careergear: ['equipment'], careershop: ['equipment'], collection: ['equipment'],
     careerjoin: ['careerWorld'], careeroffers: ['careerWorld'], careertable: ['careerWorld'], careercoach: ['careerWorld'],
-    careerretire: ['legacy'], halloffame: ['legacy'], records: ['legacy'],
+    careerretire: ['legacy'], halloffame: ['legacy'], records: ['legacy'], credits: ['legacy'], trophyroom: ['legacy'],
     myxicreate: ['myxi'], myxihome: ['myxi'], myxisquad: ['myxi'], myxilineup: ['myxi'], myxitable: ['myxi'],
     myxiresult: ['myxi'], myxiending: ['myxi'],
   },
 };
+
+// M16: the rendered cricket actions (data/anims.js) join the match art as 'anim_<action>:<n>'.
+if (typeof ANIM_DATA !== 'undefined') {
+  for (const [act, a] of Object.entries(ANIM_DATA)) {
+    for (let i = 0; i < a.frames; i++) {
+      ASSET_MANIFEST.groups['match-common']['anim_' + act + ':' + i] = {
+        src: a.files[i], anchorX: a.anchorX, anchorY: a.anchorY, heightM: a.heightM,     // (drawn x BATTING_DATA.anim.sizeK)
+      };
+    }
+  }
+}

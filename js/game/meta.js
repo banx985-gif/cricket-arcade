@@ -201,6 +201,11 @@ const GameSettings = {
     const s = (typeof Save !== 'undefined' && Save.data && Save.data.settings) || {};
     return s[key] !== undefined ? s[key] : SETTINGS_DATA.defaults[key];
   },
+  // The same, from a given save (notifications plan from a save passed in).
+  getIn(save, key) {
+    const s = (save && save.settings) || {};
+    return s[key] !== undefined ? s[key] : SETTINGS_DATA.defaults[key];
+  },
   factor(key) { const tbl = SETTINGS_DATA[key]; return tbl ? (tbl[this.get(key)] || 1) : 1; },
   // Fill in any settings an older save doesn't have.
   ensure(save) {

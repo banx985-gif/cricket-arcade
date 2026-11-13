@@ -2,6 +2,9 @@
 // Flies the hit ball on the fixed step and asks, each step: has it cleared
 // the rope? can a fielder get there in time to catch or stop it?
 // Catch attempts roll on the 'fielding' random stream.
+// Diving stops (M15, plan 6.3): when YOU field, a hard-hit ground ball that
+// just beats a fielder can become a DIVE! moment; resolve() then also works out
+// the "saved" version of the ball (plan.dive.alt) for the scene to swap in.
 
 const Fielding = {
   // The field setting in use (a FIELD_DATA preset) and the fielding side's
@@ -12,11 +15,30 @@ const Fielding = {
   mods: null,
 
   setPreset(id, powerplay) {
+    const same = this.preset && this.preset.id === id && this.powerplay === !!powerplay;
     this.preset = FIELD_DATA.presets.find((p) => p.id === id) || null;
     this.powerplay = !!powerplay;
     this._cache = null;
+    if (!same) this.moved = null;     // a new field: the captain's last move is undone
   },
-  clear() { this.preset = null; this.powerplay = false; this.mods = null; this._cache = null; },
+  clear() { this.preset = null; this.powerplay = false; this.mods = null; this._cache = null; this.moved = null; },
+
+  // After a boundary the captain moves the nearest inner fielder back to the rope where it went
+  // (M15 Job 3b). Lasts until the field is set again (the next over).
+  moved: null,
+  moveBack(dirDeg) {
+    const R0 = BATTING_DATA.sixes.fightBack.deepRadius, cz = BATTING_DATA.field.boundaryCentreZ;
+    const a = dirDeg * Math.PI / 180, tx = Math.sin(a) * R0, tz = cz + Math.cos(a) * R0;
+    this._cache = null;
+    const list = this.fielders();
+    if (list.some((f) => !f.keeper && Math.hypot(f.x - tx, f.z - tz) < 12)) return null;   // someone's already there
+    const inner = list.filter((f) => !f.keeper && !f.bowler && f.id !== 'slip' && Math.hypot(f.x, f.z - cz) < FIELD_DATA.ringRadius);
+    if (!inner.length) return null;
+    inner.sort((p, q) => Math.hypot(p.x - tx, p.z - tz) - Math.hypot(q.x - tx, q.z - tz));
+    this.moved = { id: inner[0].id, x: tx, z: tz };
+    this._cache = null;
+    return this.moved;
+  },
 
   // Where a preset puts everyone (powerplay: extra deep fielders come in).
   positionsOf(preset, powerplay) {
@@ -40,6 +62,7 @@ const Fielding = {
     const list = this.preset ? this.positionsOf(this.preset, this.powerplay)
       : F.positions.map(p => ({ id: p.id, x: p.x, z: p.z, keeper: !!p.keeper }));
     if (F.bowlerFields) list.push({ id: 'bowler', x: 0.4, z: F.bowlerFollowThroughZ, bowler: true });
+    if (this.moved) { const f = list.find((p) => p.id === this.moved.id); if (f) { f.x = this.moved.x; f.z = this.moved.z; } }
     this._cache = list;
     return list;
   },
@@ -82,7 +105,8 @@ const Fielding = {
   },
 
   // start: ball position at contact; c: Contact.resolve() result.
-  resolve(start, c, shotId, rng) {
+  // opts.dive = a random stream: look for a diving-stop chance (the player's side fields).
+  resolve(start, c, shotId, rng, opts) {
     const F = BATTING_DATA.field;
     const M = this.mods || { catchBonus: 0, stopBonus: 0, speedMult: 1 };
     const speedF = F.fielderSpeed * M.speedMult;
@@ -90,6 +114,8 @@ const Fielding = {
     const catchable = c.kind === 'edge' || c.loftDeg >= F.minLoftForCatch;
     const noCatch = {};          // fielders who already dropped it
     const noStop = {};           // fielders the ball already beat
+    const D = MATCH_DATA.dive, diveRng = opts && opts.dive;
+    let diveAt = null;           // first time a hard ground ball beats a fielder by a dive's length
     const out = {
       result: null, runs: 0, fielder: null, catchPoint: null,
       dropped: null, crossPoint: null, endT: 0,
@@ -103,12 +129,18 @@ const Fielding = {
       for (const f of fielders) {
         const run = Math.max(0, t - F.reaction) * speedF + F.reach;
         const d = Math.hypot(x - f.x, z - f.z);
+        if (diveRng && !diveAt && !f.keeper && d > run && d <= run + D.reach && speed >= D.minSpeed && y <= F.groundPickupMaxHeight && (bounced > 0 || !catchable)) {
+          diveAt = { id: f.id, from: { x: f.x, z: f.z }, x, z, t };
+        }
         if (d > run) continue;
         if (bounced === 0 && catchable && y >= F.catchMinHeight && y <= F.catchMaxHeight) {
           if (noCatch[f.id]) continue;
           // Catch attempt: full-stretch catches are harder.
           const stretch = Math.max(0, Math.min(1, (d - (run - F.reach)) / F.reach));
-          const p = F.catchSkill + M.catchBonus - F.hardCatchPenalty * stretch;
+          // M15 3b: a running catch (far from where the fielder stood) and one right at the rope are harder.
+          const ranK = Math.min(1, Math.hypot(x - f.x, z - f.z) / F.runCatch.metres);
+          const atRope = this.distToBoundary(x, z) < F.runCatch.ropeWithin ? F.runCatch.rope : 0;
+          const p = F.catchSkill + M.catchBonus - F.hardCatchPenalty * stretch - F.runCatch.penalty * ranK - atRope;
           if (rng.chance(p)) {
             out.fielder = { id: f.id, from: { x: f.x, z: f.z }, to: { x, z }, t };
             out.catchPoint = { x, y, z };
@@ -121,7 +153,11 @@ const Fielding = {
         if (y <= F.groundPickupMaxHeight && (bounced > 0 || !catchable || noCatch[f.id])) {
           if (noStop[f.id]) continue;
           const tier = F.cleanStop.find(s => speed >= s.minSpeed);
-          if (tier && !rng.chance(Math.min(0.97, tier.chance + M.stopBonus))) { noStop[f.id] = true; continue; }
+          if (tier && !rng.chance(Math.min(0.97, tier.chance + M.stopBonus))) {
+            noStop[f.id] = true;
+            if (diveRng && !diveAt && !f.keeper && speed >= D.minSpeed) diveAt = { id: f.id, from: { x: f.x, z: f.z }, x, z, t };   // through the hands
+            continue;
+          }
           out.fielder = { id: f.id, from: { x: f.x, z: f.z }, to: { x, z }, t };
           return 'fielded';
         }
@@ -155,8 +191,38 @@ const Fielding = {
       out.runs = fieldT >= F.runs.twoRunsAfter ? 2 : fieldT >= F.runs.oneRunAfter ? 1 : 0;
       out.fieldT = fieldT;
     }
+    if (diveAt) this._offerDive(out, start, c, diveAt, diveRng);
     return out;
   },
+
+  // The dive: only when a good dive would save something (a four, or a run or
+  // more), and only now and then (MATCH_DATA.dive.chance). plan.dive.alt is the
+  // same ball stopped at the dive point, fielded there, the fielder up after getUp.
+  _offerDive(out, start, c, at, rng) {
+    const D = MATCH_DATA.dive, F = BATTING_DATA.field;
+    if (out.result !== 'four' && out.result !== 'fielded') return;
+    const sim = BallSim.hit(start, c.vel, (t) => (t >= at.t - 1e-9 ? 'fielded' : null));
+    const endT = sim.path.duration(), fieldT = endT + D.getUp;
+    const runs = fieldT >= F.runs.twoRunsAfter ? 2 : fieldT >= F.runs.oneRunAfter ? 1 : 0;
+    const saves = out.result === 'four' ? 4 - runs : out.runs - runs;
+    if (saves < 1 || !rng.chance(D.chance)) return;
+    out.dive = {
+      id: at.id, t: endT, x: at.x, z: at.z, from: at.from, saves,
+      alt: {
+        result: 'fielded', runs, path: sim.path, endT, fieldT, catchPoint: null, crossPoint: null,
+        dropped: out.dropped && out.dropped.t < endT ? out.dropped : null,
+        fielder: { id: at.id, from: at.from, to: { x: at.x, z: at.z }, t: endT, dive: true },
+      },
+    };
+  },
+
+  // The swipe window (real seconds): wider for a good fielding side; zoneK = a perk's widening.
+  diveWindow(fielding, zoneK) {
+    const D = MATCH_DATA.dive;
+    return Math.max(D.minWindow, D.window * (1 + D.fieldingWidens * Teams.n(fielding)) * (zoneK || 1));
+  },
+  // A swipe of dx (screen px, sign = direction) at t seconds into the window: the right way in time saves it.
+  diveJudge(dx, dir, t, win) { return Math.sign(dx) === Math.sign(dir) && t <= win ? 'saved' : 'missed'; },
 
   _nearest(fielders, x, z) {
     let best = null, bd = Infinity;

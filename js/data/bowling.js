@@ -113,6 +113,8 @@ const BOWLING_DATA = {
   // ---- AI batter (plan 7.7) -------------------------------------------------
   // The "default balanced challenge batter" (plan 17.7).
   aiBatter: {
+    groundPower: [0.15, 0.6],
+    loftGood: 0.4,               // ...but this often they loft a good-length ball anyway    // real matches (M15 3b): a power shot at a ball that does not suit a loft goes along the ground
     name: 'balanced',
     timingSigma: 0.05,           // spread of their timing error (seconds) on an easy ball
     aggression: 0.42,            // base chance of going for POWER

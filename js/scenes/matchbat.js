@@ -50,7 +50,12 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     const inn = this.inn;
     const prevBatter = this.batterP;
     this.batterP = Match.batter(inn);
+    // Sixes are earned (M15 3b): the bowler and captain remember boundaries this innings.
+    if (!this._sixMem || this._sixMemInn !== inn.index) { this._sixMem = SixRules.newMemory(); this._sixMemInn = inn.index; }
+    if (this._sixPending) SixRules.afterBall(this._sixMem, { result: 'dot' });     // last ball: no contact
+    this._sixPending = true;
     if (Match.needsBowler(inn)) {
+      Fielding.moved = null; SixRules.newOver(this._sixMem);
       const rng = RNG.stream('aiPick:' + inn.index);
       const bw = (MissionMatch.on && MissionMatch.aiBowler(inn)) || BowlerRules.aiPick(inn, this.team, Match.fatigue, rng);   // (a mission names its attack)
       const ph = BowlerRules.phase(inn);
@@ -71,7 +76,8 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
 
     const A = MATCH_DATA.aiBowler, rng = this._bowlRng, bowl = this.bowlerP;
     const fatigue = Match.fatigue[bowl.id] || 0;
-    const ch = Bowling.aiChoose(bowl, { phase: BowlerRules.phase(inn), fatigue }, rng);
+    const ch = Bowling.aiChoose(bowl, { phase: BowlerRules.phase(inn), fatigue, memory: this._sixMem }, rng);
+    this._typeIdx = ch.typeIdx;
     const accK = 1 - PLAYER_DATA.duel.aiExtras.accuracy * Teams.n(bowl.stats.accuracy);
     const roll = rng.next();
     this.extraKind = roll < A.wideChance * accK ? 'wide' : roll < (A.wideChance + A.noBallChance) * accK ? 'noball' : null;
@@ -98,11 +104,15 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
   _techBall() {
     const tw = Tech.batWindows(this);
     this.windowScale = this._baseWindow * tw.k;
-    this.techExtra = tw.extra;
+    // The perfect window in a match: the matchup (my batting v this bowler) and difficulty (M15 3b).
+    this.techExtra = Object.assign({ perfect: 1 }, tw.extra || {});
+    this.techExtra.perfect *= SixRules.perfectK(this.batP, this.bowlerP);
     TechUI.layout('bat', this.inn, () => this.state === 'ready' || this.state === 'runup');
     if (MyXIMatch.on) TacticBar.layout('bat'); else TacticBar.btns = [];     // My XI: between-over calls (M10)
   },
   _techMods(m, sh, aim) { return Tech.contactMods(m, sh, aim, this); },
+  // Real-match six rules (M15 3b): Six Smash doesn't have this, so it keeps its own.
+  _sixCtx(aim) { return { del: this.del, aim, releaseGrade: this.del.releaseGrade || 'ai', memory: this._sixMem }; },
   _techContact(c, sh) { Tech.afterContact(c, sh, this); },
 
   _ballLabel() {
@@ -287,6 +297,8 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
       const hit = this._connect(BatControls.aim(), RNG.stream('batting'), RNG.stream('fielding'));
       this._showTiming(sh.grade);
       Log.add('ball', `inn${this.inn.index + 1} ${this.inn.overs} ${this.del.family}/${this.del.type} ${sh.id} ${sh.grade} -> ${hit.plan.result}`);
+      this._sixPending = false;
+      SixRules.afterBall(this._sixMem, { result: hit.plan.result, c: hit.c, typeIdx: this._typeIdx });
       return;
     }
     // No shot, and the late window has closed: the ball goes on (it may hit

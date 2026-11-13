@@ -46,11 +46,13 @@ const Main = {
       this.frozen = true;
       PointerHub.releaseAll();
       Scenes.appHidden();
+      try { Notify.leaving(Save.data, Date.now()); } catch (e) { Log.add('error', 'notify: ' + e.message); }   // Rule B
       Save.write();
       Sound.suspend();
     });
     // Back again: never fast-forward; wait for a tap before sound comes back.
     Platform.onResume(() => {
+      try { Notify.back(Save.data, Date.now()); } catch (e) { Log.add('error', 'notify: ' + e.message); }
       this.frozen = false;
       this.tapToContinue = true;
       this._tapT = 0;

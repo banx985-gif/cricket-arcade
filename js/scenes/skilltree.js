@@ -65,7 +65,8 @@ const CareerTreeScene = {
   },
 
   // ---- camera ----
-  _view() { const v = Display.viewRect(); return { x: v.x, y: v.y + 130, w: v.w, h: v.h - 130 }; },
+  // Rule A: the tree art fills the whole screen, under the header too (no empty band at the top).
+  _view() { const v = Display.viewRect(); return { x: v.x, y: v.y, w: v.w, h: v.h }; },
   // Fully zoomed out, the picture still fills the screen (no empty edges).
   _limits() { const v = this._view(), B = TreeLayout.bg(); return { min: Math.max(v.w / B.w, v.h / B.h), max: 1.6 }; },
   _fitCam() {
@@ -369,7 +370,7 @@ const CareerTreeScene = {
     const s = Display.safe, c = this.career, cx = CONFIG.LOGICAL_W / 2;
     const v = Display.viewRect();
     const g = ctx.createLinearGradient(0, v.y, 0, v.y + 150);
-    g.addColorStop(0, 'rgba(3,8,16,0.95)'); g.addColorStop(1, 'rgba(3,8,16,0)');
+    g.addColorStop(0, 'rgba(3,8,16,0.55)'); g.addColorStop(1, 'rgba(3,8,16,0)');
     ctx.fillStyle = g; ctx.fillRect(v.x, v.y, v.w, 150);
     // points counter
     R.roundRect(s.left + 240, s.top + 16, 330, 96, 30, 'rgba(40,30,5,0.92)', '#ffd23f', 4);

@@ -65,6 +65,13 @@ const AIBatter = {
       y: shot === 'power' ? rng.range(-1, -0.4) : shot === 'control' ? rng.range(-0.2, 0.6) : 0,
       active: true,
     };
+    // Real matches (o.smartLoft, M15 3b): like a good player, only loft the balls that suit it
+    // (full ones straight, short ones pulled to leg); hit the rest hard along the ground.
+    if (o.smartLoft && shot === 'power' && !o.freeHit) {
+      if (del.lengthId === 'short') { aim.x = rng.range(-0.95, -0.35); }
+      else if (del.lengthId === 'full') { aim.x = rng.range(-0.5, 0.5); }
+      else if (!rng.chance(A.loftGood)) aim.y = rng.range(A.groundPower[0], A.groundPower[1]);   // a good-length ball: sometimes they go for it anyway
+    }
     return { shot, err, aim, difficulty: d };
   },
 };

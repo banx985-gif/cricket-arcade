@@ -222,11 +222,12 @@ const RecordsScene = {
     b.clear();
     b.add('gear.back', s.left + 20, s.top + 16, 200, 96, () => this._back(), { size: 32, color: '#e9eef5' });
     const cats = this._cats();
-    cats.forEach((k, i) => b.add(() => T('ach.cat.' + k), cx - 900 + i * (1800 / cats.length), 140, 1800 / cats.length - 10, 84, () => { this.cat = k; this.page = 0; this._layout(); },
+    const L = Math.max(cx - 900, s.left + 10), W = Math.min(cx + 900, s.right - 10) - L;      // Rule A: clear of a notch
+    cats.forEach((k, i) => b.add(() => T('ach.cat.' + k), L + i * (W / cats.length), 140, W / cats.length - 10, 84, () => { this.cat = k; this.page = 0; this._layout(); },
       { size: 20, color: this.cat === k ? '#ffd23f' : '#e9eef5' }));
     const pages = Math.ceil(this._items().length / this.PER);
     if (pages > 1) {
-      b.add(() => '‹', cx - 900, s.bottom - 110, 120, 90, () => { this.page = (this.page + pages - 1) % pages; this._layout(); }, { size: 50, color: '#e9eef5' });
+      b.add(() => '‹', L, s.bottom - 110, 120, 90, () => { this.page = (this.page + pages - 1) % pages; this._layout(); }, { size: 50, color: '#e9eef5' });
       b.add(() => '›', cx + 780, s.bottom - 110, 120, 90, () => { this.page = (this.page + 1) % pages; this._layout(); }, { size: 50, color: '#e9eef5' });
     }
   },

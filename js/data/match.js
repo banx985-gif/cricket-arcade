@@ -73,8 +73,25 @@ const MATCH_DATA = {
     speed: { perfect: 1.08, okay: 1.0, bad: 1.0 },
   },
 
+  // ---- Diving stops (M15, plan 6.3 "diving stops") ---------------------------
+  // When YOU field, a hard-hit ground ball that just beats a fielder can become a
+  // DIVE! moment: swipe left or right (the way the ball is going) before the ring
+  // closes. A good dive stops it there; a miss lets it run on (often a four).
+  dive: {
+    minSpeed: 14,                 // m/s: only hard-hit balls
+    reach: 3.2,                   // metres beyond a fielder's normal reach a dive can cover
+    chance: 0.7,                // of the chances that would save something, how many become a moment
+    getUp: 0.7,                   // seconds from the stop to the ball being ready to throw
+    window: 0.75,                 // real seconds to swipe (at Fielding 50)
+    fieldingWidens: 0.5,          // Fielding 99 = +50% window, Fielding 1 = -50%
+    minWindow: 0.4,
+    slowMo: 0.18,                 // game speed while the ring closes
+    lead: 0.3,                    // game seconds before the dive point that the prompt appears
+    swipeMin: 40,                 // logical px: shorter moves are taps, not swipes
+  },
+
   feel: {
-    overBreak: 1.1,               // "END OF OVER" pause
+    overBreak: 1.1,              // "END OF OVER" pause
     outcomeHold: 1.15,
   },
 

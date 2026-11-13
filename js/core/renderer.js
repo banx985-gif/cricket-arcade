@@ -77,11 +77,15 @@ const R = {
     }
   },
 
-  // Chunky outlined text.
-  text(str, x, y, size, color, align, outline) {
+  // Chunky outlined text. maxW (optional): shrink the font until it fits that width.
+  text(str, x, y, size, color, align, outline, maxW) {
     const c = this.ctx;
     if (size <= 30 && this.textScale !== 1) size = Math.round(size * this.textScale);
     c.font = `900 ${size}px ${CONFIG.FONT}`;
+    if (maxW > 0) {
+      const w = c.measureText(str).width;
+      if (w > maxW) { size = Math.max(10, Math.floor(size * maxW / w)); c.font = `900 ${size}px ${CONFIG.FONT}`; }
+    }
     c.textAlign = align || 'center';
     c.textBaseline = 'middle';
     if (outline !== false) {

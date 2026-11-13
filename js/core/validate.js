@@ -353,6 +353,9 @@ const Validate = {
         if ((m.goal.kind === 'runs' || m.goal.kind === 'defend') && !m.target) p.push(where + ' needs a target');
         if (!m.super && m.at.over * 6 + m.at.ball + m.balls > F.overs * 6) p.push(where + ' runs past the last over');
         if (m.stars.length !== 3) p.push(where + ' needs 3 stars');
+        // (M15: a mission with pitch 'hard' crashed on its first ball; the id is 'hardFast')
+        if (m.cond && m.cond.pitch && !STADIUM_DATA.pitchTypes[m.cond.pitch]) p.push(where + ' unknown pitch "' + m.cond.pitch + '"');
+        if (m.cond && m.cond.weather && !STADIUM_DATA.weather[m.cond.weather]) p.push(where + ' unknown weather "' + m.cond.weather + '"');
         for (const s of m.stars) {
           if (s.field) { if (!FIELD_DATA.presets.some((f) => f.id === s.field)) p.push(where + ' star field unknown'); continue; }
           if (s.stat.startsWith('wk_') ? !deliveries.has(s.stat.slice(3)) : !stats.includes(s.stat)) p.push(where + ' star stat "' + s.stat + '" unknown');

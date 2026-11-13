@@ -82,12 +82,13 @@ class ButtonList {
         tx = b.x + 14 + isz + (b.w - 14 - isz) / 2;
       }
       const tc = dis ? '#c9d0d6' : b.textColor;
+      const room = (b.x + b.w - tx) * 2 - 28;       // large text / long words never spill out of the button
       if (b.sub) {
         const sub = typeof b.sub === 'function' ? b.sub() : T(b.sub);
-        R.text(this.labelOf(b), tx, b.y + off + b.h / 2 - b.size * 0.32, b.size, tc, 'center', false);
-        R.text(sub, tx, b.y + off + b.h / 2 + b.size * 0.55, Math.round(b.size * 0.5), tc, 'center', false);
+        R.text(this.labelOf(b), tx, b.y + off + b.h / 2 - b.size * 0.32, b.size, tc, 'center', false, room);
+        R.text(sub, tx, b.y + off + b.h / 2 + b.size * 0.55, Math.round(b.size * 0.5), tc, 'center', false, room);
       } else {
-        R.text(this.labelOf(b), tx, b.y + off + b.h / 2 + 2, b.size, tc, 'center', false);
+        R.text(this.labelOf(b), tx, b.y + off + b.h / 2 + 2, b.size, tc, 'center', false, room);
       }
     }
   }

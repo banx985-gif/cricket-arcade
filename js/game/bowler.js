@@ -103,13 +103,16 @@ const Bowling = {
   // ctx: { phase, fatigue }
   aiChoose(bowler, ctx, rng) {
     const F = this.family(bowler.family);
-    const list = F.deliveries.map((t, i) => ({ i, t, weight: t.ai * (ctx.phase === 'death' && t.id === 'yorker' ? 2 : 1) }));
+    let list = F.deliveries.map((t, i) => ({ i, t, weight: t.ai * (ctx.phase === 'death' && t.id === 'yorker' ? 2 : 1) }));
+    if (ctx.memory && typeof SixRules !== 'undefined') list = SixRules.reweight(list, ctx.memory);   // after a boundary: change the plan (M15 3b)
     const pick = rng.weighted(list);
     const t = pick.t;
     const z = rng.rangeOf(t.zone);
     // Aim so the ball ARRIVES on or just outside off stump: allow for the turn
     // it will take off the pitch.
-    const want = rng.range(-0.08, 0.3);
+    let want = rng.range(-0.08, 0.3);
+    const wider = ctx.memory && typeof SixRules !== 'undefined' ? SixRules.lineAfter(ctx.memory, rng) : null;
+    if (wider !== null) want = wider;
     const vAfter = (F.powerTo === 'spin' ? (F.speed[0] + F.speed[1]) / 2 : F.speed[1] * 0.9) * t.speed * 0.9;
     const x = want - (t.turn || 0) * (z / vAfter);
     const grade = Duel.aiReleaseGrade(bowler, ctx.fatigue, rng);

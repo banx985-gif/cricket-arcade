@@ -18,13 +18,15 @@ const SettingsScene = {
   _msg: null, _msgT: 0,
   _t: 0,
 
-  TABS: ['controls', 'audio', 'video', 'access', 'other'],
+  TABS: ['controls', 'audio', 'video', 'access', 'alerts', 'other'],
   ROWS: {
     controls: [['leftHanded', 'bool'], ['controlSize', ['small', 'normal', 'large']], ['aimAssist', ['low', 'normal', 'high']],
       ['batSensitivity', ['low', 'normal', 'high']], ['aimSensitivity', ['low', 'normal', 'high']], ['aimInvert', 'bool']],
     audio: [['master', 'slider'], ['music', 'slider'], ['sfx', 'slider'], ['crowd', 'slider'], ['muted', 'boolNot'], ['haptics', 'bool']],
     video: [['fps', [30, 60]], ['vfx', ['low', 'normal', 'high']], ['shake', 'bool'], ['reduceFlash', 'bool']],
     access: [['textSize', ['normal', 'large']], ['contrastBall', 'bool'], ['contrastTarget', 'bool'], ['reducedMotion', 'bool'], ['reduceFlash', 'bool'], ['colourSafe', 'bool']],
+    // Notifications (Rule B): one main switch + one per kind. Off cancels anything waiting.
+    alerts: [['notifyOn', 'bool'], ['notifyReward', 'bool'], ['notifyMissions', 'bool'], ['notifyRival', 'bool'], ['notifyCareer', 'bool']],
   },
 
   enter(params) {
@@ -40,6 +42,7 @@ const SettingsScene = {
   _set(key, v) {
     if (key === 'muted') Save.setMuted(v); else Save.setSetting(key, v);
     if (key === 'haptics' && v) Platform.haptic('strong');
+    if (/^notify/.test(key)) Notify.switched(Save.data, key, v);
     if (['sfx', 'master', 'crowd'].includes(key)) Sound.play('ui_press');
     this._layout();
   },
@@ -56,7 +59,7 @@ const SettingsScene = {
     const b = this.buttons, s = Display.safe, cx = CONFIG.LOGICAL_W / 2;
     b.clear();
     b.add('settings.back', s.left + 24, s.top + 24, 240, 96, () => Scenes.go('title'), { size: 40, color: '#e9eef5' });
-    this.TABS.forEach((t, i) => b.add('settings.tab.' + t, cx - 800 + i * 324, 150, 310, 90, () => { this.tab = t; this._layout(); },
+    this.TABS.forEach((t, i) => b.add('settings.tab.' + t, cx - 810 + i * 272, 150, 262, 90, () => { this.tab = t; this._layout(); },
       { size: 26, color: this.tab === t ? '#ffd23f' : '#5b6570', textColor: this.tab === t ? CONFIG.COLOR.ink : '#ffffff' }));
     const rows = this.ROWS[this.tab];
     if (rows) {
@@ -156,6 +159,10 @@ const SettingsScene = {
           R.text(String(v), cx + 410, y + 40, 18, '#d8e4f0', 'center', false);
         }
       });
+    }
+    if (this.tab === 'alerts') {
+      const st = Notify.status(Save.data);
+      if (st !== 'on') R.text(T('settings.notify.' + st), cx, 265 + rows.length * 108 + 80, 26, '#ffd23f', 'center', false, 1600);
     }
     this.buttons.draw();
     const m = Save.data.meta;

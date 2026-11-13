@@ -244,6 +244,7 @@ const CareerMatch = {
       hatTricks: mf.hatTricks, chaseWinNotOut: mf.chaseWinNotOut, closerWin: mf.closerWin };
     const stageId = c.stage;                        // (a final can promote the career, so note the stage first)
     const summary = Career.finishMatch(c, fx, perf);
+    if (summary.won && typeof Notify !== 'undefined') Notify.won(Save.data);             // Rule B: ask once, after the first win
     summary.profile = Profile.add(Save.data, PROFILE_DATA.xp.careerMatch, 'career');            // Global Profile Level (M12)
     // Match drops (plan 12.7): sometimes a league match, the Local Final when you win.
     // Duplicates reroll, then turn into Coins (Gear.resolveDrop).
