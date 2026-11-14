@@ -76,13 +76,14 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
 
     const A = MATCH_DATA.aiBowler, rng = this._bowlRng, bowl = this.bowlerP;
     const fatigue = Match.fatigue[bowl.id] || 0;
-    const ch = Bowling.aiChoose(bowl, { phase: BowlerRules.phase(inn), fatigue, memory: this._sixMem }, rng);
+    const mirrorArm = Bowling.armMismatch(bowl, this.batterP);
+    const ch = Bowling.aiChoose(bowl, { phase: BowlerRules.phase(inn), fatigue, memory: this._sixMem, mirrorArm }, rng);
     this._typeIdx = ch.typeIdx;
     const accK = 1 - PLAYER_DATA.duel.aiExtras.accuracy * Teams.n(bowl.stats.accuracy);
     const roll = rng.next();
     this.extraKind = roll < A.wideChance * accK ? 'wide' : roll < (A.wideChance + A.noBallChance) * accK ? 'noball' : null;
     if (this.extraKind === 'wide') ch.target.x += (rng.chance(0.75) ? 1 : -1) * A.wideOffset;
-    this.del = Bowling.release({ bowler: bowl, family: bowl.family, typeIdx: ch.typeIdx, target: ch.target,
+    this.del = Bowling.release({ bowler: bowl, family: bowl.family, typeIdx: ch.typeIdx, target: ch.target, mirrorArm,
       grade: ch.grade, power: ch.power, fatigue, cond: Match.cond, index: inn.legal }, rng);
     if (!this.extraKind && BallPlay.isWide(this.del)) this.extraKind = 'wide';
     // Reading the variation: a deceptive bowler shows it later, or not at all.
@@ -509,5 +510,6 @@ const MatchScoreHud = {
       R.roundRect(s.right - 156, s.top + 140, 136, 46, 22, 'rgba(10,22,40,0.8)', 'rgba(255,255,255,0.4)', 2);
       R.text(T('hud.energy', { n: Math.round(CareerMatch.career.energy) }), s.right - 88, s.top + 163, 22, '#9be7ff', 'center', false);
     }
+    if (scene._drawRivalFlare) scene._drawRivalFlare(ctx);     // M20
   },
 };

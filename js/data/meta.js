@@ -81,6 +81,12 @@ const COLLECTION_DATA = {
   secretRarities: ['legendary', 'mythic'],
 };
 
+// ---- one-time tips (M20) ----
+const TIPS_DATA = {
+  list: ['keyMoments', 'seasonGoals', 'evolution', 'legacyShop', 'records', 'training'],
+  minShow: 0.4,          // seconds before a tap closes a tip
+};
+
 // ---- the Home hub extras (M19, plan 5.3) ----
 const HOME_DATA = {
   goalModes: ['quickmatch', 'sixsmash', 'wicketrush', 'missions', 'collection', 'records'],   // "next goal": the first of these still locked

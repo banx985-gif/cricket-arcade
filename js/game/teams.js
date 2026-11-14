@@ -44,6 +44,7 @@ const Teams = {
     return { full: given + ' ' + sur, short: given[0] + '. ' + sur };
   },
 
+  _armHash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 1000) / 1000; },
   // Build a team of 11. o: { side, rating, origin?, rng }
   generate(o) {
     const T = PLAYER_DATA.teams, S = PLAYER_DATA.stats;
@@ -69,6 +70,8 @@ const Teams = {
         leftHanded: rng.chance(T.leftHanded),
         stats,
       };
+      // M20: left-arm bowlers, from a hash of the name (no extra random draw: every team stays the same)
+      if (p.family) p.leftArm = Teams._armHash(nm.full) < T.leftArm;
       p.overall = this.overall(p);
       return p;
     });

@@ -65,7 +65,7 @@ const MyXI = {
       const tagFor = (no) => (no <= 2 ? ['opener'] : no === 3 ? ['top'] : no === 6 ? ['finisher'] : []);
       return pick.map((p, i) => ({
         id: 'S:' + (i + 1), kind: 'starter', name: p.name, short: p.short, role: p.role, keeper: !!p.keeper,
-        family: p.family, leftHanded: !!p.leftHanded, stats: Object.assign({}, p.stats), origin: xi.origin, tags: tagFor(p.no),
+        family: p.family, leftHanded: !!p.leftHanded, leftArm: !!p.leftArm, stats: Object.assign({}, p.stats), origin: xi.origin, tags: tagFor(p.no),
       }));
     });
   },
@@ -84,7 +84,7 @@ const MyXI = {
       if (s.batRole === 'finisher' || s.archetype === 'finisher' || [s.traits.primary, s.traits.secondary].some((t) => t === 'ice_cold' || t === 'big_match_player')) tags.push('finisher');
       const role = { batter: 'bat', bowler: 'bowl', allrounder: 'all' }[s.role];
       return { id: e.id, kind: 'legacy', name: s.name, short: this._short(s.name), role, keeper: false, family: s.family || null,
-        leftHanded: s.batHand === 'left', origin: s.origin, stats, tags, snap: s, look: s };
+        leftHanded: s.batHand === 'left', leftArm: s.bowlHand === 'left', origin: s.origin, stats, tags, snap: s, look: s };
     }
     if (e.kind === 'rival') {
       const R = MYXI_DATA.rivalRecruits[e.ref], stats = {};
@@ -253,7 +253,7 @@ const MyXI = {
         }
       }
       const e = { id: 'player' + (i + 1), no: i + 1, name: v.name, short: v.short, role: v.role, keeper: id === L.keeper, family: v.family,
-        leftHanded: v.leftHanded, stats, baseStats: Object.assign({}, stats), owner: id, kind: v.kind };
+        leftHanded: v.leftHanded, leftArm: !!v.leftArm || v.bowlHand === 'left', stats, baseStats: Object.assign({}, stats), owner: id, kind: v.kind };
       if (perks) e.perks = perks;
       e.overall = Teams.overall(e);
       return e;

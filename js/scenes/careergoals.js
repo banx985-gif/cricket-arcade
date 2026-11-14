@@ -10,6 +10,7 @@ const CareerGoalsScene = {
     this.slot = params.slot || this.slot; this.career = params.career || this.career;
     this.sel = []; this._t = 0;
     SeasonGoals.ensure(this.career);
+    Tips.show('seasonGoals');                             // M20
     this._layout();
   },
   _layout() {

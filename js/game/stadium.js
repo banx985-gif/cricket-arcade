@@ -116,7 +116,8 @@ const Stadium = {
     this._note('sky', v.x, v.y, v.x + v.w, v.y + v.h, 1 / scale, st.w + '×' + st.h);
   },
 
-  drawBackground(ctx) {
+  drawBackground(ctx) { return View3D.world(() => this._drawBackground(ctx)); },   // (M20: the stadium never mirrors)
+  _drawBackground(ctx) {
     const v = Display.viewRect();
     this._drawSky(ctx, v);
 
@@ -405,7 +406,8 @@ const Stadium = {
   // The ground (grass tiles, rope, pitch) only changes when the camera moves,
   // so while the camera is still it's drawn once into a spare canvas and
   // copied each frame (screen shake just offsets the copy).
-  drawField(ctx) {
+  drawField(ctx) { return View3D.world(() => this._drawField(ctx)); },   // (M20: the stadium never mirrors)
+  _drawField(ctx) {
     const V = View3D;
     const key = [V.pos.x, V.pos.y, V.pos.z, V.tgt.x, V.tgt.y, V.tgt.z, V.focal].map((v) => v.toFixed(3)).join(',')
       + '|' + ctx.canvas.width + 'x' + ctx.canvas.height + '|' + Display.originX + ',' + Display.originY + '|' + this.cond.pitch;

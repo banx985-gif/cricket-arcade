@@ -151,6 +151,7 @@ const HallOfFameScene = {
     this.back = (params && params.back) || 'title';
     this.shop = false; this.cmp = null; this.msg = null;
     this._layout();
+    Tips.show('legacyShop');                              // M20
   },
   _layout() {
     const b = this.buttons, s = Display.safe, cx = CONFIG.LOGICAL_W / 2, hof = Save.data.hallOfFame || [];
@@ -159,7 +160,7 @@ const HallOfFameScene = {
     if (this.shop) {        // M19: the Legacy shop (permanent unlocks for Legacy Marks)
       b.add('hof.close', cx - 160, 900, 320, 100, () => { this.shop = false; this._layout(); }, { size: 36, color: '#e9eef5' });
       Legacy.shopItems(Save.data).forEach((it, i) => {
-        b.add(() => (it.owned ? T('hof.shopOwned') : T('hof.shopBuy', { n: it.lm })), cx + 260, 330 + i * 190, 360, 110, () => {
+        b.add(() => (it.owned ? T('hof.shopOwned') : it.mc ? T('hof.shopSwap', { n: it.mc }) : T('hof.shopBuy', { n: it.lm })), cx + 260, 300 + i * 165, 360, 110, () => {
           const r = Legacy.buy(Save.data, it.id);
           if (!r.ok) { Sound.play('ui_error'); this.msg = T('hof.shopWhy.' + r.reason); return; }
           Save.write(); Sound.play('fanfare'); this.msg = T('hof.shopDone', { name: T('hof.shop.' + it.id) }); this._layout();
@@ -240,9 +241,9 @@ const HallOfFameScene = {
   _drawShop(ctx) {
     const cx = CONFIG.LOGICAL_W / 2;
     R.panel(cx - 700, 190, 1400, 660, 'rgba(10,22,40,0.96)', '#ffd23f');
-    R.text(T('hof.shopTitle', { n: (Save.data.currencies && Save.data.currencies.legacyMarks) || 0 }), cx, 250, 36, '#ffd23f');
+    R.text(T('hof.shopTitle2', { n: (Save.data.currencies && Save.data.currencies.legacyMarks) || 0, c: (Save.data.currencies && Save.data.currencies.mythicCore) || 0 }), cx, 250, 34, '#ffd23f');
     Legacy.shopItems(Save.data).forEach((it, i) => {
-      const y = 385 + i * 190;
+      const y = 355 + i * 165;
       R.text(T('hof.shop.' + it.id), cx - 640, y - 16, 30, '#ffffff', 'left');
       R.text(T('hof.shop.' + it.id + '.desc'), cx - 640, y + 24, 20, '#b8c6d6', 'left', false);
       if (!it.ok && it.reason === 'myxi') R.text(T('hof.shopWhy.myxi'), cx - 640, y + 56, 18, '#ff9d7a', 'left', false);
@@ -273,6 +274,7 @@ const RecordsScene = {
     this.back = this.params.back || 'title';
     this.page = 0;
     this._layout();
+    Tips.show('records');                                 // M20
   },
   _cats() { return ACHIEVEMENT_DATA.cats.filter((k) => Achievements.list().some((a) => a.cat === k)); },
   _items() { return this.cat === 'records' ? RECORD_DATA.list : Achievements.list().filter((a) => a.cat === this.cat); },

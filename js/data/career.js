@@ -121,16 +121,24 @@ const CAREER_DATA = {
   emphasisBonus: { xp: 10, extraStatChance: 0.35 },
   // M19 (plan 8.13): the other prep actions. Coach Session: your coach's first specialty drill, +1 stat guaranteed on
   // top, extra coach mastery. Technique Practice: mastery uses for one loadout technique.
-  // M19 (plan 5.8, 10): hands-on training. The first 'sessions' times you do each drill it's a short skill check
-  // (scenes/training.js): tap when the sweeping marker is inside the zone, 'rounds' times. speed = how fast it
-  // sweeps, zone = half the zone's width (0..1 of the bar). 2 hits: +1 extra stat; 3: + a form bump and mastery uses.
+  // M20 (plan 5.8, 10): the training games (scenes/training.js). Every drill is its own short game; medals
+  // (Bronze / Silver / Gold at medals[0..2] points) pay: Silver = +1 extra stat, Gold = + a form bump and
+  // technique practice; xpPerHit per medal step. The first 'sessions' times a drill must be played; after
+  // that SKIP gives the quick result. time = seconds.
   handsOn: {
-    sessions: 3, rounds: 3, zones: [0.32, 0.7, 0.5], resultHold: 1.1,
+    sessions: 3, resultHold: 1.4,
     reward: { extraGainAt: 2, formAt: 3, masteryUses: 2, xpPerHit: 5 },
-    drills: {
-      timing_cage: { speed: 2.6, zone: 0.07 }, power_hitting: { speed: 2.2, zone: 0.09 }, target_batting: { speed: 2.4, zone: 0.06 },
-      pace_gate: { speed: 3.0, zone: 0.08 }, yorker_board: { speed: 2.8, zone: 0.05 }, movement_control: { speed: 2.3, zone: 0.07 },
-      fitness_session: { speed: 3.2, zone: 0.1 }, fielding_reaction: { speed: 3.4, zone: 0.08 },
+    games: {
+      timing_cage:       { time: 30, balls: 8, ballTime: [0.9, 1.3], window: 0.16, medals: [3, 5, 7] },
+      power_hitting:     { time: 25, balls: 6, speed: 1.9, sweet: 0.22, maxDist: 100, rope: 66, medals: [2, 3, 5] },
+      target_batting:    { time: 35, cards: 10, cardTime: 2.2, medals: [5, 7, 9],
+        deck: ['fullOff', 'fullStraight', 'shortOff', 'shortLeg', 'goodStumps', 'wideOff'],
+        answer: { fullOff: 'drive', fullStraight: 'drive', shortOff: 'cut', wideOff: 'cut', shortLeg: 'pull', goodStumps: 'defend' } },
+      pace_gate:         { time: 30, balls: 6, fillTime: 1.4, green: [0.82, 1], kmh: [110, 152], medals: [2, 4, 5] },
+      yorker_board:      { time: 30, balls: 8, speed: 1.3, zone: 0.06, medals: [3, 5, 7] },
+      movement_control:  { time: 35, balls: 6, dragPx: 420, zone: 0.14, medals: [2, 4, 5] },
+      fielding_reaction: { time: 30, turns: 8, catchTime: 1.3, window: 0.13, throwSpeed: 3.2, stump: 0.05, medals: [3, 5, 7] },
+      fitness_session:   { time: 25, every: [0.45, 0.8], life: 1.3, greenShare: 0.55, radius: 90, medals: [10, 15, 20] },
     },
   },
   prep: { coachSession: { energy: 25, xp: 35, extraGain: 1, masteryUses: 2 }, techPractice: { energy: 15, xp: 20, uses: 4 } },

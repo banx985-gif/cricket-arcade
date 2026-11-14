@@ -58,13 +58,13 @@ const Challenge = {
       const c = pick.c, p = c.player;
       const ms = SkillTree.matchStats(c, Career.effectiveStats(c), null, null);
       return { pc: c, player: { id: 'player1', no: 1, name: p.name, short: this._short(p.name), role: { batter: 'bat', bowler: 'bowl', allrounder: 'all' }[p.role],
-        family: Career.bowls(c) ? p.family : null, leftHanded: p.batHand === 'left', stats: ms.stats, perks: SkillTree.mods(c), isCareer: true } };
+        family: Career.bowls(c) ? p.family : null, leftHanded: p.batHand === 'left', leftArm: p.bowlHand === 'left', stats: ms.stats, perks: SkillTree.mods(c), isCareer: true } };
     }
     if (pick.kind === 'legacy') {
       const v = MyXI.view(save, { id: 'L:' + pick.ref, kind: 'legacy', ref: pick.ref });
       if (v) {
         const pc = MyXI.pseudoCareer(save, v);
-        return { pc, player: { id: 'player1', no: 1, name: v.name, short: v.short, role: v.role, family: v.family, leftHanded: v.leftHanded,
+        return { pc, player: { id: 'player1', no: 1, name: v.name, short: v.short, role: v.role, family: v.family, leftHanded: v.leftHanded, leftArm: !!v.leftArm || v.bowlHand === 'left',
           stats: Object.assign({}, v.stats), perks: pc ? SkillTree.mods(pc) : undefined, legacy: pick.ref } };
       }
     }

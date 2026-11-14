@@ -11,7 +11,12 @@
 const BATTING_DATA = {
   // M19 (plan 32): ball trail colours. A hit: gold when perfect, else your bat's rarity colour (career);
   // a delivery in flight: a faint tint by the bowling kind.
-  trail: { perfect: '255,210,63', plain: '255,255,255', delivery: { pace: null, swing: '127,216,255', spin: '201,160,255' }, deliveryAlpha: 0.35 },
+  trail: { perfect: '255,210,63', plain: '255,255,255', delivery: { pace: null, swing: '127,216,255', spin: '201,160,255' }, deliveryAlpha: 0.35,
+    // M20 (plan 32): the special deliveries each get their own trail (stronger than the kind tint)
+    special: { yorker: '255,80,80', bouncer: '255,150,40', slower: '110,255,150', googly: '255,110,230', doosra: '255,110,230', flipper: '120,200,255' }, specialAlpha: 0.6 },
+  // M20: the rival intro flare: the rival's colours sweep across when a rival comes out to bat or bowl.
+  // time = seconds; bands = colour stripes; alpha / calmAlpha (Reduce flashing: one soft sweep, no flicker).
+  rivalFlare: { time: 1.4, bands: 3, alpha: 0.55, calmAlpha: 0.22 },
   physics: {
     gravity: 9.81,
     ballRadius: 0.036,

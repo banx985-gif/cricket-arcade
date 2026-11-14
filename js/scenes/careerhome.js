@@ -137,7 +137,7 @@ const CareerHomeScene = {
   _train(id, skill) {
     // M19: the first few sessions of a drill are hands-on (a short skill check), then quick
     if (skill === undefined && TrainingDrill.handsOn(this.career, id) && Career.prepsLeft(this.career) > 0) {
-      TrainingDrill.start(id, (r) => this._train(id, r || null));
+      TrainingDrill.start(id, (r) => this._train(id, r || null), this.career);
       return;
     }
     const res = Career.train(this.career, id, skill || undefined);
@@ -366,7 +366,7 @@ const CareerHomeScene = {
       R.text(r.res.gain > 0 ? T('career.statUp', { n: r.res.gain, stat: T('stat.' + D.stat) }) : T('career.tooTired'), cx, 610, 46, r.res.gain > 0 ? '#9cff6a' : '#ff9d7a');
       R.text(T('career.xpEnergy', { xp: r.res.xp, e: -r.res.energy }), cx, 680, 30, '#d8e4f0', 'center', false);
       if (r.res.emphasis) R.text(T('career.emphasisBonus'), cx, 730, 26, '#ffd23f', 'center', false);
-      if (r.res.skill) R.text(T('career.drillScore', { n: r.res.skill.hits, of: r.res.skill.of }) + (r.res.formUp ? ' · ' + T('career.drillForm') : '') + (r.res.mastery ? ' · ' + T('career.drillMastery', { name: TreeText.name(r.res.mastery) }) : ''), cx, 760, 24, '#9be7ff', 'center', false);
+      if (r.res.skill) R.text(T('career.drillMedal', { m: T('drill.medal.' + r.res.skill.hits) }) + (r.res.formUp ? ' · ' + T('career.drillForm') : '') + (r.res.mastery ? ' · ' + T('career.drillMastery', { name: TreeText.name(r.res.mastery) }) : ''), cx, 760, 24, '#9be7ff', 'center', false);
       if (r.res.levels) R.text(T('career.levelUp', { n: c.player.level, g: r.res.levels * CAREER_DATA.levels.growthPerLevel }), cx, 800, 44, '#ffb400');
     } else if (r.kind === 'coachSession') {
       Sprites.ui(Coaches.coach(r.res.coach).art, cx, 330, 300, 300);

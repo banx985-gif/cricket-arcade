@@ -98,15 +98,19 @@ const Legacy = {
     const C = save.currencies || {}, U = save.unlocks || {};
     return LEGACY_DATA.shop.map((x) => {
       const club = typeof MyXI !== 'undefined' ? MyXI.club(save) : null;
-      const owned = x.id === 'legends_arena' ? !!(club && club.stadiums.includes('legends_arena')) : !!(U.legacyShop && U.legacyShop[x.id]);
-      const reason = owned ? 'owned' : x.needs === 'myxi' && !club ? 'myxi' : (C.legacyMarks || 0) < x.lm ? 'marks' : null;
-      return { id: x.id, lm: x.lm, owned, ok: !reason, reason };
+      const owned = x.repeat ? false : x.id === 'legends_arena' ? !!(club && club.stadiums.includes('legends_arena')) : !!(U.legacyShop && U.legacyShop[x.id]);
+      const reason = owned ? 'owned' : x.needs === 'myxi' && !club ? 'myxi' : (C.legacyMarks || 0) < (x.lm || 0) ? 'marks' : (C.mythicCore || 0) < (x.mc || 0) ? 'cores' : null;
+      return { id: x.id, lm: x.lm || 0, mc: x.mc || 0, owned, ok: !reason, reason, repeat: !!x.repeat };
     });
   },
   buy(save, id) {
     const it = this.shopItems(save).find((x) => x.id === id);
     if (!it || !it.ok) return { ok: false, reason: it ? it.reason : 'unknown' };
     save.currencies.legacyMarks -= it.lm;
+    save.currencies.mythicCore = (save.currencies.mythicCore || 0) - it.mc;
+    const X = LEGACY_DATA.shop.find((x) => x.id === id);
+    if (X.gives && X.gives.lm) save.currencies.legacyMarks += X.gives.lm;
+    if (X.repeat) return { ok: true };
     if (id === 'legends_arena') MyXI.club(save).stadiums.push('legends_arena');
     else { save.unlocks = save.unlocks || {}; save.unlocks.legacyShop = save.unlocks.legacyShop || {}; save.unlocks.legacyShop[id] = 1; }
     return { ok: true };

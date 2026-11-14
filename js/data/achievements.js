@@ -72,8 +72,8 @@ const ACHIEVEMENT_DATA = {
     // ---- Career ----
     { id: 'signed_up',         cat: 'career', tier: 'bronze',  cond: { on: 'career', stat: 'clubSigned', min: 1 }, reward: { coins: 100 } },
     { id: 'moving_up',         cat: 'career', tier: 'bronze',  cond: { on: 'career', stat: 'stageN', min: 2 }, reward: { coins: 200 } },
-    { id: 'big_time',          cat: 'career', tier: 'silver',  cond: { on: 'career', stat: 'stageN', min: 3 }, reward: { st: 1 } },
-    { id: 'franchise_player',  cat: 'career', tier: 'silver',  cond: { on: 'career', stat: 'franchiseSigned', min: 1 }, reward: { st: 1 } },
+    { id: 'big_time',          cat: 'career', tier: 'silver',  cond: { on: 'career', stat: 'stageN', min: 3 }, reward: { st: 1, lm: 1 } },     // (M20: a Mark mid-career)
+    { id: 'franchise_player',  cat: 'career', tier: 'silver',  cond: { on: 'career', stat: 'franchiseSigned', min: 1 }, reward: { st: 1, lm: 1 } },
     { id: 'called_up',         cat: 'career', tier: 'gold',    cond: { on: 'career', stat: 'nationalSelected', min: 1 }, reward: { lm: 1 } },
     { id: 'skipper',           cat: 'career', tier: 'gold',    cond: { on: 'career', stat: 'captain', min: 1 }, reward: { lm: 1 } },
     { id: 'world_champion',    cat: 'career', tier: 'diamond', cond: { on: 'career', stat: 'worldChampion', min: 1 }, reward: { mc: 1 } },

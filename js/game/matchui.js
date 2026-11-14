@@ -273,7 +273,7 @@ const DiveMoment = {
   swipe(dx) {
     const m = this.m;
     if (!m || m.result || !dx) return false;
-    m.result = Fielding.diveJudge(dx, m.dir, m.t, m.win);
+    m.result = Fielding.diveJudge(View3D.mirror ? -dx : dx, m.dir, m.t, m.win);   // (M20: mirrored for a left-hander)
     return true;
   },
   down(id, x, y) { if (!this.m) return false; this.touch = { id, x, y }; return true; },

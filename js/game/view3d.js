@@ -12,10 +12,17 @@ const View3D = {
   near: 0.6,
   // basis
   r: { x: 1, y: 0, z: 0 }, u: { x: 0, y: 1, z: 0 }, f: { x: 0, y: 0, z: -1 },
+  // M20 (left-handers): the match runs in the batter's own frame (a lefty plays exactly like a mirrored
+  // righty). With mirror on, everything in that frame (camera, ball, players, field) is drawn with x
+  // flipped; world things that must not flip (the stadium, its boards) draw inside View3D.world().
+  mirror: false, _world: false,
+  world(fn) { const w = this._world; this._world = true; try { return fn(); } finally { this._world = w; } },
+  _mx(x) { return this.mirror && !this._world ? -x : x; },
 
   set(pos, tgt, focal) {
-    this.pos.x = pos.x; this.pos.y = pos.y; this.pos.z = pos.z;
-    this.tgt.x = tgt.x; this.tgt.y = tgt.y; this.tgt.z = tgt.z;
+    const m = this.mirror ? -1 : 1;
+    this.pos.x = pos.x * m; this.pos.y = pos.y; this.pos.z = pos.z;
+    this.tgt.x = tgt.x * m; this.tgt.y = tgt.y; this.tgt.z = tgt.z;
     this.focal = focal;
     this._basis();
   },
@@ -36,7 +43,8 @@ const View3D = {
   },
 
   // World -> camera space
-  toCam(x, y, z) {
+  toCam(x0, y, z) {
+    const x = this._mx(x0);
     const dx = x - this.pos.x, dy = y - this.pos.y, dz = z - this.pos.z;
     return {
       x: dx * this.r.x + dy * this.r.y + dz * this.r.z,

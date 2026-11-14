@@ -16,8 +16,9 @@ const SimMatch = {
   // s: { inn, bat, bowl, fatigue, cond, fielding (avg stat), phase, index }
   ball(s, r) {
     const bowl = s.bowl, bat = s.bat;
-    const ch = Bowling.aiChoose(bowl, { phase: s.phase, fatigue: s.fatigue, memory: s.memory }, r.bowl);
-    const del = Bowling.release({ bowler: bowl, family: bowl.family, typeIdx: ch.typeIdx, target: ch.target,
+    const mirrorArm = Bowling.armMismatch(bowl, bat);
+    const ch = Bowling.aiChoose(bowl, { phase: s.phase, fatigue: s.fatigue, memory: s.memory, mirrorArm }, r.bowl);
+    const del = Bowling.release({ bowler: bowl, family: bowl.family, typeIdx: ch.typeIdx, target: ch.target, mirrorArm,
       grade: ch.grade, power: ch.power, fatigue: s.fatigue, cond: s.cond, index: s.index || 0 }, r.bowl);
     const A = MATCH_DATA.aiBowler;
     const accK = 1 - PLAYER_DATA.duel.aiExtras.accuracy * Teams.n(bowl.stats.accuracy);

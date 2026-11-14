@@ -50,7 +50,7 @@ const CareerMatch = {
     return {
       id: 'player' + pos, no: pos, name: p.name, short: p.name.split(' ').length > 1 ? p.name[0] + '. ' + p.name.split(' ').slice(1).join(' ') : p.name,
       role: p.role === 'batter' ? 'bat' : p.role === 'bowler' ? 'bowl' : 'all', keeper: false,
-      family: Career.bowls(c) ? p.family : null, leftHanded: p.batHand === 'left', stats: ms.stats, isCareer: true,
+      family: Career.bowls(c) ? p.family : null, leftHanded: p.batHand === 'left', leftArm: p.bowlHand === 'left', stats: ms.stats, isCareer: true,
       look: { look: c.player.look, facial: c.player.facial, skin: c.player.skin, hairColour: c.player.hairColour, presentation: c.player.presentation },   // (M18: drawn in matches)
       perks: SkillTree.mods(c),
     };

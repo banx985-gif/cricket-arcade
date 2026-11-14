@@ -361,6 +361,8 @@ const PitchScene = {
   _delTint() {
     const fam = this.del && this.del.family && typeof Bowling !== 'undefined' && Bowling.family(this.del.family);
     if (!fam) return null;
+    const sp = BATTING_DATA.trail.special[this.del.type];
+    if (sp) return sp;                                            // M20: a special delivery
     const k = fam.kind === 'spin' ? 'spin' : this.del.swing ? 'swing' : 'pace';
     return BATTING_DATA.trail.delivery[k];
   },
@@ -394,7 +396,39 @@ const PitchScene = {
     };
   },
 
+  // M20: a left-hander on strike: the batter's frame is drawn mirrored (View3D.mirror).
+  _setMirror() {
+    View3D.mirror = !!(this.batterP && this.batterP.leftHanded);
+    // M20: a rival walking out to bat or taking the ball: the flare (once per rival per innings)
+    const rv = [this.batterP, this.bowlerP].find((p) => p && p.isRival);
+    const key = rv && (this.inn ? this.inn.index : 0) + ':' + rv.isRival + ':' + (rv === this.batterP ? 'bat' : 'bowl');
+    if (rv && this._flareKey !== key) {
+      this._flareKey = key;
+      const kits = typeof KitLook !== 'undefined' ? KitLook.kits() : null, side = Match.teams && Match.teams.ai.players.includes(rv) ? 'ai' : 'player';
+      this.flare = { t: 0, name: T('rival.' + rv.isRival), cols: kits ? [kits[side].main, kits[side].trim] : ['#b0122a', '#ffd23f'] };
+    }
+  },
+  // Drawn over the match (MatchScoreHud): coloured bands sweep across, the rival's name between them.
+  _drawRivalFlare(ctx, dt) {
+    const f = this.flare, F = BATTING_DATA.rivalFlare;
+    if (!f) return;
+    f.t += dt || 1 / 60;
+    if (f.t > F.time) { this.flare = null; return; }
+    const v = Display.viewRect(), k = f.t / F.time, calm = typeof GameSettings !== 'undefined' && GameSettings.get('reduceFlash');
+    const a = (calm ? F.calmAlpha : F.alpha) * Math.sin(Math.PI * k);
+    ctx.save();
+    for (let i = 0; i < F.bands; i++) {
+      const x = v.x - v.w * 0.6 + (v.w * 2.2) * k - i * 160;
+      ctx.globalAlpha = Math.max(0, a * (1 - i * 0.25));
+      ctx.fillStyle = f.cols[i % 2];
+      ctx.beginPath(); ctx.moveTo(x, v.y); ctx.lineTo(x + 140, v.y); ctx.lineTo(x + 140 - v.h * 0.5, v.y + v.h); ctx.lineTo(x - v.h * 0.5, v.y + v.h); ctx.closePath(); ctx.fill();
+    }
+    ctx.globalAlpha = Math.min(1, Math.sin(Math.PI * k) * 1.4);
+    R.text(f.name, CONFIG.LOGICAL_W / 2, CONFIG.LOGICAL_H * 0.42, 84, '#ffffff', 'center', true);
+    ctx.restore();
+  },
   _updateCamera(dt) {
+    this._setMirror();
     const C = BATTING_DATA.camera;
     let want;
     // Follow the ball after contact; once it's thrown back, cut to the pitch
@@ -509,7 +543,7 @@ const PitchScene = {
     // M18: everyone in their team's colours with their own looks (game/kitlook.js)
     KitLook._inMatch = !!this.showNonStriker;
     const W = this._people(), AK = BATTING_DATA.anim.sizeK, cel = this._celebrate();
-    const addA = (a, x, z, look, kit) => add('anim_' + a.id + ':' + a.frame, x, 0, z, { scale: AK, flip: !!a.flip, kl: { act: a.id, frame: a.frame, look, kit } });
+    const addA = (a, x, z, look, kit) => add('anim_' + a.id + ':' + a.frame, x, 0, z, { scale: AK, flip: !!a.flip !== View3D.mirror, kl: { act: a.id, frame: a.frame, look, kit } });
 
     const brokenT = Math.min(1.5, Math.max(0, Stadium._time - (this.stumpsBrokenAt || 0)));
     add('stumps', 0, 0, 0, this.stumpsBroken ? { broken: brokenT, back: this.stumpsBroken === 'hitwicket' } : {});
@@ -537,7 +571,8 @@ const PitchScene = {
     // M16: the rendered run-up and bowling action, when its frames are in (else the art / stand-in above).
     let ba = this._bowlerAnim(ph, bz);
     if (ba && cel && cel.wicket && this._anim('cele_bowler')) ba = { id: 'cele_bowler', frame: this._f01(this._anim('cele_bowler'), cel.t / BATTING_DATA.anim.celeTime), z: ba.z };
-    if (ba) addA(ba, bx, ba.z, W.bowler, W.fieldKit);
+    // M20: the frames are a right-arm action; a left-arm bowler is drawn flipped (whatever the batter's hand)
+    if (ba) addA(Object.assign({}, ba, { flip: !!ba.flip !== !!W.bowlerLeft !== View3D.mirror }), bx, ba.z, W.bowler, W.fieldKit);
     else add('bowler', bx, 0, bz, bopts);
 
     // Fielders
@@ -800,7 +835,7 @@ const PitchScene = {
     const keeper = rest.find((p) => p.keeper) || rest[0] || stand('keeper');
     const others = rest.filter((p) => p !== keeper);
     return {
-      batKit: kits[batSide], fieldKit: kits[fieldSide],
+      batKit: kits[batSide], fieldKit: kits[fieldSide], bowlerLeft: !!bowler.leftArm,
       striker: KitLook.of(st || stand('striker'), bt), nonStriker: KitLook.of(ns || stand('nonstriker'), bt),
       bowler: KitLook.of(bowler, ft),
       fielder: (i, f) => KitLook.of(f.keeper ? keeper : (others.length ? others[i % others.length] : stand('fielder' + i)), ft),
@@ -915,7 +950,7 @@ const PitchScene = {
     const del = this.trailKind === 'del', gold = !del && this.hit && this.hit.perfect;
     const col = del ? this._delTint() : this._hitTint();
     if (!col) return;
-    const amax = del ? BATTING_DATA.trail.deliveryAlpha : gold ? 0.9 : col === BATTING_DATA.trail.plain ? 0.6 : 0.8;
+    const amax = del ? (this.del && BATTING_DATA.trail.special[this.del.type] ? BATTING_DATA.trail.specialAlpha : BATTING_DATA.trail.deliveryAlpha) : gold ? 0.9 : col === BATTING_DATA.trail.plain ? 0.6 : 0.8;
     let prev = null;
     for (let i = 0; i < this.trail.length; i++) {
       const t = this.trail[i];

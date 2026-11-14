@@ -137,6 +137,7 @@ const CareerGearScene = {
     Gear.ensureCareer(this.career);
     this.flash = null; this._t = 0;
     this._select(params.focus || this.sel || 'bat', params.pick);
+    if (Object.keys(Save.data.locker || {}).some((id) => Gear.evoLine(id))) Tips.show('evolution');     // M20
   },
 
   _owned(slot) {
@@ -311,6 +312,8 @@ const CareerGearScene = {
     } else {
       R.text(T('gear.wearingNow'), rx + 30, y, 24, '#9cff6a', 'left', false); y += 36;
     }
+    // M20: an evolved item's own line
+    if (Strings.has && Strings.has('gear.' + it.id + '.desc')) y = GearUI.wrap(T('gear.' + it.id + '.desc'), rx + 30, y, 580, 18, '#d7a6ff') + 28;
     // perk
     if (it.perk) { y = GearUI.wrap('★ ' + GearUI.perkName(it.perk) + ': ' + GearUI.perkDesc(it.perk), rx + 30, y, 580, 20, '#ffe28a') + 30; }
     // set bonus lines

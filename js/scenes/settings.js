@@ -34,7 +34,7 @@ const SettingsScene = {
 
   enter(params) {
     this.confirming = null;
-    this.legal = false;
+    this.legal = false; this.tipsPage = false;
     this._msg = null;
     this._t = 0;
     this.overlay = !!(params && params.overlay);      // M19: opened over a paused match (pause menu)
@@ -92,6 +92,7 @@ const SettingsScene = {
       add('settings.replayTutorial', 3, () => Scenes.go('tutorial', { phase: 'batIntro', replay: true, career: null }), '#9cff6a');
       add('settings.resetCareer', 4, () => { this.confirming = { kind: 'pickCareer' }; this._layoutConfirm(); }, '#ffc2a0');
       add('settings.reset', 5, () => { this.confirming = { kind: 'full' }; this._layoutConfirm(); }, '#ff9b9b');
+      add('settings.tips', 6, () => { this.tipsPage = true; Save.data.tipsOff = false; Save.write(); }, '#9be7ff');
     }
   },
 
@@ -138,12 +139,13 @@ const SettingsScene = {
     if (Dev.pointerDown(id, x, y)) return;
     Sound.unlock();
     if (this.legal) { this.legal = false; return; }
+    if (this.tipsPage) { this.tipsPage = false; return; }
     this._list().down(id, x, y);
   },
   pointerMove(id, x, y) { if (!Dev.pointerMove(id, x, y)) this._list().move(id, x, y); },
   pointerUp(id) { if (!Dev.pointerUp(id)) this._list().up(id); },
   keyDown(code) {
-    if (code === 'Escape') { if (this.legal) this.legal = false; else if (this.confirming) this.confirming = null; else this._close(); }
+    if (code === 'Escape') { if (this.tipsPage) this.tipsPage = false; else if (this.legal) this.legal = false; else if (this.confirming) this.confirming = null; else this._close(); }
   },
 
   render(ctx) {
@@ -185,6 +187,17 @@ const SettingsScene = {
       if (k.kind === 'career') R.text(T('settings.careerWarn'), cx, 520, 32, '#ffd0d0', 'center', false);
       if (k.kind === 'pickCareer' && !Save.data.careerSlots.some(Boolean)) R.text(T('settings.noCareers'), cx, 520, 32, '#ffd0d0', 'center', false);
       this.confirmBtns.draw();
+    }
+    if (this.tipsPage) {          // M20: every tip, again
+      const v = Display.viewRect();
+      ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(v.x, v.y, v.w, v.h);
+      R.panel(cx - 860, 120, 1720, 860, 'rgba(12,26,44,0.97)', '#9be7ff');
+      R.text(T('settings.tipsTitle'), cx, 190, 50, '#ffffff');
+      TIPS_DATA.list.forEach((id, i) => {
+        R.text(T('tip.name.' + id), cx - 820, 290 + i * 110, 28, '#9be7ff', 'left');
+        R.text(T('tip.' + id), cx - 820, 330 + i * 110, 22, '#d8e4f0', 'left', false, 1640);
+      });
+      R.text(T('settings.tapClose'), cx, 950, 24, '#ffd23f', 'center', false);
     }
     if (this.legal) {
       const v = Display.viewRect();

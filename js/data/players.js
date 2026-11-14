@@ -35,7 +35,8 @@ const PLAYER_DATA = {
     statSpread: 7,              // each stat is the player's level +/- this (seeded)
     offRoleStat: [18, 30],      // stats a player doesn't use (a batter's bowling)
     shared: { spread: 12 },     // fielding / fitness / running around the team level
-    leftHanded: 0.25,           // (handedness is recorded; mirroring arrives with the 3D art)
+    leftHanded: 0.2,            // about 1 batter in 5 is left-handed (M20: drawn and played mirrored)
+    leftArm: 0.25,              // M20: share of bowlers who bowl left-arm (picked from the name, so teams don't change)
   },
 
   // Team strength for a Quick Match. 'player' = your XI, 'ai' = the Rivals.

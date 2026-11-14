@@ -47,7 +47,8 @@ const LEGACY_DATA = {
   //   legends_arena: the Legends Arena for your My XI club before its final reward; hof_frame: a gold frame
   //   on every Hall of Fame card. (Evolution steps and early coaches also cost Marks.) Defaults to tune.
   shop: [
-    { id: 'legends_arena', lm: 8, needs: 'myxi' },
+    { id: 'legends_arena', lm: 6, needs: 'myxi' },
     { id: 'hof_frame', lm: 3 },
+    { id: 'core_exchange', mc: 1, gives: { lm: 3 }, repeat: true },     // M20: 1 Mythic Core -> 3 Legacy Marks, any time
   ],
 };

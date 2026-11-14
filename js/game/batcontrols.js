@@ -130,7 +130,13 @@ const BatControls = {
   },
 
   // Current aim: {x: -1..1 (right = off side), y: -1..1 (up = loft), active}
+  // M20: the screen is mirrored for a left-hander, so left / right on the pad flip into his frame.
   aim() {
+    const a = this._aimScreen();
+    if (a.x && typeof View3D !== 'undefined' && View3D.mirror) a.x = -a.x;
+    return a;
+  },
+  _aimScreen() {
     const p = this.pad;
     // Keyboard (PC)
     let kx = 0, ky = 0;

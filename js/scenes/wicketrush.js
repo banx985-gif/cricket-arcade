@@ -190,7 +190,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     BowlControls.swipeOpen = false;
     if (typeof TutorialCoach !== 'undefined') TutorialCoach.event('swipe');
     const mag = Math.min(1, Math.abs(dx) / W.fullPx);
-    this.del = Bowling.withSwipe(this.del, { dir: Math.sign(dx), mag });
+    this.del = Bowling.withSwipe(this.del, { dir: Math.sign(dx) * (View3D.mirror ? -1 : 1), mag });
     this.del.golden = this.golden;
     sw.dir = Math.sign(dx);
     sw.flash = 1;
@@ -239,7 +239,9 @@ const WicketRushScene = Object.assign({}, PitchScene, {
   // Dragging UP the screen moves the target up the screen (toward the batter).
   _updateAim(realDt) {
     const st = Aim.settings();
-    Aim.drag(this.aim, BowlControls.takeDrag(), st);
+    const dr = BowlControls.takeDrag();
+    if (dr && View3D.mirror) dr.x = -dr.x;                     // M20: a left-hander's end is drawn mirrored
+    Aim.drag(this.aim, dr, st);
     Aim.keys(this.aim, {
       left: Keys.any(['KeyA', 'ArrowLeft']), right: Keys.any(['KeyD', 'ArrowRight']),
       up: Keys.any(['KeyW', 'ArrowUp']), down: Keys.any(['KeyS', 'ArrowDown']),
@@ -260,7 +262,7 @@ const WicketRushScene = Object.assign({}, PitchScene, {
     // bowlP / _techBoost: the career bowler's techniques (Quick Match / career only).
     this.del = Bowling.release({
       bowler: this.bowlP || this.bowler, family: this.bowler.family, typeIdx: this.typeIdx, target: this._snapped(),
-      grade, power, fatigue: this._fatigue(), cond: this._cond(), index: this.rules.ball,
+      grade, power, fatigue: this._fatigue(), cond: this._cond(), index: this.rules.ball, mirrorArm: Bowling.armMismatch(this.bowler, this.batterP),
       boost: this._techBoost ? this._techBoost() : null,
     }, RNG.stream('bowlAcc'));
     this.del.golden = this.golden;

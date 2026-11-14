@@ -8,6 +8,9 @@
 
 const Bowling = {
   family(id) { return BOWLING_DATA.families[id] || BOWLING_DATA.families.fast; },
+  // M20: does this bowler bowl from the "other" side for this batter? (left arm to a right-hander, or
+  // right arm to a left-hander). Everything is worked out in the batter's frame, so only this matters.
+  armMismatch(bowler, batter) { return !!(bowler && bowler.leftArm) !== !!(batter && batter.leftHanded); },
   conditions(c) {
     const S = STADIUM_DATA;
     return { pitch: S.pitchTypes[(c && c.pitch) || 'balanced'], weather: S.weather[(c && c.weather) || 'clear'] };
@@ -53,6 +56,8 @@ const Bowling = {
     turn += r.vary * (F.powerTo === 'spin' ? 2 : 1);
     if (bo.move) { seam *= bo.move; swing *= bo.move; }
     if (bo.turn) turn *= bo.turn;
+    const arm = o.mirrorArm ? -1 : 1;           // M20: left-arm to a right-hander (or right-arm to a left-hander)
+    turn *= arm;
     if (bo.reverse) { swing = -swing; turn = -turn; seam = -seam; }
 
     // Step 4: the movement swipe.
@@ -68,7 +73,7 @@ const Bowling = {
     }
 
     const d = Delivery.build({
-      index: o.index || 0, speed, releaseX: F.releaseX, releaseHeight: F.releaseHeight,
+      index: o.index || 0, speed, releaseX: F.releaseX * arm, releaseHeight: F.releaseHeight,
       bounceX: o.target.x + r.dx, bounceZ: Math.max(0.3, o.target.z + r.dz),
       movement: seam + turn, restitution: t.bounce * cond.pitch.bounce, swing, skid: t.skid,
       type: t.id, family: F.id,
@@ -114,7 +119,7 @@ const Bowling = {
     const wider = ctx.memory && typeof SixRules !== 'undefined' ? SixRules.lineAfter(ctx.memory, rng) : null;
     if (wider !== null) want = wider;
     const vAfter = (F.powerTo === 'spin' ? (F.speed[0] + F.speed[1]) / 2 : F.speed[1] * 0.9) * t.speed * 0.9;
-    const x = want - (t.turn || 0) * (z / vAfter);
+    const x = want - (t.turn || 0) * (ctx.mirrorArm ? -1 : 1) * (z / vAfter);
     const grade = Duel.aiReleaseGrade(bowler, ctx.fatigue, rng);
     const power = F.powerTo === 'spin' ? rng.range(0.35, 0.9) : rng.range(0.7, 1);
     return { typeIdx: pick.i, target: { x, z }, grade, power };

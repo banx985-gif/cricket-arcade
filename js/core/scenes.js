@@ -23,6 +23,7 @@ const Scenes = {
 
   go(name, params) {
     this.overlay = null;                                   // (an overlay never outlives its screen)
+    if (typeof View3D !== 'undefined') View3D.mirror = false;   // (M20: only a left-hander's ball is drawn mirrored)
     if (!this.registry[name]) { console.error('Unknown scene', name); return; }
     const missing = this._artMissing(name);
     if (!missing.length || !this.current) { this.pending = null; this._switch(name, params); return; }
@@ -70,6 +71,7 @@ const Scenes = {
       return;
     }
     if (this._story()) Story.update(realDt || dt);
+    if (typeof Tips !== 'undefined' && !this._story()) Tips.pump();            // M20: a waiting tip
     if (this.overlay) { if (this.overlay.update) this.overlay.update(realDt || dt); return; }   // the scene under it waits (paused)
     if (this.current && this.current.update) this.current.update(dt, realDt);
   },

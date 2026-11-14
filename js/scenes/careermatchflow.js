@@ -43,6 +43,7 @@ const CareerPreMatchScene = {
       paint();
     }
     Stadium.setConditions(Match.cond);
+    Tips.show('keyMoments');                              // M20
   },
   _go() { Scenes.go(Match.startInnings()); },
   update(dt) { this._t += dt; Stadium.update(dt); },

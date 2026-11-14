@@ -68,8 +68,9 @@ const SixSmashScene = Object.assign({}, PitchScene, {
     this.bowlerP = Challenge.sixBowler(r, this.chal.diff);
     const rng = this._bowlRng;
     for (let tries = 0; tries < 4; tries++) {
-      const ch = Bowling.aiChoose(this.bowlerP, { phase: rs.boss ? 'death' : 'middle', fatigue: 0 }, rng);
-      this.del = Bowling.release({ bowler: this.bowlerP, family: this.bowlerP.family, typeIdx: ch.typeIdx, target: ch.target,
+      const mirrorArm = Bowling.armMismatch(this.bowlerP, this.batterP);
+      const ch = Bowling.aiChoose(this.bowlerP, { phase: rs.boss ? 'death' : 'middle', fatigue: 0, mirrorArm }, rng);
+      this.del = Bowling.release({ bowler: this.bowlerP, family: this.bowlerP.family, typeIdx: ch.typeIdx, target: ch.target, mirrorArm,
         grade: ch.grade, power: ch.power, fatigue: 0, cond: null, index: r.ball }, rng);
       if (!BallPlay.isWide(this.del)) break;
     }
