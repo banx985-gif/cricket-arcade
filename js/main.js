@@ -84,6 +84,7 @@ const Main = {
     Scenes.register('careersim', CareerSimScene);
     Scenes.register('careerresult', CareerResultScene);
     Scenes.register('careerpromoted', CareerPromotedScene);
+    Scenes.register('careergoals', CareerGoalsScene);
     Scenes.register('careertree', CareerTreeScene);
     Scenes.register('careerloadout', CareerLoadoutScene);
     Scenes.register('careergear', CareerGearScene);

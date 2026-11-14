@@ -32,8 +32,17 @@ const CareerHomeScene = {
     }
     if (this.career && this.career.phase === 'promoted' && !params.stay) { Scenes.go('careerpromoted', { slot: this.slot, career: this.career }); return; }
     this._layout();
+    this._flow();
+  },
+  // M17: what opens over Career Home, in order: a story scene (a new stage, a new rival), then
+  // picking the stage's season goals, then the events (a rival's build-up) and the first-time tour.
+  _flow() {
+    const c = this.career;
+    if (!c || Scenes.current !== this) return;
+    if (Story.forHome(c, () => { this._save(); this._flow(); })) return;
+    if (c.phase === 'season' && SeasonGoals.needsPick(c)) { this._save(); Scenes.go('careergoals', { slot: this.slot, career: c }); return; }
     this._checkEvent();
-    if (!Tutorial.done(Save.data) && Tutorial.state(Save.data).step === 'tour') TutorialTour.start();
+    if (!Tutorial.done(Save.data) && Tutorial.state(Save.data).step === 'tour' && !TutorialTour.on) TutorialTour.start();
   },
   // A pending event (or a rival's build-up before a boss match) opens its panel.
   _checkEvent() {
@@ -86,6 +95,9 @@ const CareerHomeScene = {
       sub: () => (Coaches.active(c) ? T('coach.' + Coaches.active(c)) : T('coach.noneShort')) });
     b.add('career.records', s.right - 270, 734, 240, 90, () => Scenes.go('records', { back: 'careerhome', slot: this.slot, career: c }), { size: 22, color: '#e9eef5', icon: 'meta_records',
       sub: () => T('ach.short', { n: Object.keys(Save.data.achievements || {}).length }) });
+    // Season goals (M17): progress, tap for the details.
+    if (c.goals && c.goals.picked && c.goals.stage === c.stage) b.add('goals.button', s.left + 1175, 292, 220, 100, () => this._open('goals'), {
+      size: 26, color: '#ffe28a', sub: () => T('goals.doneN', { n: SeasonGoals.doneCount(c), t: CAREER_DATA.seasonGoals.pick }) });
     // tap the portrait area for the player panel
     b.add(() => '', s.left + 40, 150, 470, 470, () => this._open('player'), { color: 'rgba(0,0,0,0)' });
     b.items[b.items.length - 1].invisible = true;
@@ -302,6 +314,7 @@ const CareerHomeScene = {
       R.text(T('career.trainSub', { e: c.energy, emph: T('emphasis.' + c.club.emphasis) }), cx, 175, 26, '#d8e4f0', 'center', false);
     } else if (this.panel === 'result') this._drawResult(ctx);
     else if (this.panel === 'player') this._drawPlayer(ctx);
+    else if (this.panel === 'goals') GoalsUI.panel(ctx, c);
     this.panelBtns.draw();
   },
 

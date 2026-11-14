@@ -219,6 +219,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     MatchupCard.update(realDt);
     if (this.paused || Dev.open || Display.isPortrait) return;
     Effects.update(dt);
+    Commentary.update(dt);
     Stadium.update(dt);
     Tech.update(realDt);
     this.stateT += dt;
@@ -357,6 +358,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
       fingerUp: res.wicket && wicket === 'lbw',
     });
     this._setState('outcome');
+    Commentary.live(this, key, res, batRuns, wicket);         // M17: the caption line
     RunControls.visible = false;
     BatControls.enabled = false;
 
@@ -444,6 +446,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
 const MatchScoreHud = {
   draw(ctx, scene, playerBatting) {
     const s = Display.safe, inn = scene.inn;
+    Commentary.draw(ctx);                                      // M17: one caption line, bottom centre
     const h = MatchHud.scoreboard(ctx, s.left + 16, s.top + 12, 470, inn, CareerMatch.teamShort(inn.battingSide));
     MatchHud.thisOver(ctx, s.left + 34, s.top + 12 + h + 30, inn);
     const b = inn.bat(inn.striker), bp = Match.batter(inn);

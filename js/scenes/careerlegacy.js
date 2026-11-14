@@ -75,6 +75,7 @@ const CareerRetireScene = {
     const c = this.career, r = Legacy.retire(c, Save.data);
     this.done = r;
     Save.saveCareer(this.slot, null, null);            // the slot is free again; the player lives in the Hall of Fame
+    Story.play('retire', { career: c });               // M17: a farewell scene
     Achievements.checkAccount(Save.data, null);
     Save.write();
     Sound.play('fanfare'); Sound.play('crowdRoar');

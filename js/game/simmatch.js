@@ -45,6 +45,9 @@ const SimMatch = {
     const six = s.memory ? { del, aim: dec.aim, releaseGrade: ch.grade, memory: s.memory } : null;      // real-match six rules (M15 3b)
     const c = Contact.resolve({ shotId: dec.shot, grade, err: dec.err, aim: dec.aim, ball: pos, mods: BallPlay.mods(bat, bowl, dec.shot, six) }, r.bat);
     const plan = Fielding.resolve(pos, c, dec.shot, r.field);
+    // (M17 commentary: who fielded it, where it went, an edge)
+    out.fielder = plan.fielder ? plan.fielder.id : null; out.edge = c.kind === 'edge';
+    if (plan.path && plan.path.n) out.end = { x: plan.path.x[plan.path.n - 1], z: plan.path.z[plan.path.n - 1] };
     if (s.memory) SixRules.afterBall(s.memory, { result: plan.result, c, typeIdx: ch.typeIdx });
     if (plan.result === 'six' || plan.result === 'four') { out.boundary = plan.runs; return out; }
     if (plan.result === 'caught') { out.wicket = 'caught'; return out; }

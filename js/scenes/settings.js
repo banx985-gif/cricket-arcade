@@ -23,7 +23,7 @@ const SettingsScene = {
     controls: [['leftHanded', 'bool'], ['controlSize', ['small', 'normal', 'large']], ['aimAssist', ['low', 'normal', 'high']],
       ['batSensitivity', ['low', 'normal', 'high']], ['aimSensitivity', ['low', 'normal', 'high']], ['aimInvert', 'bool']],
     audio: [['master', 'slider'], ['music', 'slider'], ['sfx', 'slider'], ['crowd', 'slider'], ['muted', 'boolNot'], ['haptics', 'bool']],
-    video: [['fps', [30, 60]], ['vfx', ['low', 'normal', 'high']], ['shake', 'bool'], ['reduceFlash', 'bool']],
+    video: [['fps', [30, 60]], ['vfx', ['low', 'normal', 'high']], ['shake', 'bool'], ['reduceFlash', 'bool'], ['commentary', 'bool']],
     access: [['textSize', ['normal', 'large']], ['contrastBall', 'bool'], ['contrastTarget', 'bool'], ['reducedMotion', 'bool'], ['reduceFlash', 'bool'], ['colourSafe', 'bool']],
     // Notifications (Rule B): one main switch + one per kind. Off cancels anything waiting.
     alerts: [['notifyOn', 'bool'], ['notifyReward', 'bool'], ['notifyMissions', 'bool'], ['notifyRival', 'bool'], ['notifyCareer', 'bool']],

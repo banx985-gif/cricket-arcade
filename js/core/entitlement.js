@@ -35,7 +35,8 @@ const Entitlement = {
     await this._deviceReady();                       // (the app: the store plugin arrives with 'deviceready')
     // Debug builds (the dev panel is on) always use the pretend store, even in the app,
     // so a hand-installed test APK can try the whole flow. Release builds use the real store.
-    this.store = (!CONFIG.DEBUG_BUILD && this._native()) || TestStore;
+    // (and only when the store is switched live: CONFIG.STORE_LIVE, the one switch)
+    this.store = (CONFIG.STORE_LIVE && !CONFIG.DEBUG_BUILD && this._native()) || TestStore;
     await this.store.init().catch((e) => { this.lastError = String(e); });
     // Aaron's own phone keeps everything: a save from before the free intro counts as unlocked (test store only).
     if (this.store === TestStore && opts.grandfather && !this.state.source) await this._grant('existing save');

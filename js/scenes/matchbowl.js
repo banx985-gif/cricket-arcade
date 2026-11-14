@@ -253,6 +253,7 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     MatchupCard.update(realDt);
     if (this.paused || Dev.open || Display.isPortrait) return;
     Effects.update(dt);
+    Commentary.update(dt);
     Stadium.update(dt);
     Tech.update(realDt);
     this.stateT += dt;
@@ -358,7 +359,8 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     DiveMoment.stop();
     const fam = this.bowler && Bowling.family(this.bowler.family), dtype = fam && fam.deliveries[this.typeIdx] ? fam.deliveries[this.typeIdx].id : null;
     ThrowMeter.stop();
-    const res = inn.apply({ kind, batRuns, boundary, wicket, dtype, thr });
+    const catcher = wicket === 'caught' && this.hit && this.hit.plan.fielder ? this.hit.plan.fielder.id : null;
+    const res = inn.apply({ kind, batRuns, boundary, wicket, dtype, thr, catcher, myCatch: CareerMatch._myCatch(inn, catcher) });
     if (MissionMatch.on) MissionMatch.afterBall(inn);
     if (res.overDone || inn.ended) Match.overDone(inn);
     if (Tech.mine(this.bowler)) Tech.bowlBallEnd(key, kind === 'legal', !!res.wicket, res.runs);

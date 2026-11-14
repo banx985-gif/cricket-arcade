@@ -114,6 +114,8 @@ class Innings {
     if (b.contact) e.c = b.contact;
     if (b.dtype) e.d = b.dtype;
     if (b.thr) e.t = b.thr;
+    if (b.catcher && res.wicket) e.f = b.catcher;          // M17: the fielding position that took the catch
+    if (b.myCatch && res.wicket) e.mc = 1;                 // ... and it was the career player (season goals)
     this.log.push(e);
 
     res.symbol = res.wicket ? 'W' : kind === 'wide' ? 'Wd' : kind === 'noball' ? 'Nb'
@@ -179,6 +181,7 @@ const Match = {
     this.quick = o.quick || null;                // a Quick Match set up on its screen (plan 19)
     this.innings = [];
     this.superOvers = 0;
+    if (typeof Commentary !== 'undefined') Commentary.reset();
     this.over = false;
     this.result = null;
     this.toss = null;

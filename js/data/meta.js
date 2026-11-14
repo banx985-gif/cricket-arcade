@@ -179,6 +179,7 @@ const SETTINGS_DATA = {
     textSize: 'normal', contrastBall: false, contrastTarget: false, reducedMotion: false, colourSafe: false,
     // Notifications (Rule B): main switch + one per kind. Nothing is sent until the player says yes.
     notifyOn: true, notifyReward: true, notifyMissions: true, notifyRival: true, notifyCareer: true,
+    commentary: true,               // M17: the live commentary caption in matches
   },
   controlSize: { small: 0.85, normal: 1, large: 1.18 },
   aimAssist: { low: 0.5, normal: 1, high: 1.6 },

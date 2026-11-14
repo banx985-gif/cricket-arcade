@@ -44,6 +44,7 @@ const Scenes = {
     // Let go of any held fingers so nothing carries over into the new scene.
     if (this.current) PointerHub.releaseAll();
     if (this.current && this.current.exit) this.current.exit();
+    if (this._story()) { Story.open = false; Story.onDone = null; }
     this.current = next;
     this.currentName = name;
     Log.add('scene', name);
@@ -67,11 +68,14 @@ const Scenes = {
       if (this.pending.t > this.LOAD_WAIT_MAX) this._finishPending();
       return;
     }
+    if (this._story()) Story.update(realDt || dt);
     if (this.current && this.current.update) this.current.update(dt, realDt);
   },
   _ask() { return typeof NotifyAsk !== 'undefined' && NotifyAsk.open; },
+  _story() { return typeof Story !== 'undefined' && Story.open; },        // M17: a story scene over the screen
   render(ctx) {
     if (this.current && this.current.render) this.current.render(ctx);
+    if (this._story()) Story.render(ctx);
     if (this._ask()) NotifyAsk.render(ctx);
     if (this.pending && this.pending.t > 0.15) {        // a quick loading moment (only if it takes a while)
       const v = Display.viewRect();
@@ -80,10 +84,10 @@ const Scenes = {
       R.text(T('boot.loading'), CONFIG.LOGICAL_W / 2, CONFIG.LOGICAL_H / 2, 48, '#ffffff');
     }
   },
-  pointerDown(id, x, y) { if (this.pending) return; if (this._ask()) { NotifyAsk.pointerDown(id, x, y); return; } if (this.current && this.current.pointerDown) this.current.pointerDown(id, x, y); },
-  pointerMove(id, x, y) { if (this._ask()) { NotifyAsk.pointerMove(id, x, y); return; } if (this.current && this.current.pointerMove) this.current.pointerMove(id, x, y); },
-  pointerUp(id) { if (this._ask()) { NotifyAsk.pointerUp(id); return; } if (this.current && this.current.pointerUp) this.current.pointerUp(id); },
-  keyDown(code) { if (this._ask()) { if (code === 'Escape') NotifyAsk.dismiss(); return; } if (this.current && this.current.keyDown) this.current.keyDown(code); },
+  pointerDown(id, x, y) { if (this.pending) return; if (this._ask()) { NotifyAsk.pointerDown(id, x, y); return; } if (this._story()) { Story.pointerDown(id, x, y); return; } if (this.current && this.current.pointerDown) this.current.pointerDown(id, x, y); },
+  pointerMove(id, x, y) { if (this._ask()) { NotifyAsk.pointerMove(id, x, y); return; } if (this._story()) { Story.pointerMove(id, x, y); return; } if (this.current && this.current.pointerMove) this.current.pointerMove(id, x, y); },
+  pointerUp(id) { if (this._ask()) { NotifyAsk.pointerUp(id); return; } if (this._story()) { Story.pointerUp(id); return; } if (this.current && this.current.pointerUp) this.current.pointerUp(id); },
+  keyDown(code) { if (this._ask()) { if (code === 'Escape') NotifyAsk.dismiss(); return; } if (this._story()) { Story.keyDown(code); return; } if (this.current && this.current.keyDown) this.current.keyDown(code); },
   keyUp(code) { if (this.current && this.current.keyUp) this.current.keyUp(code); },
   appHidden() { if (this.current && this.current.onAppHidden) this.current.onAppHidden(); },
 };

@@ -27,6 +27,11 @@ const CareerPreMatchScene = {
       const last = c.difficulty[c.difficulty.length - 1]; if (last) last.difficulty = c.diff;
       CareerSave.save(c, CareerMatch.slot);
     }, { size: 24, color: '#e9eef5' });
+    // M17 Job 2: play the whole match, or only your big moments (the rest is watched). Remembered by the career.
+    this.buttons.add(() => T(c.keyMoments ? 'career.km.on' : 'career.km.off'), s.left + 24, s.top + 24, 430, 100, () => {
+      c.keyMoments = !c.keyMoments; CareerMatch.keyMoments = c.keyMoments;
+      CareerSave.save(c, CareerMatch.slot);
+    }, { size: 28, color: '#9be7ff', sub: () => T(c.keyMoments ? 'career.km.subOn' : 'career.km.subOff') }).tag = 'keymoments';
     Stadium.setConditions(Match.cond);
   },
   _go() { Scenes.go(Match.startInnings()); },
@@ -86,29 +91,44 @@ const CareerSimScene = {
   _t: 0, _acc: 0,
   fast: false,
   handover: null,          // { scene, t } — about to go live
-  STEP: 0.16,              // seconds per simulated ball (normal speed)
+  speed: null,             // M17: x1 / x2 / x4 (kept between visits this session)
+
+  // Seconds per simulated ball. Key moments only: a watchable x1 (CAREER_DATA.keyMoments.step);
+  // the full match keeps its quick sim (x4 is the old speed).
+  step() { return CAREER_DATA.keyMoments.step / (this.speed || 1); },
 
   enter() {
     this._t = 0; this._acc = 0; this.fast = false; this.handover = null;
-    const s = Display.safe;
+    if (!this.speed) this.speed = CareerMatch.keyMoments ? 1 : 4;
+    this._layout();
+    Stadium.setConditions(Match.cond);
+  },
+  _layout() {
+    const s = Display.safe, K = CAREER_DATA.keyMoments;
     this.buttons.clear();
     this.buttons.add('career.skip', s.right - 360, s.bottom - 150, 330, 120, () => { this.fast = true; }, { size: 44, color: '#ffd23f' });
+    // x1 / x2 / x4
+    this.buttons.add(() => T('career.speed', { n: this.speed }), s.right - 360, s.bottom - 290, 330, 110, () => {
+      const i = K.speeds.indexOf(this.speed); this.speed = K.speeds[(i + 1) % K.speeds.length];
+    }, { size: 40, color: '#9be7ff' }).tag = 'speed';
+    // Key moments only: jump in and play every ball of yours from now on.
+    if (CareerMatch.keyMoments) this.buttons.add('career.takeOver', s.right - 360, s.bottom - 430, 330, 110, () => {
+      CareerMatch.takeOver(); this.fast = false; this._layout();
+    }, { size: 36, color: '#9cff6a', sub: 'career.takeOverSub' }).tag = 'takeover';
     // Captain's calls (plan 8.12): attack / steady / defend, any time between balls.
     if (CareerMatch.isCaptain()) CAREER_DATA.captaincy.tactics.forEach((t, i) => this.buttons.add(() => T('captain.' + t), s.left + 30 + i * 250, s.bottom - 140, 230, 110,
       () => CareerMatch.setTactic(t), { size: 30, color: '#e9eef5' }).tag = 'tactic_' + t);
-    Stadium.setConditions(Match.cond);
   },
 
   _next() {
     const inn = Match.current();
     if (inn.ended) { Scenes.go('matchbreak', Match.afterInnings()); return false; }
-    const live = CareerMatch.liveFor(inn);
-    if (live) {
-      this.handover = { scene: live === 'bat' ? 'matchbat' : 'matchbowl', t: 0, kind: live };
+    const r = CareerMatch.watchBall(inn);
+    if (r.live) {
+      this.handover = { scene: r.live === 'bat' ? 'matchbat' : 'matchbowl', t: 0, kind: r.live };
       Sound.play('crowdCheer', { gain: 0.5 });
       return false;
     }
-    const r = CareerMatch.simBall(inn);
     if (r.res.wicket) Sound.play('wicket', { gain: 0.4 });
     else if (r.b.boundary) Sound.play(r.b.boundary === 6 ? 'six' : 'four', { gain: 0.35 });
     return true;
@@ -117,6 +137,7 @@ const CareerSimScene = {
   update(dt) {
     this._t += dt;
     Stadium.update(dt);
+    Commentary.update(dt * (this.fast ? 1 : Math.max(1, this.speed / 2)));
     if (this.handover) {
       this.handover.t += dt;
       if (this.handover.t > (this.fast ? 0.2 : 1.1)) Scenes.go(this.handover.scene);
@@ -127,8 +148,8 @@ const CareerSimScene = {
       return;
     }
     this._acc += dt;
-    while (this._acc >= this.STEP && Scenes.current === this && !this.handover) {
-      this._acc -= this.STEP;
+    while (this._acc >= this.step() && Scenes.current === this && !this.handover) {
+      this._acc -= this.step();
       if (!this._next()) return;
     }
   },
@@ -144,17 +165,20 @@ const CareerSimScene = {
     if (!inn) return;
     MatchHud.scoreboard(ctx, s.left + 16, s.top + 12, 470, inn, CareerMatch.teamShort(inn.battingSide));
     if (inn.target) MatchHud.target(ctx, s.right - 330, s.top + 10, 290, inn);
-    R.text(T(inn.battingSide === 'player' ? 'career.simBatting' : 'career.simBowling'), cx, 150, 44, '#ffffff');
-    R.text(T('career.simSub'), cx, 205, 26, '#d8e4f0', 'center', false);
-    // ball ticker
+    R.text(T(inn.battingSide === 'player' ? 'career.simBatting' : 'career.simBowling'), cx, 130, 44, '#ffffff');
+    R.text(T(CareerMatch.keyMoments ? 'career.simSubKey' : 'career.simSub'), cx, 182, 26, '#d8e4f0', 'center', false, 1100);
+    // the commentary line (M17)
+    Commentary.draw(ctx, 245);
+    // ball-by-ball list, newest at the bottom
     const list = CareerMatch.ticker;
     list.forEach((l, i) => {
-      const y = 290 + i * 70, a = 0.4 + 0.6 * (i + 1) / list.length;
+      const y = 330 + i * 66, a = 0.4 + 0.6 * (i + 1) / list.length;
       ctx.globalAlpha = a;
-      R.panel(cx - 460, y - 30, 920, 60, l.mine ? 'rgba(60,50,10,0.9)' : 'rgba(10,22,40,0.85)');
-      R.text(T('career.tickerLine', { b: l.bowler, bat: l.who }), cx - 430, y, 24, '#ffffff', 'left', false);
+      R.panel(cx - 500, y - 29, 1000, 58, l.mine ? 'rgba(60,50,10,0.9)' : 'rgba(10,22,40,0.85)');
+      if (l.ball) R.text(l.ball, cx - 470, y, 24, '#9be7ff', 'left', false);
+      R.text(T('career.tickerLine', { b: l.bowler, bat: l.who }), cx - 380, y, 24, '#ffffff', 'left', false, 640);
       const col = l.sym === 'W' ? '#ff4b4b' : l.sym === '6' ? '#ffd23f' : l.sym === '4' ? '#5fd4ff' : '#ffffff';
-      R.text(l.sym === 'W' ? T('career.tickerOut', { how: T('how.' + l.how) }) : l.sym, cx + 400, y, 30, col, 'right');
+      R.text(l.sym === 'W' ? T('career.tickerOut', { how: T('how.' + l.how) }) : l.sym, cx + 470, y, 30, col, 'right');
       ctx.globalAlpha = 1;
     });
     if (this.handover) {
@@ -163,7 +187,7 @@ const CareerSimScene = {
       ctx.save(); ctx.translate(cx, 530); ctx.scale(0.7 + 0.3 * k, 0.7 + 0.3 * k);
       R.text(T(this.handover.kind === 'bat' ? 'career.yourTurnBat' : 'career.yourTurnBowl'), 0, 0, 64, '#9cff6a');
       ctx.restore();
-      R.text(T('career.getReady'), cx, 610, 28, '#ffffff', 'center', false);
+      R.text(T(CareerMatch.keyMoments ? 'career.bigMoment' : 'career.getReady'), cx, 610, 28, '#ffffff', 'center', false);
     } else {
       this.buttons.draw();
       // the captain's call in force
@@ -209,7 +233,7 @@ const CareerResultScene = {
     R.text(T('career.gradeScore', { n: r.score }), cx - 560, 685, 22, '#b8c6d6', 'center', false);
     // Figures
     const p = r.perf, x = cx - 250;
-    R.panel(x, 230, 800, 440, 'rgba(10,22,40,0.9)');
+    R.panel(x, 230, 800, 470, 'rgba(10,22,40,0.9)');
     R.text(T('career.vsName', { name: r.opp.name }) + '  ·  ' + (p.scoreLine || ''), x + 30, 270, 26, '#ffffff', 'left', false);
     R.text(p.bat.batted ? T('career.batFig', { r: p.bat.runs, b: p.bat.balls, no: p.bat.out ? '' : '*', f: p.bat.fours, s: p.bat.sixes }) : T('career.didNotBat'),
       x + 30, 330, 30, '#9fd0ff', 'left', false);
@@ -219,6 +243,7 @@ const CareerResultScene = {
     R.text(r.objectiveMet ? T('career.objMet') : T('career.objMissed'), x + 770, 450, 28, r.objectiveMet ? '#9cff6a' : '#ff9d9d', 'right');
     R.text(T('career.xpGain', { n: r.xp }), x + 30, 510, 28, '#c9a6ff', 'left', false);
     if (r.levels) R.text(T('career.levelUp', { n: c.player.level, g: r.levels * CAREER_DATA.levels.growthPerLevel }), x + 770, 620, 26, '#ffb400', 'right');
+    GoalsUI.chips(ctx, c, x + 30, 636, 740);                // season goals (M17)
     R.text(T('career.formChange', { a: T('career.formLevel.' + r.formBefore), b: T('career.formLevel.' + r.formAfter) }), x + 30, 565, 26, '#ffffff', 'left', false);
     // Coins, and what the Wicket Tree did this match (M06)
     if (r.coins) R.text(T('career.coinsGain', { n: r.coins }), x + 770, 510, 26, '#ffe28a', 'right', false);
@@ -263,6 +288,9 @@ const CareerResultScene = {
     if (r.tour) lines.push([T('career.tour.' + (r.tour.phase === 'done' ? (r.tour.best === 'champion' ? 'champion' : 'out') : r.tour.phase), { r: T('table.reach.' + r.tour.best) }), '#ffd23f']);
     if (L.contract) lines.push([L.contract.met ? T('career.contractMet', { n: L.contract.coins, what: LifeText.reward(L.contract.reward) }) : T('career.contractMissed'), L.contract.met ? '#9cff6a' : '#ff9d9d']);
     for (const id of L.coachesUnlocked || []) lines.push([T('career.coachUnlocked', { name: T('coach.' + id) }), '#c9b3ff']);
+    // Season goals reached this match (M17)
+    for (const p of (r.goals && r.goals.paid) || []) lines.push([T('goals.reached', { goal: SeasonGoals.label(p.id), n: p.coins }), '#9cff6a']);
+    if (r.goals && r.goals.bonus) lines.push([T('goals.bonusPaid', { n: r.goals.bonus }), '#ffd23f']);
     if (!lines.length) return;
     const x = CONFIG.LOGICAL_W / 2 + 580, w = Math.min(Display.safe.right - 20 - x, 360);
     R.panel(x, 230, w, 40 + lines.length * 64, 'rgba(10,22,40,0.92)', '#ffd23f');
@@ -314,6 +342,9 @@ const CareerPromotedScene = {
     }, { size: 44 });
     Effects.init();
     Sound.play('fanfare');
+    // M17: a short scene (once per promotion)
+    const c = this.career;
+    if (c && c.promotedFrom) Story.play('promoted', { career: c, key: 'promo:' + c.promotedFrom, vars: { stage: CareerUI.pathwayLabel(c, Career.stage(c).n) }, onDone: () => CareerSave.save(c, this.slot) });
   },
   update(dt) {
     this._t += dt;

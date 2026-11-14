@@ -358,3 +358,40 @@ const CAREER_DATA = {
   //   Rivals: call SkillTree.rivalWin(c) when one is beaten (+1 Skill Token).
   comingSoon: ['coach', 'records'],
 };
+
+// ---- M17 Job 3: season goals. At the start of each stage pick 3 of these 6 (game/seasongoals.js). ----
+// A target is: per match (or a rate) x the stage's scheduled matches x how your stats compare with
+// the stage's opposition (gapK per rating point, clamped). Wickets and economy need a bowler.
+CAREER_DATA.seasonGoals = {
+  pick: 3,
+  ids: ['runs', 'strikeRate', 'wickets', 'economy', 'catches', 'boundaries'],
+  needsBowling: ['wickets', 'economy'],
+  rateGoals: ['strikeRate', 'economy'],      // judged when the stage ends (the rest pay as soon as they're reached)
+  perMatch: { runs: 11, wickets: 1, catches: 0.25, boundaries: 1.1 },     // at an even match-up (tests/tools_m17calib.js)
+  rate: { strikeRate: 160, economy: 12.5 },  // at an even match-up (economy: at most this). 5-over cricket: ~210 and ~12
+  needsBatting: ['runs', 'strikeRate', 'boundaries'],   // a pure bowler bats at 9-10 and hardly faces a ball
+  gapK: 0.012,                               // +1 rating point over the opposition = a 1.2% harder target
+  multClamp: [0.75, 1.3],
+  minimum: { runs: 10, wickets: 1, catches: 1, boundaries: 2 },
+  rateClamp: { strikeRate: [110, 220], economy: [8, 16] },
+  minBalls: { strikeRate: 10, economy: 12 }, // a rate counts once you've faced / bowled this many balls
+  round: { runs: 5, strikeRate: 5, economy: 0.5 },
+  // Where you field (your catches): the first of these the over's field has (every preset has a cover).
+  fieldAt: ['slip', 'shortLeg', 'sillyPoint', 'midOff', 'cover'],
+  coins: [80, 100, 130, 160, 190, 220, 260, 300],  // per goal, by stage number
+  bonusK: 1.5,                               // all three done: a bonus of 1.5 x one goal
+};
+
+// ---- M17 Job 2: "key moments only" career matches (you play the big moments, watch the rest). ----
+CAREER_DATA.keyMoments = {
+  // Your balls are played live only when one of these is true; the rest are simulated with the same
+  // rules (SimMatch.ball) on the watch screen, where TAKE OVER puts you back in for the rest of the match.
+  firstBalls: 3,            // the first balls of your innings (getting in)
+  firstBallOfSpell: true,   // the first ball of each over you bowl ... and the whole over is yours once you're in it
+  deathOvers: true,         // the death overs of the format (MATCH_DATA.formats[..].death)
+  chase: { balls: 18, maxRate: 2.4 },     // second innings: a live chase (need <= balls x maxRate, in the last 18 balls)
+  defend: { balls: 18, maxRate: 2.4 },    // the same when you're bowling at the end of a chase
+  nearMilestone: [45, 49, 95, 99],        // your score: between 45-49 or 95-99, you play it
+  speeds: [1, 2, 4],                      // the watch screen's x1 / x2 / x4
+  step: 0.5,                              // seconds per simulated ball at x1
+};

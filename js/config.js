@@ -11,13 +11,17 @@ const CONFIG = {
   TITLE_SHORT: 'Cricket Legends', // under the phone's home-screen icon (some phones cut names over ~12 letters)
 
   BUILD_VERSION: '0.14.0-m14',
-  BUILD_STAMP: '20261113-094651',            // filled in by publish.ps1 (date-time of the published build)
+  BUILD_STAMP: '20261114-092840',            // filled in by publish.ps1 (date-time of the published build)
   CONTENT_VERSION: 8,
   SAVE_SCHEMA_VERSION: 2,
   DEBUG_BUILD: true,          // dev panel + content checks. publish.ps1 -Release turns this off.
   // How the game is sold (plan 44 item 6, still open): 'free_intro' = free download,
   // one Full Game Unlock purchase; 'paid_download' = everything open, no unlock screens.
   MONETISATION: 'free_intro',
+  // Store money (Server decision, 13 Nov): TEST mode until Aaron's Play Console is ready. This is the ONE
+  // switch: false = the pretend store everywhere, even in a release app. A store build
+  // (node tools/build_web.js --store) refuses to run while it's false.
+  STORE_LIVE: false,
 
   LOGICAL_W: 1920,
   LOGICAL_H: 1080,

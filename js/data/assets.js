@@ -691,7 +691,7 @@ const ASSET_MANIFEST = {
     result: ['match-common', 'challenges'], careersim: ['match-common', 'career'], tutorial: ['match-common'],
     challenges: ['challenges'], missions: ['challenges'], missionresult: ['challenges'], quickmatch: ['quickmatch'],
     careerselect: ['career'], careercreate: ['career'], careersign: ['career'], careerhome: ['career'],
-    careerprematch: ['career'], careerresult: ['career'], careerpromoted: ['career'],
+    careerprematch: ['career'], careerresult: ['career'], careerpromoted: ['career'], careergoals: ['career'],
     careertree: ['skilltree', 'skilltreeArt'], careerloadout: ['skilltree', 'skilltreeArt'],
     careergear: ['equipment'], careershop: ['equipment'], collection: ['equipment'],
     careerjoin: ['careerWorld'], careeroffers: ['careerWorld'], careertable: ['careerWorld'], careercoach: ['careerWorld'],

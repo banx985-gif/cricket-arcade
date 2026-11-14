@@ -16,6 +16,8 @@ const CareerMatch = {
   pid: null,           // the career player's id in the team ('player' + batting position)
   assigned: [],        // over numbers the career player bowls (0-based)
   ticker: [],          // recent simulated balls (for the fast-sim screen)
+  keyMoments: false,   // M17: play only your big moments, watch the rest (the career's choice, c.keyMoments)
+  _kmOver: null,       // { inn, over, live }: whether the over you're bowling is played (decided at its start)
 
   teamName(side) {
     if (typeof MyXIMatch !== 'undefined' && MyXIMatch.on) return MyXIMatch.teamName(side);
@@ -79,6 +81,7 @@ const CareerMatch = {
     Tech.end();                                    // (no challenge / My XI techniques left over)
     this.on = true; this.career = c; this.slot = slot; this.fixture = fx;
     this.ticker = []; this.tactic = 'steady';
+    this.keyMoments = !!c.keyMoments; this._kmOver = null;
     fx.attempt = (fx.attempt || 0) + 1;
     const S = Career.stage(c);
     const fmt = Dev.matchFormat || S.format;
@@ -135,7 +138,7 @@ const CareerMatch = {
   tacticFx() { return this.isCaptain() ? CAREER_DATA.captaincy.effects[this.tactic] : null; },
   setTactic(t) { if (CAREER_DATA.captaincy.tactics.includes(t)) this.tactic = t; },
 
-  ctx() { return this.on ? { slot: this.slot, n: this.fixture.n, pid: this.pid, assigned: this.assigned, tech: Tech.snapshot() } : null; },
+  ctx() { return this.on ? { slot: this.slot, n: this.fixture.n, pid: this.pid, assigned: this.assigned, tech: Tech.snapshot(), keyMoments: this.keyMoments } : null; },
 
   // ---- routing: live or simulated? ----
   // Sets the bowler at the start of an over (career side: the assignment;
@@ -166,10 +169,51 @@ const CareerMatch = {
     return bw && bw.id === this.pid ? 'bowl' : null;
   },
 
+  // ---- M17 Job 2: key moments only ----
+  // Is this ball of yours a big moment (played), or watched (simulated with the same rules)?
+  // kind: 'bat' | 'bowl'. A bowling over is decided once, at its first ball, and stays that way.
+  isKeyMoment(inn, kind) {
+    const K = CAREER_DATA.keyMoments, f = Match.fmt, over = Math.floor(inn.legal / 6);
+    const death = K.deathOvers && over >= f.overs - (f.death || 1);
+    const close = (k) => !!(inn.target && k && inn.ballsLeft <= k.balls && inn.need <= inn.ballsLeft * k.maxRate);
+    if (inn.isSuper) return true;
+    if (kind === 'bat') {
+      const me = inn.bat(parseInt(this.pid.replace('player', ''), 10));
+      const near = K.nearMilestone.length >= 2 && ((me.runs >= K.nearMilestone[0] && me.runs <= K.nearMilestone[1]) || (me.runs >= K.nearMilestone[2] && me.runs <= K.nearMilestone[3]));
+      return me.balls < K.firstBalls || death || close(K.chase) || near;
+    }
+    const k = this._kmOver;
+    if (k && k.inn === inn.index && k.over === over) return k.live;
+    const myOvers = inn.overBowlers.filter((id) => id === this.pid).length;      // (this over included)
+    const live = (K.firstBallOfSpell && myOvers <= 1) || death || close(K.defend);
+    this._kmOver = { inn: inn.index, over, live };
+    return live;
+  },
+  // Who plays the next ball: 'bat' | 'bowl' (you, live) or null (simulated). Key moments only filters liveFor.
+  playFor(inn) {
+    const l = this.liveFor(inn);
+    if (!l || !this.keyMoments) return l;
+    return this.isKeyMoment(inn, l) ? l : null;
+  },
+  // TAKE OVER on the watch screen: every ball of yours is played from now on (this match).
+  takeOver() { this.keyMoments = false; },
+  // One ball on the watch screen: yours to play (returns 'bat' | 'bowl'), or simulated (returns the sim ball).
+  watchBall(inn) {
+    const live = this.playFor(inn);
+    if (live) return { live };
+    const r = this.simBall(inn);
+    if (typeof Commentary !== 'undefined') {
+      const e = inn.log[inn.log.length - 1];
+      const bat = Match.team(inn.battingSide).players[e.b - 1], bowl = Match.team(inn.bowlingSide).players.find((p) => p.id === e.w);
+      Commentary.sim(inn, r.b, r.res, bat, bowl);
+    }
+    return r;
+  },
+
   // The scene for the next ball of the current innings.
   sceneFor(inn) {
     if (inn.ended) return 'careersim';
-    const l = this.liveFor(inn);
+    const l = this.playFor(inn);
     return l === 'bat' ? 'matchbat' : l === 'bowl' ? 'matchbowl' : 'careersim';
   },
 
@@ -184,9 +228,17 @@ const CareerMatch = {
     return true;
   },
 
+  // A catch taken where the career player fields (not in their own overs, not when batting).
+  _myCatch(inn, pos) {
+    if (!this.on || !pos || inn.bowlingSide !== 'player') return false;
+    const bw = Match.bowlerOf(inn);
+    return !(bw && bw.id === this.pid) && pos === SeasonGoals.fieldPos();
+  },
+
   // One simulated ball (same rules as the played ones).
   simBall(inn) {
     Match.overStart();
+    const ballNo = Math.floor(inn.legal / 6) + '.' + (inn.legal % 6 + 1);
     const bowl = Match.bowlerOf(inn), bat = Match.batter(inn);
     Fielding.setPreset(inn.field, BowlerRules.phase(inn) === 'powerplay');
     Fielding.mods = Duel.fieldMods(Match.team(inn.bowlingSide), Fielding.preset);
@@ -194,20 +246,20 @@ const CareerMatch = {
     const tac = inn.battingSide === 'player' && this.tacticFx();
     const b = SimMatch.ball({ inn, bat, bowl, fatigue: Match.fatigue[bowl.id] || 0, cond: Match.cond,
       fielding: Fielding.mods.fielding, phase: BowlerRules.phase(inn), index: inn.legal, aggression: tac ? tac.aggression : 0 }, r);
-    const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, wicket: b.wicket });
+    const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, wicket: b.wicket, catcher: b.wicket === 'caught' ? b.fielder : null, myCatch: this._myCatch(inn, b.wicket === 'caught' ? b.fielder : null) });
     if (res.overDone || inn.ended) Match.overDone(inn);
     Fielding.clear();
     const line = { who: bat.short, bowler: bowl.short, sym: res.symbol, how: b.wicket || (b.boundary ? String(b.boundary) : b.kind !== 'legal' ? b.kind : String(b.batRuns)),
-      mine: bat.id === this.pid || bowl.id === this.pid };
+      mine: bat.id === this.pid || bowl.id === this.pid, ball: ballNo };
     this.ticker.push(line);
-    if (this.ticker.length > 8) this.ticker.shift();
+    if (this.ticker.length > 7) this.ticker.shift();
     return { b, res, line };
   },
 
   // ---- the end of the match ----
   performance() {
     const out = { bat: { batted: false, runs: 0, balls: 0, out: false, fours: 0, sixes: 0 },
-      bowl: { bowled: false, balls: 0, runs: 0, wkts: 0, dots: 0, extras: 0 }, won: Match.result && Match.result.winner === 'player' };
+      bowl: { bowled: false, balls: 0, runs: 0, wkts: 0, dots: 0, extras: 0 }, catches: 0, won: Match.result && Match.result.winner === 'player' };
     const pos = parseInt(this.pid.replace('player', ''), 10);
     for (const inn of Match.innings) {
       if (inn.battingSide === 'player') {
@@ -217,6 +269,8 @@ const CareerMatch = {
           out.bat.fours += b.fours || 0; out.bat.sixes += b.sixes || 0;
         }
       } else {
+        // Your catches (M17 season goals: see SeasonGoals.fieldPos).
+        for (const e of inn.log || []) if (e.mc) out.catches++;
         const f = inn.bowlerFigs[this.pid];
         if (f && f.balls + (f.extras || 0) > 0) {
           out.bowl.bowled = true; out.bowl.balls += f.balls; out.bowl.runs += f.runs; out.bowl.wkts += f.wkts;
@@ -244,6 +298,9 @@ const CareerMatch = {
       hatTricks: mf.hatTricks, chaseWinNotOut: mf.chaseWinNotOut, closerWin: mf.closerWin };
     const stageId = c.stage;                        // (a final can promote the career, so note the stage first)
     const summary = Career.finishMatch(c, fx, perf);
+    // Season goals (M17): add this match, pay the goals reached (the rates when the stage ends).
+    const endStage = !!(summary.gate && (summary.gate.result === 'promoted' || summary.gate.result === 'complete'));
+    summary.goals = SeasonGoals.afterMatch(c, perf, stageId, endStage);
     if (summary.won && typeof Notify !== 'undefined') Notify.won(Save.data);             // Rule B: ask once, after the first win
     summary.profile = Profile.add(Save.data, PROFILE_DATA.xp.careerMatch, 'career');            // Global Profile Level (M12)
     // Match drops (plan 12.7): sometimes a league match, the Local Final when you win.
@@ -264,7 +321,7 @@ const CareerMatch = {
     SkillTree.addMastery(c, summary.techUses);
     Tech.end();
     // Coins go to the global purse (plan 22.1).
-    Save.data.currencies.coins = (Save.data.currencies.coins || 0) + summary.coins;
+    Save.data.currencies.coins = (Save.data.currencies.coins || 0) + summary.coins + summary.goals.coins;
     CareerSave.save(c, this.slot);                  // autosave after match completion
     Save.clearResume();
     this.on = false;
@@ -299,6 +356,7 @@ const CareerMatch = {
     this.fixture = c.fixtures.find((f) => f.n === cp.career.n);
     if (!this.fixture) throw new Error('fixture ' + cp.career.n + ' not found');
     this.on = true; this.ticker = [];
+    this.keyMoments = !!cp.career.keyMoments; this._kmOver = null;
     Tech.begin(c, cp.career.tech);
     const [scene, params] = Match.restore(cp);
     if (scene === 'matchbreak') return [scene, params];
