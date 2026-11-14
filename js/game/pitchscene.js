@@ -459,9 +459,10 @@ const PitchScene = {
       bz = D.releaseZ + 0.5 - (D.releaseZ + 0.5 - F.bowlerFollowThroughZ) * (1 - (1 - slow) * (1 - slow));
       bopts = { run: 16 + slow * 6, arm: ph.after < 0.25 ? -Math.PI / 2 + ph.after * 6 : 1.4 };
     }
-    // M16: the rendered fast-bowling action, when its frames are in (else the art / stand-in above).
+    // M16: the rendered run-up and bowling action, when its frames are in (else the art / stand-in above).
+    const AK = BATTING_DATA.anim.sizeK;
     const ba = this._bowlerAnim(ph, bz);
-    if (ba) add('anim_bowl_fast:' + ba.frame, bx, 0, ba.z, { scale: BATTING_DATA.anim.sizeK });
+    if (ba) add('anim_' + ba.id + ':' + ba.frame, bx, 0, ba.z, { scale: AK });
     else add('bowler', bx, 0, bz, bopts);
 
     // Fielders
@@ -470,6 +471,7 @@ const PitchScene = {
     const dv = this.hit && this.hit.dive && this.hit.dive.result ? this.hit.dive : null;   // a diving stop (M15)
     for (const f of Fielding.fielders()) {
       let fx = f.x, fz = f.z, running = false, catching = false, rot = 0;
+      const st = { dive: null, catchT: null, throwT: null, ran: 0, running: false };      // M16 action frames
       if (dv && dv.id === f.id && !(dv.result === 'missed' && active && active.id === f.id && hitT > dv.t + 0.6)) {
         // Run toward the ball, then slide the last bit on the ground (all the way if it was stopped).
         const dx = dv.x - f.x, dz = dv.z - f.z, dist = Math.hypot(dx, dz);
@@ -480,6 +482,7 @@ const PitchScene = {
         if (dist > 0) { fx += dx / dist * moved; fz += dz / dist * moved; }
         running = k === 0 && ranTo < dist;
         rot = (dv.dir || 1) * 1.35 * k;
+        if (k > 0) st.dive = { k, dir: dv.dir || 1 }; else { st.ran = ranTo; st.running = running; }
       } else if (active && active.id === f.id) {
         const dx = active.to.x - f.x, dz = active.to.z - f.z;
         const dist = Math.hypot(dx, dz);
@@ -488,8 +491,15 @@ const PitchScene = {
         if (dist > 0) { fx += dx / dist * moved; fz += dz / dist * moved; }
         running = moved > 0 && moved < need;
         catching = this.hit.plan.result === 'caught' && hitT > this.hit.plan.endT - 0.4;
+        st.ran = moved; st.running = running;
+        const M = BATTING_DATA.anim, th = this.hit.throw;
+        if (this.hit.plan.result === 'caught' && hitT >= this.hit.plan.endT - M.catchBefore) st.catchT = hitT - this.hit.plan.endT;
+        else if (th && hitT >= th.t0 - M.throwBefore) st.throwT = hitT - th.t0;
       }
-      add(f.keeper ? 'keeper' : 'fielder', fx, 0, fz, { run: running ? hitT * 14 : 0, catching, rot });
+      const fa = f.keeper ? (st.catchT !== null && this._anim('keep_take') ? { id: 'keep_take', frame: this._fAround(this._anim('keep_take'), this._anim('keep_take').contact, st.catchT, BATTING_DATA.anim.catchBefore, BATTING_DATA.anim.catchAfter) } : this._keeperAnim())
+        : this._fielderAnim({ z: fz }, st);
+      if (fa) add('anim_' + fa.id + ':' + fa.frame, fx, 0, fz, { scale: AK, flip: !!fa.flip });
+      else add(f.keeper ? 'keeper' : 'fielder', fx, 0, fz, { run: running ? hitT * 14 : 0, catching, rot });
     }
 
     // Batter
@@ -503,9 +513,9 @@ const PitchScene = {
     }
     const pos = this._batterPositions();
     if (pos.running) { batterItemOpts.rot = Math.sin(this.hit.t * 18) * 0.06; }
-    // M16: the rendered cover drive frames (stance, backlift, swing, finish) while batting at the crease.
-    const bf = pos.running ? null : this._batterAnimFrame(swing);
-    if (bf !== null) add('anim_bat_cover_drive:' + bf, pos.striker.x, 0, pos.striker.z, { scale: BATTING_DATA.anim.sizeK });
+    // M16: the rendered frames while batting at the crease: stance, backlift, then each shot's own action.
+    const bf = pos.running ? null : this._batterAnim(swing);
+    if (bf) add('anim_' + bf.id + ':' + bf.frame, pos.striker.x, 0, pos.striker.z, { scale: AK });
     else add('batter', pos.striker.x, 0, pos.striker.z, batterItemOpts);
     const batterItem = items[items.length - 1];
     if (pos.nonStriker) {
@@ -555,36 +565,124 @@ const PitchScene = {
   _anim(id) {
     const A = typeof ANIM_DATA !== 'undefined' && ANIM_DATA[id];
     if (!A) return null;
+    if (A._ready) return A;
+    if (!PitchScene._animLoad) { PitchScene._animLoad = true; Sprites.loadGroup('match-anims'); }   // (boot normally started it)
     for (let i = 0; i < A.frames; i++) if (!Sprites.has('anim_' + id + ':' + i)) return null;
+    A._ready = true;
     return A;
   },
-  // Stance -> backlift while the ball comes, then the swing with bat-on-ball on the contact frame
-  // (the swing reaches the ball half way through, see _swingProgress), then the finish.
-  _batterAnimFrame(swing) {
-    const A = this._anim('bat_cover_drive');
-    if (!A) return null;
-    const lift = BATTING_DATA.anim.backliftFrame, last = A.frames - 1, hit = A.contact;
-    let f;
-    if (swing === null) f = this.state === 'delivery' ? lift * Math.min(1, this.dT / BATTING_DATA.swing.backliftTime) : 0;
-    else {
-      const p = Math.min(1.2, swing);
-      f = p <= 0.5 ? lift + (hit - lift) * (p / 0.5) : hit + (last - hit) * Math.min(1, (p - 0.5) / 0.6);
-      if (this.shot && this.shot.id === 'defend') f = Math.min(f, hit);         // a block stops at the ball
-    }
-    return Math.max(0, Math.min(last, Math.round(f)));
+  // A frame from a 0..1 progress through an action (clamped), or a looping one from a count.
+  _f01(A, k) { return Math.max(0, Math.min(A.frames - 1, Math.round(k * (A.frames - 1)))); },
+  _fLoop(A, n) { return ((Math.floor(n) % A.frames) + A.frames) % A.frames; },
+  // Frames before / after a key frame: from `start` to `key` the action plays 0..key, then key..last over `after`.
+  _fAround(A, key, t, before, after) {
+    const last = A.frames - 1;
+    if (t < 0) return Math.max(0, Math.min(key, Math.round(key * (1 + t / before))));
+    return Math.min(last, Math.round(key + (last - key) * Math.min(1, t / after)));
   },
-  // The delivery stride plays over the end of the run-up (the frames carry the bowler forward
-  // themselves, so he's drawn from the release spot), release on the release frame, then the follow-through.
+
+  // Which batting action this shot plays (M16 Job 3): the button, where it's aimed (or the line
+  // of the ball), the bowler type and the height of the ball. Picked once, when the swing starts.
+  shotAction(sh) {
+    if (!sh || sh.leave) return null;
+    if (sh.anim !== undefined) return sh.anim;
+    const P = BATTING_DATA.anim.pick, PI = BATTING_DATA.pitch, DIR = BATTING_DATA.direction;
+    let id;
+    if (sh.id === 'defend') id = 'bat_defence';
+    else {
+      const aim = sh.aim || (this.ai && this.ai.aim) || (typeof BatControls !== 'undefined' && this.ai === undefined ? BatControls.aim() : null);
+      const tI = this.del && this.del.sim ? this.del.sim.contactIdx * CONFIG.PHYSICS_STEP : 0;
+      const ball = this.del && this.del.sim ? this.del.sim.path.at(tI, {}) : { x: PI.reachCentreX, y: 0.8 };
+      const dir = aim && aim.active ? aim.x * DIR.maxAim : Math.max(-45, Math.min(45, (ball.x - PI.reachCentreX) * DIR.autoFromLine));
+      const spin = this.del && this.del.kind === 'spin', high = ball.y >= P.highBall, up = aim && aim.active && aim.y <= P.loftAim;
+      if (dir >= P.cutFrom) id = 'bat_cut';
+      else if (dir <= P.legFrom) id = spin && !high ? 'bat_sweep' : 'bat_pull';
+      else if (high && sh.id === 'power') id = 'bat_pull';
+      else id = sh.id === 'power' || up ? 'bat_lofted' : 'bat_cover_drive';
+    }
+    sh.anim = id;
+    return id;
+  },
+
+  // The striker at the crease: stance (a small bat tap) while waiting, the backlift as the ball
+  // comes, then the shot's own action with bat-on-ball on its contact frame (the swing reaches
+  // the ball half way through, see _swingProgress), then the finish. null = no frames yet.
+  _batterAnim(swing) {
+    const M = BATTING_DATA.anim;
+    if (swing !== null && this.shot) {
+      const id = this.shotAction(this.shot), A = id && (this._anim(id) || this._anim('bat_cover_drive'));
+      if (!A) return null;
+      const use = this._anim(id) ? id : 'bat_cover_drive', hit = A.contact, last = A.frames - 1;
+      const p = Math.min(1.2, swing);
+      const f = p <= 0.5 ? hit * (p / 0.5) : hit + (last - hit) * Math.min(1, (p - 0.5) / 0.6);
+      return { id: use, frame: Math.max(0, Math.min(last, Math.round(f))) };
+    }
+    if (this.state === 'delivery') {
+      const A = this._anim('bat_backlift');
+      return A ? { id: 'bat_backlift', frame: this._f01(A, this.dT / BATTING_DATA.swing.backliftTime) } : null;
+    }
+    const A = this._anim('bat_stance');
+    return A ? { id: 'bat_stance', frame: this._fLoop(A, (this.stateT || 0) * M.stanceFps) } : null;
+  },
+
+  // The bowler: the run-up stride cycle, then the delivery stride (the frames carry him forward
+  // themselves, so he's drawn from the release spot), release on the release frame, then the
+  // follow-through. Spinners use their own action.
   _bowlerAnim(ph, runZ) {
-    const A = this._anim('bowl_fast');
+    const D = BATTING_DATA.delivery, M = BATTING_DATA.anim, at = D.releaseZ + 0.5;
+    const id = this.del && this.del.kind === 'spin' && this._anim('bowl_spin') ? 'bowl_spin' : 'bowl_fast';
+    const A = this._anim(id);
     if (!A) return null;
-    const D = BATTING_DATA.delivery, M = BATTING_DATA.anim, at = D.releaseZ + 0.5, rel = A.release, last = A.frames - 1;
+    const S = M.stride[id], rel = A.release, last = A.frames - 1;
     if (ph.after < 0) {
       const e = Math.max(0, Math.min(1, ph.runT));
-      if (e < M.strideFrom) return { frame: 0, z: runZ - M.strideBack };
-      return { frame: Math.round(rel * (e - M.strideFrom) / (1 - M.strideFrom)), z: at };
+      if (e < S.from) {
+        const R = this._anim('bowl_run');
+        if (R) return { id: 'bowl_run', frame: this._fLoop(R, (D.runUpStartZ - runZ) / R.cycleM * R.frames), z: runZ };
+        return { id, frame: 0, z: runZ - S.back };
+      }
+      return { id, frame: Math.round(rel * (e - S.from) / (1 - S.from)), z: at };
     }
-    return { frame: Math.min(last, Math.round(rel + (last - rel) * Math.min(1, ph.after / M.followTime))), z: at };
+    return { id, frame: Math.min(last, Math.round(rel + (last - rel) * Math.min(1, ph.after / M.followTime))), z: at };
+  },
+
+  // A fielder (M16 Job 5): ready, running, catching, diving, throwing. Fielders between the camera
+  // and the batter are seen from behind ('_b' frames). null = no frames yet (the drawn stand-in).
+  _fielderAnim(f, st) {
+    const M = BATTING_DATA.anim, back = f.z > M.backFromZ ? '_b' : '';
+    const pick = (base) => { const id = base + back; const A = this._anim(id); return A ? { id, A } : null; };
+    if (st.dive) {
+      const a = pick('field_dive');
+      // the frames dive to the right of the screen seen from the front (to the left from behind)
+      if (a) return { id: a.id, frame: this._f01(a.A, st.dive.k), flip: back ? st.dive.dir > 0 : st.dive.dir < 0 };
+    }
+    if (st.catchT !== null) {
+      const a = pick('field_catch');
+      if (a) return { id: a.id, frame: this._fAround(a.A, a.A.contact, st.catchT, M.catchBefore, M.catchAfter) };
+    }
+    if (st.throwT !== null) {
+      const a = pick('field_throw');
+      if (a) return { id: a.id, frame: this._fAround(a.A, a.A.release, st.throwT, M.throwBefore, M.throwAfter) };
+    }
+    if (st.ran > 0 && st.running) {
+      const a = pick('field_run');
+      if (a) return { id: a.id, frame: this._fLoop(a.A, st.ran / a.A.cycleM * a.A.frames) };
+    }
+    const a = pick('field_ready');
+    return a ? { id: a.id, frame: 0 } : null;
+  },
+
+  // The keeper: crouched, rises as the ball reaches the batter, takes it on the contact frame
+  // when it goes through (missed / left), stays half up when it's hit.
+  _keeperAnim() {
+    const A = this._anim('keep_take'), M = BATTING_DATA.anim;
+    if (!A) return null;
+    if (!this.del || !this.del.sim || (this.state !== 'delivery' && this.state !== 'outcome' && this.state !== 'inplay')) return { id: 'keep_take', frame: 0 };
+    const tI = this.del.sim.contactIdx * CONFIG.PHYSICS_STEP;
+    const now = this.dT + (this.hit ? this.hit.t : 0);
+    const t = now - tI - M.keeperDelay;
+    const f = this._fAround(A, A.contact, t, M.keeperRise, M.keeperAfter);
+    return { id: 'keep_take', frame: this.hit ? Math.min(f, M.keeperHitFrame) : f };
   },
 
   // 0..1 through the swing, or null when not swinging.

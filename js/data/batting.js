@@ -171,11 +171,22 @@ const BATTING_DATA = {
     power:   { contactAt: 0.5, finish: -2.75, finishSide: -0.4 },      // lofted hit: big, full finish over the shoulder
     defend:  { contactAt: 0.85, finish: -0.25, finishSide: -0.05 },    // dead bat: stops at the ball
   },
-  // M16: playing the rendered action frames. backliftFrame = the backlift pose in the batting frames;
-  // the bowler's stride starts at strideFrom of the run-up (its first frame shows him strideBack metres
-  // behind the release spot), followTime = seconds for the follow-through frames.
+  // M16: playing the rendered action frames (pitchscene.js).
   // sizeK: drawn this much bigger than life, like the rest of the game's players.
-  anim: { sizeK: 1.3, backliftFrame: 2.5, strideFrom: 0.8, strideBack: 2.0, followTime: 0.4 },
+  // stride: each bowling action starts at `from` of the run-up (before that the run-up cycle plays);
+  //   its first frame shows him `back` metres behind the release spot. followTime = follow-through seconds.
+  // stanceFps: the stance's little bat tap. pick: which batting action a shot plays (degrees from straight,
+  //   + = off side): cut from cutFrom, pull / sweep (spin) from legFrom, a ball this high (m) gets pulled,
+  //   aiming up this far (-1..0) lofts it. backFromZ: fielders further up the pitch than this are seen from behind.
+  //   Catch / throw / keeper: seconds before and after the moment of the catch / release / take.
+  anim: {
+    sizeK: 1.3, followTime: 0.4, stanceFps: 5,
+    stride: { bowl_fast: { from: 0.8, back: 2.0 }, bowl_spin: { from: 0.86, back: 1.4 } },
+    pick: { cutFrom: 50, legFrom: -45, highBall: 1.15, loftAim: -0.5 },
+    backFromZ: 0,
+    catchBefore: 0.4, catchAfter: 0.6, throwBefore: 0.35, throwAfter: 0.35,
+    keeperDelay: 0.3, keeperRise: 0.35, keeperAfter: 0.4, keeperHitFrame: 2,
+  },
   camera: {
     pitch: { pos: [1.3, 7.5, 33], target: [0.1, 0.3, 3.5], focal: 2700 },
     follow: { height: 20, back: 34, focal: 1350, lead: 0.3, cutDelay: 0.18 },

@@ -701,11 +701,14 @@ const ASSET_MANIFEST = {
   },
 };
 
-// M16: the rendered cricket actions (data/anims.js) join the match art as 'anim_<action>:<n>'.
+// M16: the rendered cricket actions (data/anims.js), as 'anim_<action>:<n>', in their own group
+// 'match-anims': it loads in the background (no screen waits for it); until an action's frames are
+// all in, the match draws the old pictures.
 if (typeof ANIM_DATA !== 'undefined') {
+  ASSET_MANIFEST.groups['match-anims'] = ASSET_MANIFEST.groups['match-anims'] || {};
   for (const [act, a] of Object.entries(ANIM_DATA)) {
     for (let i = 0; i < a.frames; i++) {
-      ASSET_MANIFEST.groups['match-common']['anim_' + act + ':' + i] = {
+      ASSET_MANIFEST.groups['match-anims']['anim_' + act + ':' + i] = {
         src: a.files[i], anchorX: a.anchorX, anchorY: a.anchorY, heightM: a.heightM,     // (drawn x BATTING_DATA.anim.sizeK)
       };
     }

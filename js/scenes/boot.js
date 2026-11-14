@@ -14,7 +14,7 @@ const BootScene = {
     // M14: only the home screen's art at start-up. Once it's in, the match art follows in
     // the background (every other screen's art loads when that screen first opens).
     const home = Sprites.loadGroup('home');
-    home.then(() => { this._artIn = true; Sprites.loadGroup('match-common'); });
+    home.then(() => { this._artIn = true; Sprites.loadGroup('match-common').then(() => Sprites.loadGroup('match-anims')); });
     setTimeout(() => { this._artIn = true; }, 6000);     // slow connection: don't hold the home screen back
     Store.open()
       .then(() => Save.load())
