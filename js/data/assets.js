@@ -711,6 +711,14 @@ if (typeof ANIM_DATA !== 'undefined') {
       ASSET_MANIFEST.groups['match-anims']['anim_' + act + ':' + i] = {
         src: a.files[i], anchorX: a.anchorX, anchorY: a.anchorY, heightM: a.heightM,     // (drawn x BATTING_DATA.anim.sizeK)
       };
+      // M18: its colour mask (main | trim | skin side by side), tinted at draw time (game/kitlook.js)
+      if (a.masks) ASSET_MANIFEST.groups['match-anims']['animm_' + act + ':' + i] = { src: a.masks[i] };
     }
+  }
+}
+// M18: the head pieces (own heads, hair, beards, coverings, rival heads), 'head_<piece>:<turn>'
+if (typeof ANIM_HEADS !== 'undefined' && ANIM_HEADS) {
+  for (const [id, p] of Object.entries(ANIM_HEADS.parts)) {
+    p.files.forEach((src, i) => { ASSET_MANIFEST.groups['match-anims']['head_' + id + ':' + i] = { src }; });
   }
 }

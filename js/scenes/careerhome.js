@@ -118,6 +118,12 @@ const CareerHomeScene = {
           sub: () => T('career.drillSub', { stat: T('stat.' + d.stat), e: d.energy }),
         });
       });
+      // M19 (plan 8.13): Coach Session and Technique Practice
+      const P = CAREER_DATA.prep, k = Coaches.coach(Coaches.active(c)), lo = SkillTree.loadout(c), techs = lo.active.concat(lo.passive);
+      pb.add('career.coachSession', cx - 880, 930, 425, 100, () => this._prep('coachSession'), { size: 26, color: '#c9b3ff', disabled: !k,
+        sub: () => (k ? T('career.coachSessionSub', { name: T('coach.' + k.id), e: P.coachSession.energy }) : T('career.noCoach')) }).tag = 'coachSession';
+      pb.add('career.techPractice', cx + 455, 930, 425, 100, () => this._prep('techPractice'), { size: 26, color: '#9be7ff', disabled: !techs.length,
+        sub: () => (techs.length ? T('career.techPracticeSub', { name: TreeText.name(techs[0]), e: P.techPractice.energy }) : T('career.noTech')) }).tag = 'techPractice';
     }
     if (p === 'player') {
       PLAYER_DATA.stats.batting.concat(PLAYER_DATA.stats.bowling, PLAYER_DATA.stats.shared).forEach((k, i) => {
@@ -128,11 +134,25 @@ const CareerHomeScene = {
     }
   },
 
-  _train(id) {
-    const res = Career.train(this.career, id);
+  _train(id, skill) {
+    // M19: the first few sessions of a drill are hands-on (a short skill check), then quick
+    if (skill === undefined && TrainingDrill.handsOn(this.career, id) && Career.prepsLeft(this.career) > 0) {
+      TrainingDrill.start(id, (r) => this._train(id, r || null));
+      return;
+    }
+    const res = Career.train(this.career, id, skill || undefined);
     if (!res) return;
     this.result = { kind: 'train', res };
     this._save();                                   // autosave after a career action
+    Sound.play(res.levels ? 'fanfare' : 'four');
+    this._open('result');
+  },
+
+  _prep(kind) {
+    const c = this.career, res = kind === 'coachSession' ? Career.coachSession(c) : Career.techPractice(c);
+    if (!res) { Sound.play('ui_error'); return; }
+    this.result = { kind, res };
+    this._save();
     Sound.play(res.levels ? 'fanfare' : 'four');
     this._open('result');
   },
@@ -346,7 +366,20 @@ const CareerHomeScene = {
       R.text(r.res.gain > 0 ? T('career.statUp', { n: r.res.gain, stat: T('stat.' + D.stat) }) : T('career.tooTired'), cx, 610, 46, r.res.gain > 0 ? '#9cff6a' : '#ff9d7a');
       R.text(T('career.xpEnergy', { xp: r.res.xp, e: -r.res.energy }), cx, 680, 30, '#d8e4f0', 'center', false);
       if (r.res.emphasis) R.text(T('career.emphasisBonus'), cx, 730, 26, '#ffd23f', 'center', false);
+      if (r.res.skill) R.text(T('career.drillScore', { n: r.res.skill.hits, of: r.res.skill.of }) + (r.res.formUp ? ' · ' + T('career.drillForm') : '') + (r.res.mastery ? ' · ' + T('career.drillMastery', { name: TreeText.name(r.res.mastery) }) : ''), cx, 760, 24, '#9be7ff', 'center', false);
       if (r.res.levels) R.text(T('career.levelUp', { n: c.player.level, g: r.res.levels * CAREER_DATA.levels.growthPerLevel }), cx, 800, 44, '#ffb400');
+    } else if (r.kind === 'coachSession') {
+      Sprites.ui(Coaches.coach(r.res.coach).art, cx, 330, 300, 300);
+      R.text(T('career.coachSessionDone', { name: T('coach.' + r.res.coach) }), cx, 530, 50, '#ffffff');
+      R.text(T('career.statUp', { n: r.res.gain, stat: T('stat.' + r.res.stat) }), cx, 610, 46, '#9cff6a');
+      R.text(T('career.xpEnergy', { xp: r.res.xp, e: -r.res.energy }), cx, 680, 30, '#d8e4f0', 'center', false);
+      if (r.res.levels) R.text(T('career.levelUp', { n: c.player.level, g: r.res.levels * CAREER_DATA.levels.growthPerLevel }), cx, 800, 44, '#ffb400');
+    } else if (r.kind === 'techPractice') {
+      const t = SKILL_TREE_DATA.techniques[r.res.tech];
+      if (t) TreeArt.draw(t.icon, cx, 330, 260);
+      R.text(TreeText.name(r.res.tech), cx, 530, 50, '#ffffff');
+      R.text(T('career.techPracticeDone', { n: r.res.uses, lvl: T('tree.mastery.' + r.res.after) }), cx, 610, 38, r.res.after !== r.res.before ? '#ffd23f' : '#9cff6a');
+      R.text(T('career.xpEnergy', { xp: r.res.xp, e: -r.res.energy }), cx, 680, 30, '#d8e4f0', 'center', false);
     } else {
       Sprites.ui('career_rest', cx, 330, 300, 300);
       R.text(T('career.rested'), cx, 530, 54, '#ffffff');

@@ -119,6 +119,21 @@ const CAREER_DATA = {
     { id: 'fielding_reaction', icon: 'train_fielding_reaction', stat: 'fielding',  gain: 1, energy: 15, xp: 20, for: 'all' },
   ],
   emphasisBonus: { xp: 10, extraStatChance: 0.35 },
+  // M19 (plan 8.13): the other prep actions. Coach Session: your coach's first specialty drill, +1 stat guaranteed on
+  // top, extra coach mastery. Technique Practice: mastery uses for one loadout technique.
+  // M19 (plan 5.8, 10): hands-on training. The first 'sessions' times you do each drill it's a short skill check
+  // (scenes/training.js): tap when the sweeping marker is inside the zone, 'rounds' times. speed = how fast it
+  // sweeps, zone = half the zone's width (0..1 of the bar). 2 hits: +1 extra stat; 3: + a form bump and mastery uses.
+  handsOn: {
+    sessions: 3, rounds: 3, zones: [0.32, 0.7, 0.5], resultHold: 1.1,
+    reward: { extraGainAt: 2, formAt: 3, masteryUses: 2, xpPerHit: 5 },
+    drills: {
+      timing_cage: { speed: 2.6, zone: 0.07 }, power_hitting: { speed: 2.2, zone: 0.09 }, target_batting: { speed: 2.4, zone: 0.06 },
+      pace_gate: { speed: 3.0, zone: 0.08 }, yorker_board: { speed: 2.8, zone: 0.05 }, movement_control: { speed: 2.3, zone: 0.07 },
+      fitness_session: { speed: 3.2, zone: 0.1 }, fielding_reaction: { speed: 3.4, zone: 0.08 },
+    },
+  },
+  prep: { coachSession: { energy: 25, xp: 35, extraGain: 1, masteryUses: 2 }, techPractice: { energy: 15, xp: 20, uses: 4 } },
 
   // ---- Match grade (plan 8.24) ---------------------------------------------------
   // Batting score: runs + strike-rate bonus + not-out bonus. Bowling score:
@@ -185,12 +200,13 @@ const CAREER_DATA = {
     {
       id: 'franchise', n: 4, nameKey: 'career.stage.franchise', art: 'stage_global_franchise', format: 'quick5',
       matches: 5,                               // 3 group matches + semi + final (when you go all the way)
-      teamRating: 60, opponentRating: [57, 66], finalOpponentRating: 68,
-      // Key objective: reach the semi-finals (win your group).
-      gate: { threshold: 70, nearMiss: 52, keyObjective: { reach: 'semi' } },
+      teamRating: 61, opponentRating: [56, 64], finalOpponentRating: 67,
+      // Key objective: reach the semi-finals (win your group), or play well enough yourself
+      // (Selection Meter at orSelection) even if the team goes out (M18 balance fix).
+      gate: { threshold: 66, nearMiss: 50, keyObjective: { reach: 'semi', orSelection: 80 } },
       qualifier: { passGrade: 'B' },
       extraBlock: { matches: 2 },
-      team: 'franchise', tournament: true, sponsors: true, scouts: true, rival: { n: 3, id: 'cannon' },
+      team: 'franchise', tournament: true, sponsors: true, scouts: true, rival: [{ n: 1, id: 'prodigy' }, { n: 3, id: 'cannon' }],   // M19: the Prodigy is back (another franchise)
       milestone: 'milestone_franchise_signing',
       next: 'national',
     },
@@ -217,7 +233,7 @@ const CAREER_DATA = {
       gate: { threshold: 72, nearMiss: 54, keyObjective: { finalGrade: 'C' } },
       qualifier: { passGrade: 'B' },
       extraBlock: { matches: 2 },
-      team: 'national', captaincy: true, sponsors: true, rival: [{ n: 2, id: 'magician' }, { n: 4, id: 'veteran' }],
+      team: 'national', captaincy: true, sponsors: true, rival: [{ n: 2, id: 'magician' }, { n: 3, id: 'prodigy' }, { n: 4, id: 'veteran' }],
       milestone: 'milestone_national_callup',
       next: 'world',
     },
@@ -225,11 +241,11 @@ const CAREER_DATA = {
       // The World Nations Championship (CAREER_DATA.world): groups of 3, top two to the quarter-finals.
       id: 'world', n: 7, nameKey: 'career.stage.world', art: 'stage_world_stage', format: 'quick5',
       matches: 5,                               // 2 group matches + quarter + semi + final (going all the way)
-      teamRating: 78, opponentRating: [75, 84], finalOpponentRating: 86,
-      gate: { threshold: 70, nearMiss: 52, keyObjective: { reach: 'semi' } },
+      teamRating: 79, opponentRating: [74, 82], finalOpponentRating: 85,
+      gate: { threshold: 66, nearMiss: 50, keyObjective: { reach: 'semi', orSelection: 80 } },   // (M18 balance fix, as Franchise)
       qualifier: { passGrade: 'B' },
       extraBlock: { matches: 2 },
-      team: 'national', tournament: 'world', sponsors: true, rival: [{ n: 1, id: 'giant' }, { kind: 'quarter', id: 'trickster' }, { kind: 'final', id: 'captain' }],
+      team: 'national', tournament: 'world', sponsors: true, rival: [{ n: 1, id: 'giant' }, { n: 2, id: 'prodigy' }, { kind: 'quarter', id: 'trickster' }, { kind: 'final', id: 'captain' }],
       milestone: 'milestone_world_stage_selection',
       next: 'elite',
     },

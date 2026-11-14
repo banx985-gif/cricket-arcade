@@ -23,7 +23,7 @@ const MatchFacts = {
       wickets: 0, bowled: 0, lbw: 0, hatTricks: 0, maidens: 0, wicketMaidens: 0, googlyWickets: 0, dots: 0, deathDefend: 0, cleanSpell: 0,
       newBallWickets: 0, deathWickets: 0, paceWickets: 0, closerWin: 0, wicketTypes: [],
       catches: 0, directHits: 0, runouts: 0, superOverWin: 0, lastBallWin: 0, bigWin: 0, nelson: 0, tailWags: 0,
-      teamSixes: 0, teamRuns: 0 };
+      teamSixes: 0, teamRuns: 0, divingStops: 0, overthrowRuns: 0, longestSix: 0, droppedCatches: 0, extrasGiven: 0, fastest50: 0, fastest100: 0, wicketStreak: 0, bestFigW: 0, bestFigR: 0 };
     const main = inns.filter((i) => !i.isSuper);
     for (const inn of inns) {
       const log = inn.log || [], lastOver = inn.maxBalls / 6 - 1, over = (e) => Math.floor(((e.k === 'l' ? e.n : e.n + 1) - 1) / 6);
@@ -35,11 +35,17 @@ const MatchFacts = {
           if (pos) { f.runs += b.runs; f.sixes += b.sixes || 0; } else { f.runs = Math.max(f.runs, b.runs); f.sixes = Math.max(f.sixes, b.sixes || 0); }
         }
         f.teamSixes += inn.sixes; f.teamRuns += inn.runs;
-        const overSix = {}, streak = {}, best = {};
+        const overSix = {}, streak = {}, best = {}, bf = {}, br = {};
         for (const e of log) {
           if (!myBat(e) || e.k === 'w') continue;
+          // M19 record book: balls to 50 / 100
+          bf[e.b] = (bf[e.b] || 0) + 1; const was = br[e.b] || 0; br[e.b] = was + batRuns(e);
+          if (was < 50 && br[e.b] >= 50 && (!f.fastest50 || bf[e.b] < f.fastest50)) f.fastest50 = bf[e.b];
+          if (was < 100 && br[e.b] >= 100 && (!f.fastest100 || bf[e.b] < f.fastest100)) f.fastest100 = bf[e.b];
           if (e.c === 'perfect') f.perfect++;
           if (e.x === 6) { const k = e.b + ':' + over(e); overSix[k] = (overSix[k] || 0) + 1; f.sixesInOver = Math.max(f.sixesInOver, overSix[k]); }
+          if (e.x === 6 && e.m) f.longestSix = Math.max(f.longestSix, e.m);
+          if (e.ot) f.overthrowRuns++;
           streak[e.b] = e.x ? (streak[e.b] || 0) + 1 : 0; best[e.b] = Math.max(best[e.b] || 0, streak[e.b]);
           if (e.fh && e.x === 6) f.freeHitSixes++;
           const spin = kindOf(e.w) === 'spin';
@@ -67,6 +73,9 @@ const MatchFacts = {
         const seq = {}, overRuns = {}, overWk = {}, overBalls = {};
         for (const e of log) {
           if (e.o === 'caught') f.catches++;
+          if (e.ds) f.divingStops++;
+          if (e.dc) f.droppedCatches++;
+          if (!inn.isSuper && e.k !== 'l') f.extrasGiven++;
           if (e.o === 'runout') { f.runouts++; if (e.t === 'perfect') f.directHits++; }
           if (!myBowl(e)) continue;
           const o = over(e), key = e.w + ':' + o;
@@ -83,7 +92,7 @@ const MatchFacts = {
             if (o === lastOver) f.deathWickets++;
             if (kindOf(e.w) === 'pace') f.paceWickets++;
           }
-          if (e.k === 'l') { seq[e.w] = wk ? (seq[e.w] || 0) + 1 : 0; if (seq[e.w] === 3) f.hatTricks++; }
+          if (e.k === 'l') { seq[e.w] = wk ? (seq[e.w] || 0) + 1 : 0; if (seq[e.w] === 3) f.hatTricks++; f.wicketStreak = Math.max(f.wicketStreak, seq[e.w]); }
         }
         for (const key of Object.keys(overBalls)) if (overBalls[key] >= 6 && !overRuns[key]) { f.maidens++; if (overWk[key]) f.wicketMaidens++; }
         // Quick Match: your best bowler's wickets / dots; career: the career player's figures
@@ -91,6 +100,7 @@ const MatchFacts = {
         if (me.pid) f.dots += figs.reduce((a, x) => a + (x.dots || 0), 0);
         else { f.wickets = Math.max(f.wickets, ...figs.map((x) => x.wkts), 0); f.dots = Math.max(f.dots, ...figs.map((x) => x.dots || 0), 0); }
         if (figs.some((x) => x.balls >= 12 && !(x.extras || 0))) f.cleanSpell = 1;
+        for (const x of figs) if (x.wkts > f.bestFigW || (x.wkts === f.bestFigW && x.wkts > 0 && x.runs < f.bestFigR)) { f.bestFigW = x.wkts; f.bestFigR = x.runs; }
         // the last over of a match your side won / defended
         const lastBowler = inn.overBowlers[inn.overBowlers.length - 1];
         if (won && inn === inns[inns.length - 1] && lastBowler && myBowl({ w: lastBowler })) {
@@ -109,6 +119,7 @@ const MatchFacts = {
     // Legend difficulty (plan 20): a win, and the secret wicket + six + catch
     const legend = Match.difficulty === 'legend';
     f.legendWin = won && legend ? 1 : 0;
+    f.perfectGame = won && main.length === 2 && f.catches >= 1 && !f.extrasGiven && !f.droppedCatches ? 1 : 0;   // M19: catches held, none dropped, no extras
     f.legendTriple = legend && f.wickets >= 1 && f.sixes >= 1 && f.catches >= 1 ? 1 : 0;
     if (won && dec && dec.log && dec.log.length && dec.log[dec.log.length - 1].n === dec.maxBalls && dec.log[dec.log.length - 1].k === 'l') f.lastBallWin = 1;
     if (won && main.length === 2) {
@@ -170,6 +181,8 @@ const Achievements = {
       rivalsBeaten: Object.keys(rivals).length, championBeaten: rivals.champion ? 1 : 0,
       coachesHired: Object.keys((save.coaches && save.coaches.hired) || {}).length,
       techsDiscovered: Object.keys((save.collection && save.collection.techniques) || {}).length,
+      evolved: this.life(save).evolved || 0,
+      hiddenMaster: save.collection && save.collection.hiddenMaster ? 1 : 0,          // (M19)                                    // Evolution (M19)
       mythicOwned: EQUIPMENT_DATA.items.some((it) => it.rarity === 'mythic' && Gear.owns(save, it.id)) ? 1 : 0,
       ...(typeof MyXI !== 'undefined' ? MyXI.facts(save) : {}),     // My XI (M10)
       legendCareers: hof.filter((h) => h.legendCareer).length,                   // Hard Way (M12)
@@ -228,14 +241,64 @@ const Achievements = {
     // lifetime: the career player (or your whole side in Quick Match)
     add('sixes', me.pid ? f.sixes : f.teamSixes); add('runs', me.pid ? f.runs : f.teamRuns); add('bowled', f.bowled);
     add('wickets', me.pid ? f.wickets : (Match.innings || []).filter((i) => i.bowlingSide === 'player').reduce((a, i) => a + Object.entries(i.bowlerFigs).reduce((s, [, x]) => s + x.wkts, 0), 0));
-    add('catches', f.catches); add('runouts', f.runouts);
+    add('catches', f.catches); add('runouts', f.runouts); add('hatTricks', f.hatTricks);
     for (const k of f.wicketTypes) W[k] = (W[k] || 0) + 1;
     const got = this._check(save, 'match', f, c).concat(this._check(save, 'life', null, c));
-    return { facts: f, got };
+    const records = typeof Records !== 'undefined' ? Records.afterMatch(save, f) : [];     // M19: the record book
+    return { facts: f, got, records };
   },
   // Any time a career is saved (cheap): career and account achievements.
   checkCareer(save, c) { return this._check(save, 'career', this.careerFacts(c), c).concat(this.checkAccount(save, c)); },
   checkAccount(save, c) { return this._check(save, 'account', this.accountFacts(save), c).concat(this._check(save, 'life', null, c)); },
+};
+
+// ---- the record book (M19, plan 5.28, 24): bests from matches (kept in save.records.best) and
+// account bests read from the save. RECORD_DATA (data/achievements.js) lists them.
+const Records = {
+  best(save) { save.records = save.records || {}; return (save.records.best = save.records.best || {}); },
+  // The value of a match record from the match facts (null = not set this match).
+  _fromFacts(r, f) {
+    if (r.id === 'bestFigures') return f.bestFigW ? f.bestFigW * 1000 - f.bestFigR : null;     // more wickets, then fewer runs
+    const v = f[r.fact];
+    return v ? v : null;
+  },
+  better(r, a, b) { return b === null || b === undefined ? true : r.low ? a < b : a > b; },
+  // After a match: new bests. Returns the ids that are new records.
+  afterMatch(save, f) {
+    const B = this.best(save), out = [], day = new Date().toISOString().slice(0, 10);
+    for (const r of RECORD_DATA.list) {
+      if (r.kind !== 'match') continue;
+      const v = this._fromFacts(r, f);
+      if (v === null) continue;
+      if (this.better(r, v, B[r.id] ? B[r.id].v : null)) { B[r.id] = { v, at: day }; out.push(r.id); }
+    }
+    return out;
+  },
+  // Every record as { id, v (number or null), text, at }.
+  all(save) {
+    const B = this.best(save), A = Achievements.accountFacts(save), L = Achievements.life(save);
+    return RECORD_DATA.list.map((r) => {
+      let v = null, at = null;
+      if (r.kind === 'match') { if (B[r.id]) { v = B[r.id].v; at = B[r.id].at; } }
+      else if (r.kind === 'life') v = L[r.fact] || 0;
+      else if (r.kind === 'account') v = this._account(save, r, A);
+      return { id: r.id, v, at, text: v === null || v === 0 && r.kind === 'match' ? '-' : this.text(r, v) };
+    });
+  },
+  _account(save, r, A) {
+    if (r.fact === 'sixSmashHigh' || r.fact === 'wicketRushHigh') {
+      const g = r.fact === 'sixSmashHigh' ? 'six' : 'rush';
+      return Math.max(0, ...Challenge.rulesets(g).map((x) => ((Challenge.record(save, x.id) || {}).score) || 0));
+    }
+    if (r.fact === 'diamondClears') return ['six', 'rush'].reduce((n, g) => n + Challenge.rulesets(g).filter((x) => (Challenge.record(save, x.id) || {}).medal === 'diamond').length, 0);
+    if (r.fact === 'championships') return (save.hallOfFame || []).reduce((n, h) => n + (h.trophies || []).filter((t) => /_champion$/.test(t)).length, 0);
+    if (r.fact === 'missionsDone') return typeof Missions !== 'undefined' ? Missions.clearedCount(save) : 0;
+    return A[r.fact] || 0;
+  },
+  text(r, v) {
+    if (r.id === 'bestFigures') { const w = Math.floor((v + 999) / 1000), runs = w * 1000 - v; return T('rec.figures', { w, r: runs }); }
+    return T('rec.unit.' + (r.unit || 'n'), { n: v });
+  },
 };
 
 // The pop-up when an achievement is earned (drawn over every screen by main.js).

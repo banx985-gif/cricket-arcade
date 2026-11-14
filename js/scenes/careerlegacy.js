@@ -149,13 +149,33 @@ const HallOfFameScene = {
     this.sel = i >= 0 ? hof[i].id : null;
     this.page = i >= 0 ? Math.floor(i / this.PER) : 0;
     this.back = (params && params.back) || 'title';
+    this.shop = false; this.cmp = null; this.msg = null;
     this._layout();
   },
   _layout() {
     const b = this.buttons, s = Display.safe, cx = CONFIG.LOGICAL_W / 2, hof = Save.data.hallOfFame || [];
     b.clear();
     b.add('gear.back', s.left + 20, s.top + 16, 200, 96, () => Scenes.go(this.back === 'careerselect' ? 'careerselect' : 'title'), { size: 32, color: '#e9eef5' });
-    const list = hof.slice(this.page * this.PER, (this.page + 1) * this.PER);
+    if (this.shop) {        // M19: the Legacy shop (permanent unlocks for Legacy Marks)
+      b.add('hof.close', cx - 160, 900, 320, 100, () => { this.shop = false; this._layout(); }, { size: 36, color: '#e9eef5' });
+      Legacy.shopItems(Save.data).forEach((it, i) => {
+        b.add(() => (it.owned ? T('hof.shopOwned') : T('hof.shopBuy', { n: it.lm })), cx + 260, 330 + i * 190, 360, 110, () => {
+          const r = Legacy.buy(Save.data, it.id);
+          if (!r.ok) { Sound.play('ui_error'); this.msg = T('hof.shopWhy.' + r.reason); return; }
+          Save.write(); Sound.play('fanfare'); this.msg = T('hof.shopDone', { name: T('hof.shop.' + it.id) }); this._layout();
+        }, { size: 30, color: it.owned ? '#5b6570' : '#ffd23f', disabled: () => !it.ok });
+      });
+      return;
+    }
+    b.add('hof.shopBtn', s.right - 400, s.top + 16, 380, 96, () => { this.shop = true; this.msg = null; this._layout(); }, { size: 28, color: '#ffd23f' });
+    const sel = this.sel && hof.find((x) => x.id === this.sel);
+    if (sel) {   // M19 (plan 5.27): favourite, compare
+      b.add(() => T(sel.fav ? 'hof.unfav' : 'hof.fav'), s.right - 400, s.top + 124, 380, 90, () => { sel.fav = !sel.fav; Save.write(); }, { size: 26, color: '#ffe28a' });
+      if (hof.length > 1) b.add(() => T(this.cmp ? 'hof.cmpCancel' : 'hof.cmp'), s.left + 240, s.top + 16, 330, 96, () => { this.cmp = this.cmp ? null : this.sel; }, { size: 28, color: '#9be7ff' });
+    }
+    // favourites first, then the order they retired in
+    const order = hof.slice().sort((a, z) => (z.fav ? 1 : 0) - (a.fav ? 1 : 0));
+    const list = order.slice(this.page * this.PER, (this.page + 1) * this.PER);
     this.cards = list.map((h, i) => ({ id: h.id, x: cx - 900 + i * 455, y: 170, w: 420 }));
     const pages = Math.ceil(hof.length / this.PER);
     if (pages > 1) {
@@ -171,26 +191,64 @@ const HallOfFameScene = {
     if (this.buttons.up(id)) return;
     const d = this._down; this._down = null;
     if (!d) return;
+    if (this.shop) return;
     const k = this.cards.find((q) => d.x >= q.x && d.x <= q.x + q.w && d.y >= q.y && d.y <= q.y + 520);
+    if (this.cmp && k && k.id !== this.cmp) { this.sel = k.id; Sound.play('uiTap'); this._layout(); return; }   // the second card to compare
+    if (this.cmp && !k) this.cmp = null;
     this.sel = k && k.id !== this.sel ? k.id : null;
     Sound.play('uiTap');
+    this._layout();
   },
-  keyDown(code) { if (code === 'Escape') Scenes.go('title'); },
+  keyDown(code) { if (code === 'Escape') { if (this.shop) { this.shop = false; this._layout(); } else if (this.cmp) this.cmp = null; else Scenes.go('title'); } },
   render(ctx) {
     const cx = CONFIG.LOGICAL_W / 2, hof = Save.data.hallOfFame || [];
     CareerUI.bg(ctx, 'bg_hall_of_fame', 0.35);
     R.text(T('hof.title'), cx, 70, 56, '#ffd23f');
     R.text(T('hof.sub', { n: hof.length }), cx, 125, 24, '#ffffff', 'center', false);
     if (!hof.length) { Sprites.ui('reward_hall_of_fame', cx, 520, 420, 380); R.text(T('hof.empty'), cx, 780, 30, '#d8e4f0'); }
+    if (this.shop) { this._drawShop(ctx); this.buttons.draw(); return; }
+    const gold = Legacy.hasFrame(Save.data);
     for (const k of this.cards) {
       const h = hof.find((x) => x.id === k.id);
+      if (gold) R.roundRect(k.x - 14, k.y - 14, k.w + 28, 552, 28, null, '#ffd23f', 8);
       LegacyCard.draw(ctx, h, k.x, k.y, k.w);
+      if (h.fav) R.text('★', k.x + k.w - 30, k.y + 30, 54, '#ffd23f');
+      if (this.cmp === k.id) R.roundRect(k.x - 8, k.y - 8, k.w + 16, 540, 24, null, '#9be7ff', 6);
       if (this.sel === k.id) R.roundRect(k.x - 8, k.y - 8, k.w + 16, 540, 24, null, '#ffffff', 5);
       R.text(T('hof.retired', { d: h.retiredAt }), k.x + k.w / 2, k.y + 540, 18, '#d8e4f0', 'center', false);
     }
     const h = this.sel && hof.find((x) => x.id === this.sel);
-    if (h) this._detail(ctx, h);
+    const a = this.cmp && this.cmp !== this.sel && hof.find((x) => x.id === this.cmp);
+    if (a && h) this._compare(ctx, a, h);
+    else if (h) this._detail(ctx, h);
+    if (this.cmp && !a) R.text(T('hof.cmpPick'), cx, 745, 24, '#9be7ff', 'center', false);
     this.buttons.draw();
+  },
+  // Two Legacy players side by side (M19, plan 5.27): their records, the better one in green.
+  _compare(ctx, a, b) {
+    const cx = CONFIG.LOGICAL_W / 2, y = 760;
+    R.panel(cx - 780, y, 1560, 270, 'rgba(10,22,40,0.95)', '#9be7ff');
+    R.text(a.name, cx - 420, y + 36, 28, '#ffffff'); R.text(T('hof.vs'), cx, y + 36, 26, '#9be7ff'); R.text(b.name, cx + 420, y + 36, 28, '#ffffff');
+    const rows = [['matches', (h) => h.records.matches], ['runs', (h) => h.records.runs], ['wickets', (h) => h.records.wickets], ['sixes', (h) => h.records.sixes], ['trophies', (h) => h.trophies.length]];
+    rows.forEach(([k, f], i) => {
+      const va = f(a) || 0, vb = f(b) || 0, yy = y + 80 + i * 38;
+      R.text(T('hof.row.' + k), cx, yy, 20, '#b8c6d6', 'center', false);
+      R.text(String(va), cx - 420, yy, 24, va > vb ? '#9cff6a' : '#ffffff');
+      R.text(String(vb), cx + 420, yy, 24, vb > va ? '#9cff6a' : '#ffffff');
+    });
+  },
+  _drawShop(ctx) {
+    const cx = CONFIG.LOGICAL_W / 2;
+    R.panel(cx - 700, 190, 1400, 660, 'rgba(10,22,40,0.96)', '#ffd23f');
+    R.text(T('hof.shopTitle', { n: (Save.data.currencies && Save.data.currencies.legacyMarks) || 0 }), cx, 250, 36, '#ffd23f');
+    Legacy.shopItems(Save.data).forEach((it, i) => {
+      const y = 385 + i * 190;
+      R.text(T('hof.shop.' + it.id), cx - 640, y - 16, 30, '#ffffff', 'left');
+      R.text(T('hof.shop.' + it.id + '.desc'), cx - 640, y + 24, 20, '#b8c6d6', 'left', false);
+      if (!it.ok && it.reason === 'myxi') R.text(T('hof.shopWhy.myxi'), cx - 640, y + 56, 18, '#ff9d7a', 'left', false);
+    });
+    R.text(T('hof.shopMore'), cx, 790, 20, '#9be7ff', 'center', false, 1300);
+    if (this.msg) R.text(this.msg, cx, 1040, 28, '#9cff6a');
   },
   _detail(ctx, h) {
     const cx = CONFIG.LOGICAL_W / 2, y = 760, r = h.records;
@@ -217,16 +275,18 @@ const RecordsScene = {
     this._layout();
   },
   _cats() { return ACHIEVEMENT_DATA.cats.filter((k) => Achievements.list().some((a) => a.cat === k)); },
-  _items() { return Achievements.list().filter((a) => a.cat === this.cat); },
+  _items() { return this.cat === 'records' ? RECORD_DATA.list : Achievements.list().filter((a) => a.cat === this.cat); },
   _layout() {
     const b = this.buttons, s = Display.safe, cx = CONFIG.LOGICAL_W / 2;
     b.clear();
     b.add('gear.back', s.left + 20, s.top + 16, 200, 96, () => this._back(), { size: 32, color: '#e9eef5' });
+    // M19: the record book has its own button (top right), so the category tabs keep their size
+    b.add('ach.cat.records', s.right - 320, s.top + 16, 300, 96, () => { this.cat = 'records'; this.page = 0; this._layout(); }, { size: 30, color: this.cat === 'records' ? '#ffd23f' : '#9be7ff' });
     const cats = this._cats();
     const L = Math.max(cx - 900, s.left + 10), W = Math.min(cx + 900, s.right - 10) - L;      // Rule A: clear of a notch
     cats.forEach((k, i) => b.add(() => T('ach.cat.' + k), L + i * (W / cats.length), 140, W / cats.length - 10, 84, () => { this.cat = k; this.page = 0; this._layout(); },
       { size: 20, color: this.cat === k ? '#ffd23f' : '#e9eef5' }));
-    const pages = Math.ceil(this._items().length / this.PER);
+    const pages = Math.ceil(this._items().length / (this.cat === 'records' ? this.PER * 2 : this.PER));
     if (pages > 1) {
       b.add(() => '‹', L, s.bottom - 110, 120, 90, () => { this.page = (this.page + pages - 1) % pages; this._layout(); }, { size: 50, color: '#e9eef5' });
       b.add(() => '›', cx + 780, s.bottom - 110, 120, 90, () => { this.page = (this.page + 1) % pages; this._layout(); }, { size: 50, color: '#e9eef5' });
@@ -248,6 +308,7 @@ const RecordsScene = {
     R.text(T('ach.title'), cx, 60, 50, '#ffffff');
     R.text(T('ach.count', { n: got, total: all.length, later: ACHIEVEMENT_DATA.list.length - all.length }), cx, 110, 22, '#ffe28a', 'center', false);
     const c = this.params.career || null;
+    if (this.cat === 'records') { this._drawRecords(ctx); this.buttons.draw(); return; }
     this._items().slice(this.page * this.PER, (this.page + 1) * this.PER).forEach((a, i) => {
       const y = 250 + i * 104, on = Achievements.earned(S, a.id), hide = a.hidden && !on;
       R.panel(cx - 900, y, 1800, 92, on ? 'rgba(30,60,30,0.94)' : 'rgba(10,22,40,0.9)', on ? '#9cff6a' : 'rgba(255,255,255,0.2)');
@@ -260,6 +321,26 @@ const RecordsScene = {
     });
     this.buttons.draw();
   },
+};
+
+// The record book tab (M19) and the NEW RECORD flag on result screens.
+const RecordsUI = {
+  flag(ids, cx, y) {
+    const t = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000, k = 1 + 0.04 * Math.sin(t * 6);
+    const txt = T('rec.new', { list: ids.slice(0, 3).map((id) => T('rec.' + id)).join(' · ') });
+    R.roundRect(cx - 520 * k, y - 32, 1040 * k, 64, 28, 'rgba(90,20,30,0.92)', '#ffd23f', 4);
+    R.text(txt, cx, y, 28, '#ffd23f', 'center', false, 1000);
+  },
+};
+RecordsScene._drawRecords = function (ctx) {
+  const cx = CONFIG.LOGICAL_W / 2, all = Records.all(Save.data), page = all.slice(this.page * this.PER * 2, (this.page + 1) * this.PER * 2);
+  page.forEach((r, i) => {
+    const col = i % 2, row = Math.floor(i / 2), x = cx - 900 + col * 910, y = 250 + row * 104;
+    R.panel(x, y, 890, 92, 'rgba(10,22,40,0.9)', r.text !== '-' ? '#ffd23f' : 'rgba(255,255,255,0.2)');
+    R.text(T('rec.' + r.id), x + 30, y + 30, 24, '#ffffff', 'left');
+    if (r.at) R.text(T('rec.on', { d: r.at }), x + 30, y + 64, 16, '#b8c6d6', 'left', false);
+    R.text(r.text, x + 860, y + 46, 34, r.text !== '-' ? '#ffd23f' : '#5b6570', 'right');
+  });
 };
 
 const LegacyAssets = { loaded: false, ensure() { if (!this.loaded) { this.loaded = true; Sprites.loadGroup('legacy'); GearAssets.ensure(); Sprites.loadGroup('career'); } } };

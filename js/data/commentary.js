@@ -9,11 +9,12 @@ const COMM_DATA = {
   holdShort: 1.4,              // ... when another line is waiting
   fade: 0.25,                  // fade in / out (seconds)
   maxQueue: 3,                 // result line + up to two follow-ups (milestone, situation)
+  crowd: { chance: 0.35 },     // M19: your side's boundary / wicket: how often the home crowd line is heard (origins' crowdLines)
 
   // What a ball can be called (all need comm.<kind>.1..8).
   kinds: {
     result: ['dot', 'defended', 'beaten', 'single', 'runs', 'four', 'edgeFour', 'six', 'caught', 'caughtKeeper',
-      'bowled', 'lbw', 'runout', 'hitwicket', 'wide', 'noball', 'notOut'],
+      'bowled', 'lbw', 'runout', 'hitwicket', 'stumped', 'byes', 'wide', 'noball', 'notOut'],
     milestone: ['fifty', 'hundred', 'hatTrickOn', 'threeWkts', 'newBatter'],
     situation: ['lastOver', 'chase', 'lastBall', 'freeHit', 'overRuns'],
   },

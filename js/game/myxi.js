@@ -511,6 +511,7 @@ const MyXIMatch = {
     const opp = Teams.generate({ side: 'ai', rating: O.rating + Difficulty.D(Difficulty.forMyXI(save)).opp, origin: null, rng: RNG.stream('teams') });
     opp.name = O.name;
     if (O.rival) Rivals.inject(opp, O.rival);
+    player.kit = { colours: club.colours, crest: club.crest }; opp.kit = { colours: O.colours, crest: O.crest };   // M18: team colours
     return { player, ai: opp };
   },
   // Techniques for every Legacy Player / rival in the XI.
@@ -575,7 +576,7 @@ const MyXIMatch = {
       Fielding.mods = Duel.fieldMods(Match.team(inn.bowlingSide), Fielding.preset);
       const b = SimMatch.ball({ inn, bat, bowl, fatigue: Match.fatigue[bowl.id] || 0, cond: Match.cond, fielding: Fielding.mods.fielding,
         phase: BowlerRules.phase(inn), index: inn.legal, aggression: this.aggression(inn) }, SimMatch._streams('myxi:' + inn.index));
-      const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, wicket: b.wicket });
+      const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, byes: b.byes, legByes: b.legByes, power: b.shot === 'power', wicket: b.wicket });
       if (res.overDone || inn.ended) Match.overDone(inn);
       Fielding.clear();
     }

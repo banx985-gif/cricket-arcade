@@ -71,9 +71,9 @@ const PitchScene = {
     } else {
       b.add('pause.restart', cx - 260, 460, 520, 110, () => Scenes.go(sceneName, params || undefined), { size: 48, color: '#e9eef5' });
     }
-    b.add(() => T(Sound.muted ? 'common.soundOff' : 'common.soundOn'), cx - 260, 590, 520, 110, () => {
-      Sound.setMuted(!Sound.muted); Save.setMuted(Sound.muted);
-    }, { size: 44, color: '#e9eef5' });
+    // M19 (plan 4, pause flow): Controls and Audio open Settings over the paused match
+    b.add('pause.controls', cx - 260, 590, 255, 110, () => Scenes.openOverlay(SettingsScene, { tab: 'controls' }), { size: 34, color: '#9be7ff' });
+    b.add('pause.audio', cx + 5, 590, 255, 110, () => Scenes.openOverlay(SettingsScene, { tab: 'audio' }), { size: 34, color: '#9be7ff' });
     b.add('pause.quit', cx - 260, 720, 520, 110, () => { if (typeof CareerMatch !== 'undefined') CareerMatch.leave(); if (typeof MyXIMatch !== 'undefined') MyXIMatch.on = false; Scenes.go(quitTo || 'title'); }, { size: 44, color: '#ffb3b3' });
   },
 
@@ -133,6 +133,17 @@ const PitchScene = {
       }
       return false;
     }
+    if (f.result === 'stumped') {       // M19: into the keeper's gloves, bails off, the batter out of the crease
+      const tK = sim.path.duration();
+      if (this.dT >= Math.min(tK, (sim.stumpsIdx || sim.contactIdx) * step + MATCH_DATA.extrasPlay.stumpDelay) && this.ballStopT === null) {
+        this.ballStopT = this.dT;
+        this.stumpsBroken = true;
+        this.stumpsBrokenAt = Stadium._time;
+        this._endBall('stumped');
+        return true;
+      }
+      return false;
+    }
     if (f.result === 'bowled') {
       const tS = sim.stumpsIdx * step;
       if (this.dT >= tS && this.ballStopT === null) {
@@ -154,7 +165,7 @@ const PitchScene = {
     const tIdeal = sim.contactIdx * CONFIG.PHYSICS_STEP;
     // Late contacts meet the ball a touch behind the ideal point.
     const pos = sim.path.at(Math.min(this.dT, tIdeal + 0.035), {});
-    let mods = this._duelPlayers ? BallPlay.mods(this._duelPlayers.bat, this._duelPlayers.bowl, sh.id, this._sixCtx ? this._sixCtx(aim) : null) : null;
+    let mods = this._duelPlayers ? BallPlay.mods(this._duelPlayers.bat, this._duelPlayers.bowl, sh.id, this._sixCtx ? this._sixCtx(aim) : null, this._sixCtx ? this.inn : null) : null;
     // Career techniques (game/techniques.js) adjust the contact, then the hit.
     if (this._techMods) mods = this._techMods(mods || { edge: 1, power: 1, jitter: 1 }, sh, aim);
     const c = Contact.resolve({ shotId: sh.id, grade: sh.grade, err: sh.err, aim, ball: pos, mods }, battingRng);
@@ -243,9 +254,9 @@ const PitchScene = {
       Stadium.cheer(0.7);
     } else if (key === 'miss' || key === 'leave') {
       Sound.play('sfx_glove', { gain: 0.7 });           // into the keeper's gloves
-    } else if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') {
-      Sound.play(key === 'bowled' ? 'stumps' : key === 'lbw' || key === 'hitwicket' ? 'wicket' : 'catchIt');
-      if (key === 'bowled' || key === 'hitwicket') Sound.play('sfx_bails');
+    } else if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket' || key === 'stumped') {
+      Sound.play(key === 'bowled' ? 'stumps' : key === 'lbw' || key === 'hitwicket' || key === 'stumped' ? 'wicket' : 'catchIt');
+      if (key === 'bowled' || key === 'hitwicket' || key === 'stumped') Sound.play('sfx_bails');
       if (key === 'lbw' || key === 'caught') Sound.play('sfx_appeal');
       Sound.play('wicket');
       Sound.play('crowd_wicket', { gain: 0.8 });
@@ -267,6 +278,7 @@ const PitchScene = {
       bowled:   ['outcome.bowled', '#ff4b4b', 140, 'marker_wicket'],
       lbw:      ['outcome.lbwOut', '#ff4b4b', 120, 'marker_lbw'],
       hitwicket:['outcome.hitWicketOut', '#ff4b4b', 110, 'marker_hit_wicket'],
+      stumped:  ['outcome.stumped', '#ff4b4b', 120, 'marker_wicket'],
       runout:   ['outcome.runOut', '#ff4b4b', 140, 'marker_run_out'],
       padLeg:   ['outcome.notOutLeg', '#ffd23f', 80],
       wide:     ['outcome.wide', '#ffb36b', 120, 'marker_wide'],
@@ -311,6 +323,15 @@ const PitchScene = {
     return out;
   },
 
+  // M19: how far the hit carried (metres, from the bat to where it first lands; the whole flight
+  // if it never lands inside the path). Monster Hit, longest six, the record book.
+  _hitDist() {
+    const p = this.hit && this.hit.plan && this.hit.plan.path;
+    if (!p || !p.n) return null;
+    const end = p.bounces && p.bounces.length ? p.bounces[0] : p.n - 1;
+    return Math.round(Math.hypot(p.x[end] - p.x[0], p.z[end] - p.z[0]));
+  },
+
   _ballPos() {
     if (this.hit && this.hit.throw && this.hit.t >= this.hit.throw.t0) return this._throwPos(this.hit.throw, this.hit.t, this._ball);
     if (this.hit) return this.hit.plan.path.at(this.hit.t, this._ball);
@@ -325,11 +346,33 @@ const PitchScene = {
   _updateTrail() {
     const b = this.hit ? this._ballPos() : null;
     if (b && this.state === 'inplay') {
+      if (this.trailKind !== 'hit') { this.trail = []; this.trailKind = 'hit'; }
       this.trail.push({ x: b.x, y: b.y, z: b.z });
       if (this.trail.length > 16) this.trail.shift();
+    } else if (this.state === 'delivery' && this.del && this._delTint()) {
+      // M19: a swing or spin delivery leaves a faint coloured trail
+      const d = this._ballPos();
+      if (this.trailKind !== 'del') { this.trail = []; this.trailKind = 'del'; }
+      if (d) { this.trail.push({ x: d.x, y: d.y, z: d.z }); if (this.trail.length > 12) this.trail.shift(); }
     } else if (this.trail.length && this.state !== 'inplay') {
       this.trail.shift();
     }
+  },
+  _delTint() {
+    const fam = this.del && this.del.family && typeof Bowling !== 'undefined' && Bowling.family(this.del.family);
+    if (!fam) return null;
+    const k = fam.kind === 'spin' ? 'spin' : this.del.swing ? 'swing' : 'pace';
+    return BATTING_DATA.trail.delivery[k];
+  },
+  // The colour of a hit's trail: gold when perfect, the bat's rarity in a career (M19), else white.
+  _hitTint() {
+    const T0 = BATTING_DATA.trail;
+    if (this.hit && this.hit.perfect) return T0.perfect;
+    if (typeof CareerMatch !== 'undefined' && CareerMatch.on && CareerMatch.career && this.inn && this.inn.battingSide === 'player' && typeof Gear !== 'undefined') {
+      const it = Gear.item(Gear.equipped(CareerMatch.career).bat), col = it && it.rarity !== 'common' ? Gear.rarity(it).colour : null;
+      if (col) { const n = parseInt(col.slice(1), 16); return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255); }
+    }
+    return T0.plain;
   },
 
   // Ball-in-play camera (plan 7.11): shortly after contact the view CUTS (like
@@ -362,7 +405,7 @@ const PitchScene = {
     if (following) {
       want = this._followWant(this.hit.t);
     } else if (highlight) {
-      const H = C.highlight;
+      const H = highlight === 'big' ? C.big : C.highlight;
       want = { pos: { x: H.pos[0], y: H.pos[1], z: H.pos[2] }, tgt: { x: H.target[0], y: H.target[1], z: H.target[2] }, focal: H.focal };
     } else {
       const P = C.pitch;
@@ -390,10 +433,35 @@ const PitchScene = {
 
   // Highlight camera (plan 7.11): a low shot of the stumps for bowled and
   // hit-wicket moments.
+  // M19: big moments (a perfect six, a hat-trick, a rival out, the ball that wins a final) get a slow,
+  // low wide shot of the middle; the first time it plays in full, after that it's shorter (skippable).
   _highlightOn() {
     if (this.moment && this.moment.id === 'anim_hit_wicket') return true;
-    return !!(this.outcome && this.state === 'outcome' && (this.outcome.key === 'bowled' || this.outcome.key === 'hitwicket')
+    if (this.outcome && this.state === 'outcome') {
+      if (this.outcome._big === undefined) this.outcome._big = this._isBig(this.outcome.key);
+      if (this.outcome._big && this.stateT < (this.outcome.bigHold || this._bigHold())) return 'big';
+    }
+    return !!(this.outcome && this.state === 'outcome' && (this.outcome.key === 'bowled' || this.outcome.key === 'hitwicket' || this.outcome.key === 'stumped')
       && this.stateT < BATTING_DATA.camera.highlight.hold);
+  },
+  _markBigSeen() { if (Save.data) { Save.data.flags = Save.data.flags || {}; Save.data.flags.bigCamSeen = 1; } },
+  _bigHold() {
+    const B = BATTING_DATA.camera.big, seen = Save.data && Save.data.flags && Save.data.flags.bigCamSeen;
+    return seen ? B.holdAgain : B.hold;
+  },
+  _isBig(key) {
+    const inn = this.inn;
+    if (!inn || !inn.log || typeof Match === 'undefined' || !Match.teams) return false;
+    const e = inn.log[inn.log.length - 1];
+    let big = false;
+    if (key === 'six' && this.hit && this.hit.perfect) big = true;
+    if (e && e.o && e.o !== 'runout' && e.w) {                         // a hat-trick: this bowler's last three legal balls all wickets
+      const mine = inn.log.filter((x) => x.w === e.w && x.k === 'l').slice(-3);
+      if (mine.length === 3 && mine.every((x) => x.o && x.o !== 'runout')) big = true;
+    }
+    if (e && e.o) { const b = Match.teams[inn.battingSide].players[e.b - 1]; if (b && b.isRival) big = true; }
+    if (inn.ended && CareerMatch.on && CareerMatch.fixture && CareerMatch.fixture.kind === 'final' && inn.target && inn.runs >= inn.target && inn.battingSide === 'player') big = true;
+    return big;
   },
 
   _showTiming(grade, reason) {
@@ -438,10 +506,17 @@ const PitchScene = {
       if (p) items.push({ id, p, opts: opts || {}, d: p.d });
     };
 
+    // M18: everyone in their team's colours with their own looks (game/kitlook.js)
+    KitLook._inMatch = !!this.showNonStriker;
+    const W = this._people(), AK = BATTING_DATA.anim.sizeK, cel = this._celebrate();
+    const addA = (a, x, z, look, kit) => add('anim_' + a.id + ':' + a.frame, x, 0, z, { scale: AK, flip: !!a.flip, kl: { act: a.id, frame: a.frame, look, kit } });
+
     const brokenT = Math.min(1.5, Math.max(0, Stadium._time - (this.stumpsBrokenAt || 0)));
     add('stumps', 0, 0, 0, this.stumpsBroken ? { broken: brokenT, back: this.stumpsBroken === 'hitwicket' } : {});
     add('stumps', 0, 0, PI.length, {});
-    add('umpire', -1.3, 0, PI.length + 1.6, { finger: Moments.fingerUp(this) });
+    const ua = this._umpireAnim();
+    if (ua) addA(ua, -1.3, PI.length + 1.6, KitLook.umpire(), KitLook.umpireKit());
+    else add('umpire', -1.3, 0, PI.length + 1.6, { finger: Moments.fingerUp(this) });
 
     // Bowler
     const ph = this._bowlerPhase();
@@ -460,16 +535,18 @@ const PitchScene = {
       bopts = { run: 16 + slow * 6, arm: ph.after < 0.25 ? -Math.PI / 2 + ph.after * 6 : 1.4 };
     }
     // M16: the rendered run-up and bowling action, when its frames are in (else the art / stand-in above).
-    const AK = BATTING_DATA.anim.sizeK;
-    const ba = this._bowlerAnim(ph, bz);
-    if (ba) add('anim_' + ba.id + ':' + ba.frame, bx, 0, ba.z, { scale: AK });
+    let ba = this._bowlerAnim(ph, bz);
+    if (ba && cel && cel.wicket && this._anim('cele_bowler')) ba = { id: 'cele_bowler', frame: this._f01(this._anim('cele_bowler'), cel.t / BATTING_DATA.anim.celeTime), z: ba.z };
+    if (ba) addA(ba, bx, ba.z, W.bowler, W.fieldKit);
     else add('bowler', bx, 0, bz, bopts);
 
     // Fielders
     const hitT = this.hit ? this.hit.t : 0;
     const active = this.hit && this.hit.plan.fielder;
     const dv = this.hit && this.hit.dive && this.hit.dive.result ? this.hit.dive : null;   // a diving stop (M15)
+    let fi = -1;
     for (const f of Fielding.fielders()) {
+      fi++;
       let fx = f.x, fz = f.z, running = false, catching = false, rot = 0;
       const st = { dive: null, catchT: null, throwT: null, ran: 0, running: false };      // M16 action frames
       if (dv && dv.id === f.id && !(dv.result === 'missed' && active && active.id === f.id && hitT > dv.t + 0.6)) {
@@ -496,9 +573,14 @@ const PitchScene = {
         if (this.hit.plan.result === 'caught' && hitT >= this.hit.plan.endT - M.catchBefore) st.catchT = hitT - this.hit.plan.endT;
         else if (th && hitT >= th.t0 - M.throwBefore) st.throwT = hitT - th.t0;
       }
-      const fa = f.keeper ? (st.catchT !== null && this._anim('keep_take') ? { id: 'keep_take', frame: this._fAround(this._anim('keep_take'), this._anim('keep_take').contact, st.catchT, BATTING_DATA.anim.catchBefore, BATTING_DATA.anim.catchAfter) } : this._keeperAnim())
+      let fa = f.keeper ? (st.catchT !== null && this._anim('keep_take') ? { id: 'keep_take', frame: this._fAround(this._anim('keep_take'), this._anim('keep_take').contact, st.catchT, BATTING_DATA.anim.catchBefore, BATTING_DATA.anim.catchAfter) } : this._keeperAnim())
         : this._fielderAnim({ z: fz }, st);
-      if (fa) add('anim_' + fa.id + ':' + fa.frame, fx, 0, fz, { scale: AK, flip: !!fa.flip });
+      // a wicket: the fielders jump (once a catch is safely held), each a moment apart
+      if (fa && cel && cel.wicket && !f.keeper && !st.dive && (st.catchT === null || st.catchT > BATTING_DATA.anim.catchAfter)) {
+        const id = 'cele_team' + (fz > BATTING_DATA.anim.backFromZ ? '_b' : ''), A = this._anim(id);
+        if (A) fa = { id, frame: this._f01(A, (cel.t - (fi % 3) * 0.12) / BATTING_DATA.anim.celeTime) };
+      }
+      if (fa) addA(fa, fx, fz, W.fielder(fi, f), W.fieldKit);
       else add(f.keeper ? 'keeper' : 'fielder', fx, 0, fz, { run: running ? hitT * 14 : 0, catching, rot });
     }
 
@@ -514,13 +596,26 @@ const PitchScene = {
     const pos = this._batterPositions();
     if (pos.running) { batterItemOpts.rot = Math.sin(this.hit.t * 18) * 0.06; }
     // M16: the rendered frames while batting at the crease: stance, backlift, then each shot's own action.
-    const bf = pos.running ? null : this._batterAnim(swing);
-    if (bf) add('anim_' + bf.id + ':' + bf.frame, pos.striker.x, 0, pos.striker.z, { scale: AK });
+    // M18: running between the wickets (run, reach / dive for the crease), the walk off when out,
+    // the bat raised for a 50 or 100.
+    const M = BATTING_DATA.anim, hasRun = this.hit && this.hit.running && (this.hit.running.cur || this.hit.running.completed > 0);
+    let bf = hasRun ? this._runnerAnim('s') : this._batterAnim(swing), sz = pos.striker.z;
+    if (cel && cel.wicket && !cel.runout && this._anim('bat_walkoff')) {
+      const A = this._anim('bat_walkoff');
+      bf = { id: 'bat_walkoff', frame: this._fLoop(A, Math.max(0, cel.t - M.walkDelay) * M.walkSpeed / A.cycleM * A.frames) };
+      sz += Math.max(0, cel.t - M.walkDelay) * M.walkSpeed;
+    } else if (cel && cel.mile && this._anim('bat_raise')) bf = { id: 'bat_raise', frame: this._f01(this._anim('bat_raise'), cel.t / M.celeTime) };
+    if (bf) addA(bf, pos.striker.x, sz, W.striker, W.batKit);
     else add('batter', pos.striker.x, 0, pos.striker.z, batterItemOpts);
     const batterItem = items[items.length - 1];
     if (pos.nonStriker) {
-      add('batter', pos.nonStriker.x, 0, pos.nonStriker.z,
+      const nf = this._runnerAnim('n');
+      if (nf) addA(nf, pos.nonStriker.x, pos.nonStriker.z, W.nonStriker, W.batKit);
+      else add('batter', pos.nonStriker.x, 0, pos.nonStriker.z,
         { bat: 1.6, rot: pos.running ? Math.sin(this.hit.t * 18 + 1) * 0.06 : 0 });
+    } else if (this.showNonStriker && this.camMode === 'follow' && this._anim('ns_ready')) {
+      // the non-striker (out of the pitch camera's shot until the ball is hit): backed up, watching
+      addA({ id: 'ns_ready', frame: 0 }, M.nsX, PI.length - M.nsBackedUp, W.nonStriker, W.batKit);
     }
 
     // Ball
@@ -550,7 +645,8 @@ const PitchScene = {
           R.circle(it.p.x, it.p.y, it.opts.r * 1.7, 'rgba(255,255,255,0.45)');
         }
       }
-      Sprites.draw(it.id, it.p.x, it.p.y, it.p.s, it.opts);
+      const kl = it.opts.kl;
+      if (!(kl && KitLook.draw(kl.act, kl.frame, it.p.x, it.p.y, it.p.s, it.opts, kl.look, kl.kit))) Sprites.draw(it.id, it.p.x, it.p.y, it.p.s, it.opts);
       if (it === ballItem && Access.on('contrastBall')) {
         R.circle(it.p.x, it.p.y, it.opts.r + 5, null, '#000000', 5);
         R.circle(it.p.x, it.p.y, it.opts.r + 10, null, '#fff35c', 4);
@@ -567,7 +663,8 @@ const PitchScene = {
     if (!A) return null;
     if (A._ready) return A;
     if (!PitchScene._animLoad) { PitchScene._animLoad = true; Sprites.loadGroup('match-anims'); }   // (boot normally started it)
-    for (let i = 0; i < A.frames; i++) if (!Sprites.has('anim_' + id + ':' + i)) return null;
+    for (let i = 0; i < A.frames; i++) if (!Sprites.has('anim_' + id + ':' + i) || (A.masks && !Sprites.has('animm_' + id + ':' + i))) return null;
+    if (A.ownHead && !KitLook.headsReady()) return null;     // (M18: never a player without a head)
     A._ready = true;
     return A;
   },
@@ -685,6 +782,77 @@ const PitchScene = {
     return { id: 'keep_take', frame: this.hit ? Math.min(f, M.keeperHitFrame) : f };
   },
 
+  // ---- M18: who's who on the pitch (looks + kits), the umpire, running, celebrations ----
+  _people() {
+    const T = KitLook._inMatch && typeof Match !== 'undefined' ? Match.teams : null;
+    const inn = T && Match.current ? Match.current() : null;
+    const kits = KitLook.kits();
+    const batSide = inn ? inn.battingSide : 'player', fieldSide = batSide === 'player' ? 'ai' : 'player';
+    const bt = T && T[batSide], ft = T && T[fieldSide];
+    const stand = (id) => ({ id, name: id });
+    const byNo = (t, n) => (t && n ? t.players.find((p) => p.no === n) : null);
+    // the striker of this ball (inn.striker may already have changed ends after the runs)
+    const st = this.batterP && bt && bt.players.includes(this.batterP) ? this.batterP : byNo(bt, inn && inn.striker);
+    const ns = inn ? byNo(bt, st && st.no === inn.striker ? inn.nonStriker : inn.striker) : null;
+    const bid = inn && inn.overBowlers ? inn.overBowlers[inn.overBowlers.length - 1] : null;
+    const bowler = (this.bowlerP && ft && ft.players.includes(this.bowlerP) ? this.bowlerP : ft && ft.players.find((p) => p.id === bid)) || stand('bowler');
+    const rest = ft ? ft.players.filter((p) => p !== bowler) : [];
+    const keeper = rest.find((p) => p.keeper) || rest[0] || stand('keeper');
+    const others = rest.filter((p) => p !== keeper);
+    return {
+      batKit: kits[batSide], fieldKit: kits[fieldSide],
+      striker: KitLook.of(st || stand('striker'), bt), nonStriker: KitLook.of(ns || stand('nonstriker'), bt),
+      bowler: KitLook.of(bowler, ft),
+      fielder: (i, f) => KitLook.of(f.keeper ? keeper : (others.length ? others[i % others.length] : stand('fielder' + i)), ft),
+    };
+  },
+  // After the ball: a wicket (the bowler and fielders celebrate, the batter walks off) or a batter's 50 / 100.
+  _celebrate() {
+    const o = this.state === 'outcome' && this.outcome;
+    if (!o || !o.res) return null;
+    return { t: this.stateT || 0, wicket: !!o.res.wicket, runout: o.key === 'runout', mile: !!o.mile };
+  },
+  // The umpire: standing (seen from behind), then the signal for the ball.
+  _umpireAnim() {
+    const M = BATTING_DATA.anim, o = this.state === 'outcome' && this.outcome;
+    let id = null, done = false;
+    if (Moments.fingerUp(this)) { id = 'ump_out'; done = true; }
+    else if (o && o.res) {
+      if (o.res.wicket) id = 'ump_out';
+      else if (o.key === 'six') id = 'ump_six';
+      else if (o.key === 'four') id = 'ump_four';
+      else if (o.key === 'wide') id = 'ump_wide';
+      else if (this.extraKind === 'noball') id = 'ump_noball';
+    }
+    const A = id && this._anim(id);
+    if (A) return { id, frame: done ? A.frames - 1 : this._f01(A, Math.max(0, (this.stateT || 0) - M.umpDelay) / (M.umpTime[id] || M.umpTime.other)) };
+    return this._anim('ump_stand') ? { id: 'ump_stand', frame: 0 } : null;
+  },
+  // A batter running between the wickets ('s' = this ball's striker, 'n' = the non-striker):
+  // seen from the front running towards the camera's end, from behind running away; the bat
+  // reached over the line at the end of each run (a dive when a throw is coming in).
+  _runnerAnim(who) {
+    const run = this.hit && this.hit.running;
+    if (!run) return null;
+    const M = BATTING_DATA.anim, t = this.hit.t;
+    // which way: the striker runs to the far end (towards the camera) on even-numbered runs
+    const towards = (run.completed % 2 === 0) === (who === 's');
+    if (run.cur && !run.cur.back) {
+      const k = (t - run.cur.start) / Math.max(0.001, run.cur.dur), b = towards ? '' : '_b';
+      if (k > 1 - M.groundK) {
+        const th = this.hit.throw, dive = th && t >= th.t0 && this._anim('bat_dive' + b);
+        const id = (dive ? 'bat_dive' : 'bat_ground') + b, A = this._anim(id);
+        if (A) return { id, frame: this._f01(A, (k - (1 - M.groundK)) / M.groundK) };
+      }
+      const id = 'bat_run' + b, A = this._anim(id);
+      return A ? { id, frame: this._fLoop(A, Math.max(0, t - run.cur.start) * M.runSpeed / A.cycleM * A.frames) } : null;
+    }
+    // stopped (or walking back): the last reach for the crease, held
+    const last = run.completed % 2 === 1 ? who === 's' : who !== 's';     // the last run was towards the camera
+    const id = 'bat_ground' + (last ? '' : '_b'), A = this._anim(id);
+    return A ? { id, frame: A.frames - 1 } : null;
+  },
+
   // 0..1 through the swing, or null when not swinging.
   _swingProgress() {
     const sh = this.shot;
@@ -744,15 +912,17 @@ const PitchScene = {
 
   _drawTrail(ctx) {
     if (this.trail.length < 2) return;
-    const gold = this.hit && this.hit.perfect;
+    const del = this.trailKind === 'del', gold = !del && this.hit && this.hit.perfect;
+    const col = del ? this._delTint() : this._hitTint();
+    if (!col) return;
+    const amax = del ? BATTING_DATA.trail.deliveryAlpha : gold ? 0.9 : col === BATTING_DATA.trail.plain ? 0.6 : 0.8;
     let prev = null;
     for (let i = 0; i < this.trail.length; i++) {
       const t = this.trail[i];
       const p = View3D.project(t.x, t.y, t.z);
       if (p && prev) {
         const k = i / this.trail.length;
-        R.line(prev.x, prev.y, p.x, p.y, gold ? `rgba(255,210,63,${k * 0.9})` : `rgba(255,255,255,${k * 0.6})`,
-          Math.max(2, (gold ? 14 : 8) * k));
+        R.line(prev.x, prev.y, p.x, p.y, `rgba(${col},${k * amax})`, Math.max(2, (gold ? 14 : del ? 6 : 8) * k));
       }
       prev = p;
     }

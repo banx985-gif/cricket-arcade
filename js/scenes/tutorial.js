@@ -12,9 +12,17 @@ const WelcomePanel = {
   layout(done) {
     const b = this.buttons, cx = CONFIG.LOGICAL_W / 2, st = () => Save.data.settings;
     b.clear();
-    b.add(() => T('welcome.sound', { s: T(st().muted ? 'settings.off' : 'settings.on') }), cx + 20, 450, 420, 96, () => { Save.setMuted(!st().muted); }, { size: 28, color: '#e9eef5' });
-    b.add(() => T('welcome.text', { s: T('settings.textSize.' + (st().textSize || 'normal')) }), cx + 20, 560, 420, 96, () => { Save.setSetting('textSize', st().textSize === 'large' ? 'normal' : 'large'); }, { size: 28, color: '#e9eef5' });
-    b.add(() => T('welcome.flash', { s: T(st().reduceFlash ? 'settings.on' : 'settings.off') }), cx + 20, 670, 420, 96, () => { Save.setSetting('reduceFlash', !st().reduceFlash); }, { size: 26, color: '#e9eef5' });
+    // two columns (M19, plan 5.2: + volume, vibration, screen shake)
+    const onOff = (v) => T(v ? 'settings.on' : 'settings.off'), L = cx + 20, Rr = cx + 450, W = 410;
+    b.add(() => T('welcome.sound', { s: onOff(!st().muted) }), L, 440, W, 96, () => { Save.setMuted(!st().muted); }, { size: 26, color: '#e9eef5' });
+    b.add(() => T('welcome.volume', { n: GameSettings.get('master') }), Rr, 440, W, 96, () => {
+      const V = TUTORIAL_DATA.welcomeVolumes, i = V.indexOf(GameSettings.get('master'));
+      Save.setSetting('master', V[(i + 1) % V.length]); Sound.play('ui_press');
+    }, { size: 26, color: '#e9eef5' });
+    b.add(() => T('welcome.text', { s: T('settings.textSize.' + (st().textSize || 'normal')) }), L, 550, W, 96, () => { Save.setSetting('textSize', st().textSize === 'large' ? 'normal' : 'large'); }, { size: 26, color: '#e9eef5' });
+    b.add(() => T('welcome.flash', { s: onOff(st().reduceFlash) }), Rr, 550, W, 96, () => { Save.setSetting('reduceFlash', !st().reduceFlash); }, { size: 24, color: '#e9eef5' });
+    b.add(() => T('welcome.haptics', { s: onOff(GameSettings.get('haptics')) }), L, 660, W, 96, () => { const v = !GameSettings.get('haptics'); Save.setSetting('haptics', v); if (v) Platform.haptic('strong'); }, { size: 26, color: '#e9eef5' });
+    b.add(() => T('welcome.shake', { s: onOff(GameSettings.get('shake')) }), Rr, 660, W, 96, () => { Save.setSetting('shake', !GameSettings.get('shake')); }, { size: 26, color: '#e9eef5' });
     b.add('welcome.start', cx + 20, 820, 420, 120, () => { Tutorial.setStep(Save.data, 'create'); Save.write(); done(); Scenes.go('careercreate', { slot: 1 }); }, { size: 44, color: '#9cff6a' });
     b.add('welcome.skip', cx - 460, 850, 420, 96, () => { Tutorial.skip(Save.data); Save.write(); done(); }, { size: 26, color: '#e9eef5' });
   },

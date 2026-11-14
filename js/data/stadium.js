@@ -9,6 +9,8 @@
 
 const STADIUM_DATA = {
   defaultStadium: 'local_oval',
+  // M19 (plan 7.10): boundary distance per ground (metres, 62-70). Small grounds give more sixes.
+  boundary: { local_oval: 66, coastal_ground: 64, city_arena: 62, desert_stadium: 70, world_championship_stadium: 68, legends_arena: 70 },
 
   stadiums: {
     local_oval: {

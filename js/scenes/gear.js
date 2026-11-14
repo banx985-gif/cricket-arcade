@@ -46,6 +46,11 @@ const GearUI = {
   framed(it, cx, cy, w, h, o) {
     const opts = o || {}, fr = Gear.frame(it);
     if (!opts.silhouette) R.circle(cx, cy, Math.min(w, h) * 0.34, Gear.rarity(it).colour + '26');
+    if (it.evo && !opts.silhouette) {     // M19: an evolved item glows (the same art, one rarity up)
+      const t = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000, r = Math.min(w, h) * (0.36 + 0.02 * Math.sin(t * 3));
+      R.circle(cx, cy, r, null, Gear.rarity(it).colour + 'cc', Math.max(3, w * 0.025));
+      R.circle(cx, cy, r * 0.82, 'rgba(255,240,180,0.14)');
+    }
     this.art(it, cx, cy, Math.min(w, h) * 0.66, opts);
     if (!Sprites.ui(fr, cx, cy, w, h, { alpha: opts.silhouette ? 0.45 : 1 })) R.roundRect(cx - w * 0.42, cy - h * 0.46, w * 0.84, h * 0.92, 14, null, Gear.rarity(it).colour, 5);
   },
@@ -136,8 +141,9 @@ const CareerGearScene = {
 
   _owned(slot) {
     const S = Save.data, O = EQUIPMENT_DATA.rarityOrder;
+    const fav = (it) => (S.locker[it.id] && S.locker[it.id].fav ? 0 : 1);       // M19: favourites first
     return Gear.items(slot).filter((it) => Gear.owns(S, it.id))
-      .sort((a, z) => a.tier - z.tier || O.indexOf(a.rarity) - O.indexOf(z.rarity) || (a.id < z.id ? -1 : 1));
+      .sort((a, z) => fav(a) - fav(z) || a.tier - z.tier || O.indexOf(a.rarity) - O.indexOf(z.rarity) || (a.id < z.id ? -1 : 1));
   },
   PER_PAGE: 12,
   _select(slot, pick) {
@@ -166,6 +172,13 @@ const CareerGearScene = {
     }
     // equip (right)
     const rx = this._rx();
+    // favourite (M19, plan 5.10): a star on the picked item
+    if (this.pick) b.add(() => ((Save.data.locker[this.pick] || {}).fav ? '★' : '☆'), rx + 548, 140, 88, 88, () => {
+      const L = Save.data.locker[this.pick]; if (!L) return; L.fav = !L.fav; Save.write(); this._layout();
+    }, { size: 48, color: '#ffe28a' }).tag = 'fav';
+    // evolution (M19, plan 12.6): an item that can evolve shows what it needs and an EVOLVE button
+    const evo = this.pick && Gear.owns(Save.data, this.pick) ? Gear.evoStatus(Save.data, this.pick, c) : null;
+    if (evo && !evo.done) b.add('gear.evolve', rx + 40, s.bottom - 252, 560, 100, () => this._evolve(), { size: 38, color: '#d7a6ff', disabled: () => !(Gear.evoStatus(Save.data, this.pick, c) || {}).ready }).tag = 'evolve';
     b.add(() => this._equipLabel(), rx + 40, s.bottom - 132, 560, 112, () => this._equip(), { size: 44, color: '#9cff6a', disabled: () => !this._canEquip() }).tag = 'equip';
   },
   _rx() { return Math.min(Display.safe.right, CONFIG.LOGICAL_W + 60) - 660; },
@@ -189,6 +202,21 @@ const CareerGearScene = {
     const after = Career.overall(c);
     this.flash = { text: after !== before ? T('gear.ovrChange', { a: before, b: after }) : T('gear.equippedFlash'), t: 0 };
   },
+  _evolve() {
+    const c = this.career, r = Gear.evolve(Save.data, this.pick, c);
+    if (!r.ok) { Sound.play('ui_error'); return; }
+    CareerSave.save(c, this.slot);
+    Save.write();
+    const it = Gear.item(r.to), rx = this._rx();
+    if (typeof Reveal !== 'undefined') Reveal.show({ item: r.to, title: 'gear.evolvedTitle' });
+    Sound.play('fanfare');
+    Effects.sparks(rx + 320, 330, 60, Gear.rarity(it).colour, 1200);
+    Effects.ring(rx + 320, 330, 260, Gear.rarity(it).colour, 0.7, 14);
+    this.flash = { text: T('gear.evolvedFlash', { name: T('gear.' + r.to) }), t: 0 };
+    if (typeof Achievements !== 'undefined') Achievements.checkAccount && Achievements.checkAccount(Save.data);
+    this.pick = r.to;
+    this._layout();
+  },
   _back() { Scenes.go('careerhome', { slot: this.slot, career: this.career, stay: true }); },
 
   pointerDown(id, x, y) { if (Dev.pointerDown(id, x, y)) return; Sound.unlock(); if (!this.buttons.down(id, x, y)) this._down = { id, x, y }; },
@@ -201,7 +229,7 @@ const CareerGearScene = {
     const t = this.tiles.find((k) => CareerScene.inBox(k, d.x, d.y));
     if (t) { Sound.play('uiTap'); this._select(t.slot); return; }
     const k = this.cards.find((q) => CareerScene.inBox(q, d.x, d.y));
-    if (k) { Sound.play('uiTap'); this.pick = k.id; }
+    if (k) { Sound.play('uiTap'); this.pick = k.id; this._layout(); }
   },
   keyDown(code) {
     if (code === 'Escape') this._back();
@@ -237,6 +265,7 @@ const CareerGearScene = {
       GearUI.framed(it, k.x + k.w / 2, k.y + 76, 124, 124, { alpha: ok ? 1 : 0.4 });
       CareerTreeScene._fit(T('gear.' + it.id), k.x + 8, k.y + k.h - 36, k.w - 16, 16, ok ? '#ffffff' : '#8a96a3');
       if (on) R.roundRect(k.x + 6, k.y + 6, 70, 26, 12, '#9cff6a', CONFIG.COLOR.ink, 2), R.text(T('gear.on'), k.x + 41, k.y + 19, 15, CONFIG.COLOR.ink, 'center', false);
+      if (Save.data.locker[k.id] && Save.data.locker[k.id].fav) R.text('★', k.x + k.w - 20, k.y + 22, 30, '#ffd23f');
       if (!ok) R.text(T('gear.needsStage', { t: it.tier }), k.x + k.w / 2, k.y + k.h - 14, 15, '#ff9d7a', 'center', false);
     }
     if (list.length <= 1) GearUI.wrap(T('gear.lockerHint'), x0 + 10, 620, 620, 22, '#b8c6d6');
@@ -295,6 +324,13 @@ const CareerGearScene = {
       }
     }
     if (!chk.ok && chk.reason === 'tier') R.text(T('gear.why.tier', chk.params), rx + 320, Display.safe.bottom - 158, 22, '#ff9d7a');
+    // evolution progress (M19)
+    const evo = Gear.owns(Save.data, it.id) ? Gear.evoStatus(Save.data, it.id, c) : null;
+    if (evo && !evo.done) {
+      const parts = evo.steps.map((st) => (st.ok ? '✓ ' : '○ ') + T('gear.evoStep.' + st.id, { a: st.have, b: st.need }));
+      R.text(T('gear.evoInto', { name: T('gear.' + evo.line.to) }), rx + 320, Display.safe.bottom - 300, 20, '#d7a6ff', 'center', false, 600);
+      R.text(parts.join('  '), rx + 320, Display.safe.bottom - 272, 17, '#e9eef5', 'center', false, 610);
+    } else if (evo && evo.done) R.text(T('gear.evoDone', { name: T('gear.' + evo.line.to) }), rx + 320, Display.safe.bottom - 280, 18, '#d7a6ff', 'center', false, 600);
     // where it came from
     const L = Save.data.locker && Save.data.locker[it.id];
     if (L) R.text(T('gear.gotFrom', { src: T('gear.src.' + L.src) }), rx + 320, Math.min(y + 6, Display.safe.bottom - 190), 16, '#8a96a3', 'center', false);
@@ -458,7 +494,7 @@ const CollectionScene = {
     CareerAssets.ensure(); GearAssets.ensure();
     this.params = params || {};
     this.back = this.params.back || 'title';
-    this.sel = null;
+    this.sel = null; this.page = 0;
     CollectionBook.check(Save.data);             // Collection Book milestones (plan 21.3)
     this._layout();
   },
@@ -466,13 +502,55 @@ const CollectionScene = {
     const b = this.buttons, s = Display.safe, cx = CONFIG.LOGICAL_W / 2;
     b.clear();
     b.add('gear.back', s.left + 20, s.top + 16, 200, 96, () => this._back(), { size: 32, color: '#e9eef5' });
-    b.add('collection.tab.gear', s.right - 600, s.top + 16, 280, 96, () => { this.tab = 'gear'; this.sel = null; this._layout(); }, { size: 30, color: this.tab === 'gear' ? '#ffd23f' : '#e9eef5' });
-    b.add('collection.tab.techniques', s.right - 310, s.top + 16, 290, 96, () => { this.tab = 'techniques'; this.sel = null; this._layout(); }, { size: 24, color: this.tab === 'techniques' ? '#ffd23f' : '#e9eef5' });
-    const ids = this._ids(), cols = 12, size = 138, gap = 8, x0 = cx - (cols * (size + gap) - gap) / 2;
-    this.cells = ids.map((id, i) => ({ id, x: x0 + (i % cols) * (size + gap), y: 190 + Math.floor(i / cols) * (size + gap), w: size, h: size }));
+    // the tabs (M19, plan 5.26: gear, techniques, coaches, rivals, stadiums, trophies, secrets)
+    const L = Math.max(cx - 900, s.left + 240), W = Math.min(cx + 900, s.right - 10) - L, n = this.TABS.length;
+    this.TABS.forEach((t, i) => b.add('collection.tab.' + t, L + i * (W / n), 170, W / n - 8, 88, () => { this.tab = t; this.sel = null; this.page = 0; this._layout(); },
+      { size: 20, color: this.tab === t ? '#ffd23f' : '#e9eef5' }));
+    const ids = this._ids(), cols = 12, size = 138, gap = 8, x0 = cx - (cols * (size + gap) - gap) / 2, per = cols * this.ROWS;
+    const pages = Math.ceil(ids.length / per);
+    if (this.page >= pages) this.page = 0;
+    this.cells = ids.slice(this.page * per, (this.page + 1) * per).map((id, i) => ({ id, x: x0 + (i % cols) * (size + gap), y: 280 + Math.floor(i / cols) * (size + gap), w: size, h: size }));
+    if (pages > 1) {
+      b.add(() => '‹', s.left + 20, 560, 90, 130, () => { this.page = (this.page + pages - 1) % pages; this.sel = null; this._layout(); }, { size: 50, color: '#e9eef5' });
+      b.add(() => '›', s.right - 110, 560, 90, 130, () => { this.page = (this.page + 1) % pages; this.sel = null; this._layout(); }, { size: 50, color: '#e9eef5' });
+    }
   },
-  _ids() { return this.tab === 'gear' ? EQUIPMENT_DATA.items.map((it) => it.id) : Object.keys(SKILL_TREE_DATA.techniques); },
-  _have(id) { return this.tab === 'gear' ? Gear.owns(Save.data, id) : SkillTree.discovered(Save.data, id); },
+  TABS: ['gear', 'techniques', 'coaches', 'rivals', 'stadiums', 'trophies', 'secrets'],
+  ROWS: 5, page: 0,
+  _ids() {
+    switch (this.tab) {
+      case 'gear': return EQUIPMENT_DATA.items.map((it) => it.id);
+      case 'techniques': return Object.keys(SKILL_TREE_DATA.techniques);
+      case 'coaches': return COACH_DATA.coaches.map((k) => k.id);
+      case 'rivals': return EVENT_DATA.rivals.map((r) => r.id);
+      case 'stadiums': return MYXI_DATA.stadiums.map((g) => g.id);
+      case 'trophies': return TROPHY_DATA.list.map((t) => t.id);
+      default: return ACHIEVEMENT_DATA.list.filter((a) => a.hidden).map((a) => a.id);
+    }
+  },
+  _have(id) {
+    const S = Save.data;
+    switch (this.tab) {
+      case 'gear': return Gear.owns(S, id);
+      case 'techniques': return SkillTree.discovered(S, id);
+      case 'coaches': return Coaches.unlocked(S, id);
+      case 'rivals': return Rivals.beatenOnAccount(S, id);
+      case 'stadiums': { const g = MYXI_DATA.stadiums.find((x) => x.id === id), club = MyXI.club(S); return !!(g.start || (club && club.stadiums.includes(id))); }
+      case 'trophies': return Trophies.has(S, TROPHY_DATA.list.find((t) => t.id === id));
+      default: return Achievements.earned(S, id);
+    }
+  },
+  // The other tabs (M19): picture, name, and a line (where it comes from / how it's going).
+  _simple(id) {
+    const S = Save.data;
+    switch (this.tab) {
+      case 'coaches': { const k = Coaches.coach(id); return { art: k.art, name: T('coach.' + id), hint: k.hidden ? T('coach.hiddenHint') : T('coach.unlock.' + (k.unlock.stage ? 'stage' : k.unlock), { n: k.unlock.stage }), status: T('collection.coachLevel', { l: Coaches.level(S, id) }) }; }
+      case 'rivals': { const r = Rivals.rival(id); return { art: r.art, name: T('rival.' + id), hint: T('collection.rivalHint'), status: T('collection.rivalBeaten', { d: S.collection.rivals[id] }) }; }
+      case 'stadiums': { const g = MYXI_DATA.stadiums.find((x) => x.id === id); return { art: g.art, name: T('stadium.' + id), hint: T('collection.stadiumHint'), status: T('collection.stadiumOwned') }; }
+      case 'trophies': { const t = TROPHY_DATA.list.find((x) => x.id === id); return { art: t.art, name: T('trophy.' + id), hint: T('trophy.' + id + '.how'), status: T('collection.trophyWon') }; }
+      default: { const a = Achievements.def(id); return { art: ACHIEVEMENT_DATA.tiers[a.tier], name: T('ach.' + id), hint: T('ach.hiddenHint'), status: T('ach.' + id + '.desc') }; }
+    }
+  },
   _back() {
     if (this.back === 'careergear') Scenes.go('careergear', { slot: this.params.slot, career: this.params.career });
     else if (this.back === 'careerhome') Scenes.go('careerhome', { slot: this.params.slot, career: this.params.career, stay: true });
@@ -512,6 +590,15 @@ const CollectionScene = {
         R.roundRect(k.x, k.y, k.w, k.h, 16, picked ? 'rgba(50,70,100,0.96)' : got ? 'rgba(14,28,48,0.92)' : 'rgba(6,12,22,0.85)', picked ? '#ffffff' : got ? Gear.rarity(it).colour : 'rgba(255,255,255,0.15)', 3);
         if (got) GearUI.framed(it, k.x + k.w / 2, k.y + k.h / 2, k.w - 12, k.h - 12);
         else { GearUI.art(it, k.x + k.w / 2, k.y + k.h / 2, k.w * 0.7, { silhouette: true }); R.text('?', k.x + k.w - 22, k.y + 24, 26, '#56657a'); }
+      } else if (this.tab !== 'techniques') {
+        const o = this._simple(k.id);
+        R.roundRect(k.x, k.y, k.w, k.h, 16, picked ? 'rgba(50,70,100,0.96)' : got ? 'rgba(14,28,48,0.92)' : 'rgba(6,12,22,0.85)', picked ? '#ffffff' : got ? '#ffd23f' : 'rgba(255,255,255,0.15)', 3);
+        if (got) Sprites.ui(o.art, k.x + k.w / 2, k.y + k.h / 2, k.w - 16, k.h - 16);
+        else {
+          const cv = GearUI.silhouette(o.art);
+          if (cv) { const z = Math.min((k.w - 24) / cv.width, (k.h - 24) / cv.height); ctx.drawImage(cv, k.x + k.w / 2 - cv.width * z / 2, k.y + k.h / 2 - cv.height * z / 2, cv.width * z, cv.height * z); }
+          R.text('?', k.x + k.w / 2, k.y + k.h / 2, 44, '#56657a');
+        }
       } else {
         const t = SKILL_TREE_DATA.techniques[k.id];
         R.roundRect(k.x, k.y, k.w, k.h, 16, picked ? 'rgba(50,70,100,0.96)' : got ? 'rgba(14,28,48,0.92)' : 'rgba(6,12,22,0.85)', picked ? '#ffffff' : got ? TreeUIColours.forId(k.id) : 'rgba(255,255,255,0.15)', 3);
@@ -532,7 +619,7 @@ const CollectionScene = {
   _drawInfo(ctx) {
     const s = Display.safe, cx = CONFIG.LOGICAL_W / 2, id = this.sel, got = this._have(id);
     const cell = this.cells.find((k) => k.id === id), w = 1100, h = 190, x = cx - w / 2;
-    const y = cell && cell.y > 560 ? 180 : s.bottom - h - 10;            // keep clear of the picked entry
+    const y = cell && cell.y > 560 ? 280 : s.bottom - h - 10;            // keep clear of the picked entry
     R.panel(x, y, w, h, 'rgba(8,16,30,0.97)', '#ffd23f');
     if (this.tab === 'gear') {
       const it = Gear.item(id), L = Save.data.locker && Save.data.locker[id];
@@ -545,6 +632,11 @@ const CollectionScene = {
       } else {
         R.text(T('collection.hintLabel') + ' ' + this._hint(it), x + 200, y + 124, 22, '#ffe28a', 'left', false);
       }
+    } else if (this.tab !== 'techniques') {
+      const o = this._simple(id);
+      if (got) Sprites.ui(o.art, x + 100, y + h / 2, 160, 160);
+      R.text(got ? o.name : T('collection.unknown'), x + 200, y + 44, 34, got ? '#ffffff' : '#8a96a3', 'left');
+      R.text(got ? o.status : T('collection.hintLabel') + ' ' + o.hint, x + 200, y + 100, 22, got ? '#9cff6a' : '#ffe28a', 'left', false, w - 240);
     } else {
       const t = SKILL_TREE_DATA.techniques[id];
       if (got) TreeArt.draw(t.icon, x + 100, y + h / 2, 150);

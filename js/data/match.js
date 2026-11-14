@@ -21,8 +21,20 @@ const MATCH_DATA = {
     ai:     { nameKey: 'match.teamRivals', shortKey: 'match.shortRivals', color: '#1f8a4c' },
   },
 
+  // M19 (plan 7.5, 7.6): stumpings, byes, leg byes. stumpPower / stumpOther: a swing and a miss against spin
+  // (POWER = charging down the pitch); byeChance: a ball past the bat and the stumps gets past the keeper too;
+  // byeRuns: [runs, weight]; legByeChance: off the pad, not out, they run one.
+  extrasPlay: { stumpPower: 0.22, stumpOther: 0.05, byeChance: 0.05, byeRuns: [[1, 6], [2, 2], [4, 1]], legByeChance: 0.25, stumpDelay: 0.12 },
+
+  // M19 (plan 7.15): batter fatigue. perExtraRun: per run after the first in one ball; perPower: per POWER shot;
+  // overRecover: eased off at the end of each over; runSlow / jitter: at full fatigue, running time and power
+  // wobble go up by this share.
+  batFatigue: { perExtraRun: 0.08, perPower: 0.04, overRecover: 0.12, max: 0.5, runSlow: 0.12, jitter: 0.25 },
+
   toss: {
-    aiBowlFirstChance: 0.6,       // when the AI wins the toss, how often it chooses to chase
+    aiBowlFirstChance: 0.55,      // when the AI wins the toss, how often it chooses to chase (before the conditions)
+    // M19 (plan 7.13): the conditions move that: green / cloudy = bowl first, dry / worn = bat first
+    lean: { pitch: { green: 0.25, hardFast: 0.05, balanced: 0, dry: -0.2, worn: -0.3 }, weather: { overcast: 0.2, windy: 0.05, clear: 0, hotDry: -0.1 } },
     flipTime: 1.6,                // seconds the coin spins
   },
 
@@ -132,3 +144,6 @@ const MATCH_DATA = {
     },
   },
 };
+
+// M19 (plan 27): the extra match HUD pieces (objective pill, boss bar) - their widths.
+const MATCH_HUD_DATA = { goalW: 760, bossW: 640 };

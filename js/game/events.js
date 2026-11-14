@@ -18,6 +18,7 @@ const Events = {
     const S = Career.stage(c), last = c.hooks && c.hooks.events && c.hooks.events.last;
     return EVENT_DATA.events.filter((e) => {
       if (e.special || e.id === last || S.n < e.minStage) return false;
+      if (e.once && c.hooks && c.hooks.events && (c.hooks.events.log || []).some((x) => x.startsWith(e.id + ':'))) return false;   // M19: once per career
       if (e.sponsor && (!S.sponsors || c.sponsor)) return false;
       const w = e.when || {};
       if (w.energyBelow !== undefined && c.energy >= w.energyBelow) return false;
@@ -78,6 +79,52 @@ const Events = {
     }
     if (fx.match) { c.matchBuff = { stats: Object.assign({}, fx.match.stats) }; out.push({ k: 'match', stats: fx.match.stats }); }
     if (fx.captain) { c.captain = { stage: c.stage, since: (c.history || []).length }; out.push({ k: 'captain', n: 1 }); }
+    // M19: where you bat next match (+ = lower down the order)
+    if (fx.lineup) { c.lineupNext = fx.lineup; out.push({ k: 'lineup', n: fx.lineup }); }
+    // M19: the craftsman makes a piece you don't own (seeded), if you can pay
+    if (fx.craft && save) {
+      const C = save.currencies, cost = fx.craft.cost;
+      if ((C.coins || 0) < cost) out.push({ k: 'craftNoCoins', n: cost });
+      else {
+        const tier = Career.stage(c).n, pool = EQUIPMENT_DATA.items.filter((it) => EVENT_DATA.craft.rarities.includes(it.rarity) && it.tier <= tier && !it.evo && !Gear.cosmetic(it) && !Gear.owns(save, it.id));
+        if (!pool.length) out.push({ k: 'craftNone', n: 0 });
+        else {
+          const id = Career.roll(c, (r) => r.pick(pool).id);
+          C.coins -= cost; Gear.grant(save, id, 'event');
+          out.push({ k: 'coins', n: -cost }, { k: 'item', item: id });
+        }
+      }
+    }
+    // M19: the hidden master's challenge is on for the next match
+    if (fx.hiddenMaster) { c.hiddenMaster = { objective: Object.assign({}, EVENT_DATA.hiddenMaster.objective[c.player.role === 'batter' ? 'bat' : c.player.role === 'bowler' ? 'bowl' : 'all']) }; out.push({ k: 'hiddenMaster', n: 1 }); }
+    return out;
+  },
+  // Coach chains (M19, plan 13): the next lesson of your coach's chain, once their mastery is high enough.
+  // Each lesson shows once per account (a "later" still counts as seen). Returns the pending event or null.
+  chainDue(c, save) {
+    const k = Coaches.active(c);
+    if (!k || c.pendingEvent) return null;
+    const S = Coaches.store(save), done = S.chain = S.chain || {}, step = (done[k] || 0) + 1;
+    if (step > 3 || Coaches.level(save, k) < EVENT_DATA.chainLevels[step - 1]) return null;
+    done[k] = step;
+    c.pendingEvent = { id: 'coach_' + k + '_' + step };
+    return c.pendingEvent;
+  },
+  // After the next match: the hidden master's verdict. Returns { met, technique } or null.
+  hiddenMasterAfter(c, save, perf) {
+    const H = c.hiddenMaster;
+    if (!H) return null;
+    c.hiddenMaster = null;
+    const o = H.objective;
+    const met = o.id === 'runs' ? (perf.bat.runs || 0) >= o.n : o.id === 'wickets' ? (perf.bowl.wkts || 0) >= o.n : false;
+    const out = { met, objective: o };
+    if (met) {
+      const t = EVENT_DATA.hiddenMaster.techniques.find((id) => !SkillTree.discovered(save, id)) || EVENT_DATA.hiddenMaster.techniques[0];
+      SkillTree.discover(save, t);
+      out.technique = t;
+      save.collection = save.collection || {};
+      save.collection.hiddenMaster = save.collection.hiddenMaster || new Date().toISOString().slice(0, 10);
+    }
     return out;
   },
 };
@@ -149,6 +196,8 @@ const Rivals = {
     const hit = list.find((x) => (x.n !== undefined && x.n === n && !x.kind) || (x.kind && x.kind === kind));
     return hit ? hit.id : null;
   },
+  // A rematch (M19): stronger for every earlier meeting this career.
+  rematchBoost(c, id) { const f = c && c.hooks && c.hooks.rivals && c.hooks.rivals[id]; return f ? f.tries * EVENT_DATA.rematchBoost : 0; },
   // Different rivals this career has beaten.
   beatenCount(c) { return Object.values((c.hooks && c.hooks.rivals) || {}).filter((f) => f.beaten).length; },
   // The boss objective for this career's role.
@@ -157,11 +206,11 @@ const Rivals = {
     return Object.assign({}, role === 'batter' ? O.bat : role === 'bowler' ? O.bowl : O.all);
   },
   // Put the rival into the other side's XI (a boosted player at their slot).
-  inject(team, id) {
-    const R = this.rival(id), i = Math.min(team.players.length, R.slot) - 1, p = team.players[i];
+  inject(team, id, extra) {
+    const R = this.rival(id), i = Math.min(team.players.length, R.slot) - 1, p = team.players[i], boost = R.boost + (extra || 0);
     p.name = T('rival.' + id); p.short = T('rival.' + id + '.short');
     p.isRival = id;
-    for (const k of R.stats) p.stats[k] = Math.min(99, p.stats[k] + R.boost);
+    for (const k of R.stats) p.stats[k] = Math.min(99, p.stats[k] + boost);
     if (R.family && p.family) p.family = R.family;
     p.overall = Teams.overall(p);
     return p;
@@ -220,6 +269,8 @@ const CareerLife = {
       if (!c.contract.done && c.tour && c.tour.phase === 'done') out.contract = this.contractEnd(c, save);
     }
     if (c.sponsor) out.sponsor = Sponsors.afterMatch(c, save, perf, summary.grade);
+    if (c.hiddenMaster) out.hiddenMaster = Events.hiddenMasterAfter(c, save, perf);    // M19
+    c.lineupNext = 0;                                                                     // (one match only)
     if (fixture.rival) out.rival = Rivals.afterMatch(c, save, fixture, summary.objectiveMet);
     const coach = Coaches.active(c);
     if (coach) Coaches.addUse(save, coach, 1);
@@ -227,7 +278,7 @@ const CareerLife = {
       out.coachesUnlocked = Coaches.unlockForStage(save, Career.stage(c).n);
     } else if (c.phase === 'season') {
       if (this.captaincyDue(c, stageId)) { c.pendingEvent = { id: 'captaincy_offer' }; c.captainOffered = true; out.captaincyOffer = true; }
-      else Events.roll(c);
+      else if (!Events.chainDue(c, save)) Events.roll(c);
     }
     return out;
   },

@@ -19,6 +19,8 @@ const COACH_DATA = {
   mastery: { levels: [8, 20, 40], perLevel: { xp: 0.1, extraStat: 0.08 } },
   // A specialty drill: +XP (fraction) and this chance of +1 extra stat point.
   specialty: { xp: 0.25, extraStat: 0.3 },
+  // M19 (plan 22.3): hiring a coach early (before the stage that opens them) costs Legacy Marks, by tier.
+  early: { lm: { 2: 2, 3: 3, 6: 6 } },
   coaches: [
     { id: 'power',      art: 'coach_power',      tier: 1, unlock: 'start',        drills: ['power_hitting'],                 stats: { power: 3 } },
     { id: 'technique',  art: 'coach_technique',  tier: 1, unlock: 'start',        drills: ['timing_cage', 'target_batting'],  stats: { contact: 2, placement: 1 } },

@@ -38,5 +38,8 @@ const BootScene = {
   render(ctx) {
     R.clear('#0d2a1a');
     R.text(T('boot.loading'), CONFIG.LOGICAL_W / 2, CONFIG.LOGICAL_H / 2, 48, '#ffffff');
+    // plan 5.1: the version number, small, bottom right (pinned to the screen edge and safe area)
+    const sf = Display.safe;
+    R.text(T('boot.version', { v: CONFIG.BUILD_VERSION + (CONFIG.BUILD_STAMP ? ' · ' + CONFIG.BUILD_STAMP : '') }), sf.right - 24, sf.bottom - 28, 24, 'rgba(255,255,255,0.55)', 'right');
   },
 };

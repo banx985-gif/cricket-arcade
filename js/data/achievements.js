@@ -18,7 +18,7 @@ const ACHIEVEMENT_DATA = {
   tiers: { bronze: 'medal_bronze', silver: 'medal_silver', gold: 'medal_gold', diamond: 'medal_diamond' },
   cats: ['batting', 'bowling', 'fielding', 'career', 'rivals', 'progress', 'myxi', 'challenges', 'secrets'],
   // Systems that exist now. An achievement whose 'requires' isn't here waits.
-  features: ['myxi', 'challengeTiers', 'missions', 'fever', 'goldenBall', 'legend', 'formats', 'profileLevel'],   // (M10: My XI; M11: challenge medals, missions, Fever, Golden Ball)
+  features: ['myxi', 'challengeTiers', 'missions', 'fever', 'goldenBall', 'legend', 'formats', 'profileLevel', 'fieldingDetail', 'hitDistance', 'droppedCatches', 'evolution', 'hiddenMaster'],   // (M10: My XI; M11: challenge medals, missions, Fever, Golden Ball)
   list: [
     // ---- Batting ----
     { id: 'first_blood',       cat: 'batting', tier: 'bronze',  cond: { on: 'match', stat: 'sixes', min: 1 }, reward: { coins: 100 } },
@@ -129,5 +129,36 @@ const ACHIEVEMENT_DATA = {
     { id: 'golden_duck',       cat: 'secrets', tier: 'silver',  cond: { on: 'match', stat: 'goldenDuckWin', min: 1 }, reward: { st: 1 }, hidden: true },
     { id: 'tail_wags',         cat: 'secrets', tier: 'gold',    cond: { on: 'match', stat: 'tailWags', min: 1 }, reward: { st: 1 }, hidden: true },
     { id: 'perfect_game',      cat: 'secrets', tier: 'diamond', cond: { on: 'match', stat: 'perfectGame', min: 1 }, reward: { mc: 1 }, hidden: true, requires: 'droppedCatches' },
+  ],
+};
+
+// ---- the record book (M19, plan 5.28, 24): Records screen → RECORDS tab ----
+//   kind: match (your best in one match, kept when beaten; low = fewer is better)
+//         life (lifetime totals) | account (read from the save)
+//   unit: n | m (metres) | balls
+const RECORD_DATA = {
+  list: [
+    { id: 'highScore', kind: 'match', fact: 'runs' },
+    { id: 'fastest50', kind: 'match', fact: 'fastest50', low: true, unit: 'balls' },
+    { id: 'fastest100', kind: 'match', fact: 'fastest100', low: true, unit: 'balls' },
+    { id: 'mostSixes', kind: 'match', fact: 'sixes' },
+    { id: 'longestSix', kind: 'match', fact: 'longestSix', unit: 'm' },
+    { id: 'boundaryStreak', kind: 'match', fact: 'boundaryStreak' },
+    { id: 'bestFigures', kind: 'match' },
+    { id: 'mostWickets', kind: 'match', fact: 'wickets' },
+    { id: 'mostDots', kind: 'match', fact: 'dots' },
+    { id: 'wicketStreak', kind: 'match', fact: 'wicketStreak' },
+    { id: 'hatTricks', kind: 'life', fact: 'hatTricks' },
+    { id: 'lifeSixes', kind: 'life', fact: 'sixes' },
+    { id: 'lifeWickets', kind: 'life', fact: 'wickets' },
+    { id: 'championships', kind: 'account', fact: 'championships' },
+    { id: 'rivalWins', kind: 'account', fact: 'rivalsBeaten' },
+    { id: 'sixSmashHigh', kind: 'account', fact: 'sixSmashHigh' },
+    { id: 'wicketRushHigh', kind: 'account', fact: 'wicketRushHigh' },
+    { id: 'diamondClears', kind: 'account', fact: 'diamondClears' },
+    { id: 'myxiTrophies', kind: 'account', fact: 'myxiTrophies' },
+    { id: 'winStreak', kind: 'account', fact: 'myxiStreak' },
+    { id: 'legendCareers', kind: 'account', fact: 'legendCareers' },
+    { id: 'missionsDone', kind: 'account', fact: 'missionsDone' },
   ],
 };

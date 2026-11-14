@@ -3,7 +3,7 @@
 // All hard-capped (plan 36). Visual randomness uses RNG.fx, never gameplay streams.
 
 const Effects = {
-  MAX_PARTICLES: 160,
+  MAX_PARTICLES: 250,           // the pool; how many live at once follows the Effects setting (SETTINGS_DATA.particleCap, M19)
   MAX_TEXT: 20,
   pool: [],
   texts: [],
@@ -57,9 +57,15 @@ const Effects = {
     this.flashColor = color || '#ffffff';
   },
 
+  _cap() {
+    const C = typeof SETTINGS_DATA !== 'undefined' && SETTINGS_DATA.particleCap, q = typeof GameSettings !== 'undefined' ? GameSettings.get('vfx') : 'normal';
+    return Math.min(this.MAX_PARTICLES, (C && C[q]) || 160);
+  },
   _spawn(props) {
+    const cap = this._cap();
+    if (this._next >= cap) this._next = 0;
     const p = this.pool[this._next];
-    this._next = (this._next + 1) % this.MAX_PARTICLES;
+    this._next = (this._next + 1) % cap;
     Object.assign(p, { active: true, t: 0 }, props);
     return p;
   },

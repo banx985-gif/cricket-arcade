@@ -40,8 +40,24 @@ const Coaches = {
     const k = this.coach(id);
     if (!k) return { ok: false, reason: 'unknown' };
     if (!this.unlocked(save, id)) return { ok: false, reason: 'locked' };
-    if (k.tier > Career.stage(c).n) return { ok: false, reason: 'tier', params: { t: k.tier } };
+    if (k.tier > Career.stage(c).n && !(c.hooks && c.hooks.early && c.hooks.early[id])) return { ok: false, reason: 'tier', params: { t: k.tier } };
     return { ok: true };
+  },
+  // M19 (plan 22.3): Legacy Marks hire a coach before your career (or account) has reached them.
+  // Not the Rival coach or the hidden one. The cost is by coach tier (COACH_DATA.early.lm).
+  earlyCost(c, save, id) {
+    const k = this.coach(id), chk = this.canHire(c, save, id);
+    if (!k || chk.ok || k.hidden || k.unlock === 'rival' || k.unlock === 'hidden') return null;
+    return COACH_DATA.early.lm[k.tier] || null;
+  },
+  hireEarly(c, save, id) {
+    const cost = this.earlyCost(c, save, id), C = save.currencies = save.currencies || {};
+    if (!cost) return { ok: false, reason: 'none' };
+    if ((C.legacyMarks || 0) < cost) return { ok: false, reason: 'marks', params: { n: cost } };
+    C.legacyMarks -= cost;
+    this.unlock(save, id);
+    c.hooks = c.hooks || {}; c.hooks.early = c.hooks.early || {}; c.hooks.early[id] = 1;
+    return this.hire(c, save, id);
   },
   hire(c, save, id) {
     const chk = this.canHire(c, save, id);

@@ -76,7 +76,7 @@ const Teams = {
     const fams = players.filter((p) => p.family).map((p) => p.family);
     if (!fams.includes('swing')) players.find((p) => p.family === 'fast' && p.role === 'bowl').family = 'swing';
     if (!fams.some((f) => f === 'offspin' || f === 'legspin')) players.find((p) => p.role === 'all' && p.family).family = 'offspin';
-    return { side: o.side, origin, rating: o.rating, players };
+    return { side: o.side, origin, gender, rating: o.rating, players };
   },
 
   // The two Quick Match sides, from the match seed.

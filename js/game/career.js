@@ -372,9 +372,12 @@ const Career = {
   prepsLeft(c) { return Math.max(0, CAREER_DATA.prepPerBlock - c.block.preps); },
 
   // Train: small stat gain, costs energy, gives XP. Returns what happened.
-  train(c, drillId) {
+  // skill (M19, hands-on): { hits, of } from the drill's skill check, or undefined for the quick resolve.
+  train(c, drillId, skill) {
     const D = CAREER_DATA.training.find((t) => t.id === drillId);
     if (!D || this.prepsLeft(c) <= 0) return null;
+    c.drillCount = c.drillCount || {};
+    c.drillCount[drillId] = (c.drillCount[drillId] || 0) + 1;
     const M = SkillTree.mods(c);
     const energy = Math.round(D.energy * M.energy);
     const res = { drill: D.id, stat: D.stat, gain: D.gain, xp: D.xp, energy: -energy, levels: 0, emphasis: false };
@@ -393,6 +396,19 @@ const Career = {
       if (this.roll(c, (r) => r.chance(K.extraStat))) res.gain++;
       Coaches.addUse(Save.data, res.coach, 1);
     }
+    // Hands-on (M19): the skill check pays more the better you did.
+    if (skill) {
+      const H = CAREER_DATA.handsOn.reward;
+      res.skill = skill;
+      res.xp += skill.hits * H.xpPerHit;
+      if (skill.hits >= H.extraGainAt) res.gain++;
+      if (skill.hits >= H.formAt) {
+        const F = CAREER_DATA.form.levels, i = F.indexOf(c.form);
+        if (i < F.length - 1) { c.form = F[i + 1]; res.formUp = true; }
+        const lo = SkillTree.loadout(c), t = lo.active.concat(lo.passive)[0];
+        if (t) { SkillTree.addMastery(c, { [t]: H.masteryUses }); res.mastery = t; }
+      }
+    }
     // Tired training still helps, but less.
     if (c.energy < CAREER_DATA.energy.low) res.gain = Math.max(0, res.gain - 1);
     c.player.stats[D.stat] = Math.min(CAREER_DATA.statMax, c.player.stats[D.stat] + res.gain);
@@ -401,6 +417,39 @@ const Career = {
     res.levels = this.addXp(c, res.xp);
     c.block.preps++;
     c.block.log.push('train:' + D.id);
+    return res;
+  },
+
+  // ---- M19 (plan 8.13): two more prep actions ----
+  // Coach Session: your coach's specialty drill with a guaranteed bonus (+1 extra stat, more mastery).
+  coachSession(c) {
+    const k = typeof Coaches !== 'undefined' && Coaches.coach(Coaches.active(c));
+    if (!k || this.prepsLeft(c) <= 0) return null;
+    const P = CAREER_DATA.prep.coachSession, D = CAREER_DATA.training.find((t) => t.id === k.drills[0]);
+    if (!D) return null;
+    const M = SkillTree.mods(c), energy = Math.round(P.energy * M.energy);
+    const res = { coachSession: true, coach: k.id, drill: D.id, stat: D.stat, gain: D.gain + P.extraGain, xp: Math.round(P.xp * (1 + M.xp)), energy: -energy, levels: 0 };
+    if (c.energy < CAREER_DATA.energy.low) res.gain = Math.max(1, res.gain - 1);
+    c.player.stats[D.stat] = Math.min(CAREER_DATA.statMax, c.player.stats[D.stat] + res.gain);
+    c.energy = Math.max(0, c.energy - energy);
+    Coaches.addUse(Save.data, k.id, P.masteryUses);
+    res.levels = this.addXp(c, res.xp);
+    c.block.preps++;
+    c.block.log.push('coach:' + k.id);
+    return res;
+  },
+  // Technique Practice: mastery uses for one technique in your loadout (Learned -> Skilled -> Mastered).
+  techPractice(c, techId) {
+    const lo = SkillTree.loadout(c), list = lo.active.concat(lo.passive);
+    if (this.prepsLeft(c) <= 0 || !list.length) return null;
+    const id = list.includes(techId) ? techId : list[0], P = CAREER_DATA.prep.techPractice;
+    const energy = Math.round(P.energy * SkillTree.mods(c).energy);
+    const before = SkillTree.masteryLevel(c, id);
+    SkillTree.addMastery(c, { [id]: P.uses });
+    c.energy = Math.max(0, c.energy - energy);
+    const res = { techPractice: true, tech: id, uses: P.uses, energy: -energy, before, after: SkillTree.masteryLevel(c, id), xp: P.xp, levels: this.addXp(c, P.xp) };
+    c.block.preps++;
+    c.block.log.push('tech:' + id);
     return res;
   },
 
@@ -525,7 +574,8 @@ const Career = {
     const S = this.stage(c), G = S.gate;
     const finalFx = c.fixtures.filter((f) => f.kind === 'final' || f.kind === 'qualifier').pop();
     // key objective: a grade in the final, or how far you got in the tournament
-    const keyMet = G.keyObjective.reach ? Tournament.reached(c.tour, G.keyObjective.reach) : !!finalFx && this.gradeAtLeast(finalFx.grade || 'D', G.keyObjective.finalGrade);
+    const keyMet = (G.keyObjective.reach ? Tournament.reached(c.tour, G.keyObjective.reach) : !!finalFx && this.gradeAtLeast(finalFx.grade || 'D', G.keyObjective.finalGrade))
+      || (G.keyObjective.orSelection !== undefined && c.selection >= G.keyObjective.orSelection);   // playing well yourself counts too (M18)
     if (last && last.kind === 'qualifier') {
       if (this.gradeAtLeast(last.grade, S.qualifier.passGrade)) return this.promote(c);
       return this._extraBlock(c);

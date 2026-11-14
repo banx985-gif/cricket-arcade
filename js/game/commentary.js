@@ -75,6 +75,7 @@ const Commentary = {
     else if (info.kind === 'noball') k = 'noball';
     else if (info.batRuns === 1) k = 'single';
     else if (info.batRuns > 1) k = 'runs';
+    else if (res.byes) { k = 'byes'; vars.n = res.byes; }                // M19: past the keeper
     else if (info.shot === 'defend') k = 'defended';
     else if (!info.shot || info.miss) k = 'beaten';
     else k = 'dot';
@@ -123,6 +124,8 @@ const Commentary = {
     if (!this.on()) { this.reset(); return []; }
     const ls = this.lines(info);
     this.queue = ls.map((l) => ({ kind: l.kind, text: this.text(l.kind, l.vars) }));
+    const cr = this.crowd(info);
+    if (cr) this.queue.push({ kind: 'crowd', text: cr, crowd: true });
     this.cur = null;
     this._next();
     return ls;
@@ -146,6 +149,19 @@ const Commentary = {
       fielder: plan && plan.fielder ? plan.fielder.id : null, end: path && path.n ? { x: path.x[path.n - 1], z: path.z[path.n - 1] } : null, bat, bowl });
   },
 
+  // M19 (plan 8.9): the home crowd. When your side (with a country / origin) hits a boundary or takes
+  // a wicket, now and then a line from its origin pack's crowdLines is heard. Cosmetic stream only.
+  crowd(info) {
+    const C = COMM_DATA.crowd, res = info.res, inn = info.inn;
+    if (!C || typeof Match === 'undefined' || !Match.teams || !inn || typeof ORIGIN_PACKS === 'undefined') return null;
+    const t = Match.teams.player, O = t && t.origin && ORIGIN_PACKS.origins[t.origin];
+    const lines = O && O.crowdLines;
+    if (!lines || !lines.length) return null;
+    const ours = (info.boundary && inn.battingSide === 'player') || (res && res.wicket && inn.bowlingSide === 'player');
+    if (!ours || RNG.fx.next() >= C.chance) return null;
+    return T('comm.crowd', { line: lines[Math.floor(RNG.fx.next() * lines.length)] });
+  },
+
   _next() {
     const n = this.queue.shift();
     this.cur = n ? Object.assign(n, { t: 0, hold: this.queue.length ? COMM_DATA.holdShort : COMM_DATA.hold }) : null;
@@ -164,8 +180,8 @@ const Commentary = {
     const s = Display.safe, cx = CONFIG.LOGICAL_W / 2, y = yOverride || s.bottom - 46, w = 1040;
     ctx.save();
     ctx.globalAlpha = a;
-    R.roundRect(cx - w / 2, y - 30, w, 60, 22, 'rgba(6,14,26,0.82)', 'rgba(255,210,63,0.6)', 2);
-    R.text(c.text, cx, y, 28, '#ffffff', 'center', false, w - 40);
+    R.roundRect(cx - w / 2, y - 30, w, 60, 22, c.crowd ? 'rgba(90,20,30,0.85)' : 'rgba(6,14,26,0.82)', 'rgba(255,210,63,0.6)', 2);
+    R.text(c.text, cx, y, 28, c.crowd ? '#ffd23f' : '#ffffff', 'center', false, w - 40);
     ctx.restore();
   },
 };

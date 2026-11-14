@@ -170,7 +170,7 @@ const Platform = {
   // Plan 6.4: light on Good, stronger on Perfect, pulse on a wicket.
   haptic(kind) {
     if (!this.hapticsOn) return;
-    const pattern = { light: 12, strong: 30, wicket: [40, 40, 40] }[kind];
+    const pattern = { light: 12, strong: 30, wicket: [40, 40, 40], rare: [20, 60, 20, 60, 90] }[kind];   // rare: a Legendary / Mythic reveal (M19)
     try { if (pattern && navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* optional */ }
   },
 };

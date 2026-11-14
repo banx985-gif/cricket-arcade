@@ -32,6 +32,16 @@ const CareerPreMatchScene = {
       c.keyMoments = !c.keyMoments; CareerMatch.keyMoments = c.keyMoments;
       CareerSave.save(c, CareerMatch.slot);
     }, { size: 28, color: '#9be7ff', sub: () => T(c.keyMoments ? 'career.km.subOn' : 'career.km.subOff') }).tag = 'keymoments';
+    // You're the captain and won the toss (plan 7.13, M19): bat or bowl first is your call.
+    if (Match.toss && Match.toss.winner === 'player' && CareerMatch.isCaptain()) {
+      const tb = [];
+      const paint = () => { for (const x of tb) { const on = Match.toss.choice === x.ch; x.color = on ? '#ffd23f' : '#5b6570'; x.textColor = on ? CONFIG.COLOR.ink : '#ffffff'; } };
+      for (const [k, ch, dx] of [['match.bat', 'bat', -230], ['match.bowl', 'bowl', 20]]) {
+        const bt = this.buttons.add(k, cx + dx, 500, 210, 92, () => { Match.choose(ch); paint(); }, { size: 34 });
+        bt.tag = 'toss_' + ch; bt.ch = ch; tb.push(bt);
+      }
+      paint();
+    }
     Stadium.setConditions(Match.cond);
   },
   _go() { Scenes.go(Match.startInnings()); },
@@ -58,7 +68,8 @@ const CareerPreMatchScene = {
     R.text(T('career.vs'), cx, 280, 70, '#ffd23f');
     const toss = Match.toss;
     const ours = toss.firstBatting === 'player' ? 'match.bat' : 'match.bowl';
-    R.text(T(toss.winner === 'player' ? 'career.tossWon' : 'career.tossLost', { c: T(ours) }), cx, 530, 32, '#ffffff', 'center', false);
+    if (toss && toss.winner === 'player' && CareerMatch.isCaptain()) R.text(T('career.tossCaptain'), cx, 470, 30, '#ffffff', 'center', false);
+    else R.text(T(toss.winner === 'player' ? 'career.tossWon' : 'career.tossLost', { c: T(ours) }), cx, 530, 32, '#ffffff', 'center', false);
     // Your job in this match
     const pos = parseInt(CareerMatch.pid.replace('player', ''), 10);
     let role = T('career.youBatAt', { n: pos });
@@ -257,6 +268,7 @@ const CareerResultScene = {
     R.text(T('career.energyNow', { n: r.energyAfter }), x + 770, 565, 26, '#ffffff', 'right', false);
     // A gear drop (M07): new item, or a duplicate turned into Coins.
     if (r.drop && this._t > 0.9) this._drawDrop(ctx, r.drop);
+    if (r.records && r.records.length && this._t > 1.2) RecordsUI.flag(r.records, cx, 195);     // M19: the record book
     // Selection Meter, filling up
     const S = CAREER_DATA.stages.find((st) => st.id === (c.promotedFrom && r.gate && r.gate.result === 'promoted' ? c.promotedFrom : c.stage)) || Career.stage(c);
     const k = Math.min(1, Math.max(0, (this._t - 0.4) / 0.8));
@@ -285,6 +297,7 @@ const CareerResultScene = {
     }
     if (L.sponsor) lines.push([L.sponsor.done ? T('career.sponsorDone', { name: T('sponsor.' + L.sponsor.id), what: LifeText.reward(L.sponsor.reward) })
       : L.sponsor.failed ? T('career.sponsorFailed', { name: T('sponsor.' + L.sponsor.id) }) : T('career.sponsorProgress', { name: T('sponsor.' + L.sponsor.id), have: L.sponsor.have, need: L.sponsor.need }), L.sponsor.failed ? '#ff9d9d' : '#9be7ff']);
+    if (L.hiddenMaster) lines.push([L.hiddenMaster.met ? T('career.hiddenMaster.met', { name: TreeText.name(L.hiddenMaster.technique) }) : T('career.hiddenMaster.missed'), L.hiddenMaster.met ? '#ffd23f' : '#ff9d9d']);   // M19
     if (r.tour) lines.push([T('career.tour.' + (r.tour.phase === 'done' ? (r.tour.best === 'champion' ? 'champion' : 'out') : r.tour.phase), { r: T('table.reach.' + r.tour.best) }), '#ffd23f']);
     if (L.contract) lines.push([L.contract.met ? T('career.contractMet', { n: L.contract.coins, what: LifeText.reward(L.contract.reward) }) : T('career.contractMissed'), L.contract.met ? '#9cff6a' : '#ff9d9d']);
     for (const id of L.coachesUnlocked || []) lines.push([T('career.coachUnlocked', { name: T('coach.' + id) }), '#c9b3ff']);
@@ -305,6 +318,8 @@ const CareerResultScene = {
       this._dropFx = true;
       Effects.sparks(x + w / 2, y + 150, 30, '#ffd23f', 900);
       Sound.play(d.item ? 'fanfare' : 'four');
+      // a big find gets the full Reward Reveal (M19)
+      if (d.item && typeof Reveal !== 'undefined' && REVEAL_DATA.dropReveal.includes(Gear.item(d.item).rarity)) Reveal.show({ item: d.item });
     }
     ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.scale(0.6 + 0.4 * pop, 0.6 + 0.4 * pop); ctx.translate(-(x + w / 2), -(y + h / 2));
     R.panel(x, y, w, h, 'rgba(40,24,8,0.96)', '#ffd23f');

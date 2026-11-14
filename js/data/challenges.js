@@ -32,14 +32,14 @@ const CHALLENGE_DATA = {
     bronze:  { coins: 100 },
     silver:  { coins: 200 },
     gold:    { coins: 400 },
-    diamond: { coins: 600, st: 1 },
+    diamond: { coins: 600, st: 1, item: 'acc_focus_charm' },     // M19: gear from challenges (plan 12.7); owned = just the rest
   },
   // Milestones: medal points across all 10 rulesets (Bronze 1 · Silver 2 · Gold 3 · Diamond 4). Finite.
   medalPoints: { bronze: 1, silver: 2, gold: 3, diamond: 4 },
   milestones: [
     { id: 'm10', points: 10, reward: { coins: 500 } },
-    { id: 'm20', points: 20, reward: { st: 1 } },
-    { id: 'm30', points: 30, reward: { lm: 1 } },
+    { id: 'm20', points: 20, reward: { st: 1, item: 'gloves_skybreaker' } },
+    { id: 'm30', points: 30, reward: { lm: 1, item: 'pads_nightglass' } },
     { id: 'm40', points: 40, reward: { mc: 1 } },
   ],
 

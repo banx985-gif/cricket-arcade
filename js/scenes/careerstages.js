@@ -108,7 +108,10 @@ const EventText = {
     if (fx.selection) out.push((fx.selection > 0 ? '+' : '') + fx.selection + ' ' + T('event.fx.selection'));
     if (fx.xp) out.push('+' + fx.xp + ' XP');
     if (fx.form) out.push(T(fx.form > 0 ? 'event.fx.formUp' : 'event.fx.formDown'));
-    if (fx.coins) out.push('+' + fx.coins + ' ' + T('event.fx.coins'));
+    if (fx.coins) out.push((fx.coins > 0 ? '+' : '') + fx.coins + ' ' + T('event.fx.coins'));
+    if (fx.lineup) out.push(T('event.fx.lineup', { d: T(fx.lineup < 0 ? 'event.fx.lineup.up' : 'event.fx.lineup.down') }));
+    if (fx.craft) out.push('-' + fx.craft.cost + ' ' + T('event.fx.coins') + ' · ' + T('event.fx.craftGet'));
+    if (fx.hiddenMaster) out.push(T('event.fx.hiddenMaster', { goal: CareerText.objective(EVENT_DATA.hiddenMaster.objective[c.player.role === 'batter' ? 'bat' : c.player.role === 'bowler' ? 'bowl' : 'all']) }));
     if (fx.match) out.push(Object.entries(fx.match.stats).map(([k, v]) => '+' + v + ' ' + T('stat.' + k)).join(' ') + ' ' + T('event.fx.thisMatch'));
     if (fx.sponsor) out.push(T('event.fx.sponsor'));
     if (fx.captain) out.push(T('event.fx.captain'));
@@ -119,6 +122,11 @@ const EventText = {
     return list.map((a) => a.k === 'stat' ? '+' + a.n + ' ' + T('stat.' + a.stat)
       : a.k === 'form' ? T(a.n > 0 ? 'event.fx.formUp' : a.n < 0 ? 'event.fx.formDown' : 'event.fx.formSame')
       : a.k === 'match' ? T('event.result.match')
+      : a.k === 'lineup' ? T('event.fx.lineup', { d: T(a.n < 0 ? 'event.fx.lineup.up' : 'event.fx.lineup.down') })
+      : a.k === 'item' ? T('event.fx.item', { name: T('gear.' + a.item) })
+      : a.k === 'craftNoCoins' ? T('event.fx.craftNoCoins', { n: a.n })
+      : a.k === 'craftNone' ? T('event.fx.craftNone')
+      : a.k === 'hiddenMaster' ? T('event.fx.hiddenMasterOn')
       : (a.n > 0 ? '+' : '') + a.n + ' ' + T('event.fx.' + a.k)).join(' · ');
   },
   goal(S) { return T('sponsor.goal.' + S.goal, { n: S.n, min: S.min }); },
@@ -325,14 +333,23 @@ const CareerCoachScene = {
     b.add('coach.respec', rx + 30, 920, 560, 110, () => this._openRespec(), { size: 30, color: '#ffd9a0', icon: 'icon_respec',
       sub: () => T('tree.respecSub', { n: SkillTree.respecCost(c) }) }).tag = 'respec';
   },
-  _canHire() { return Coaches.active(this.career) !== this.sel && Coaches.canHire(this.career, Save.data, this.sel).ok; },
+  _canHire() {
+    if (Coaches.active(this.career) === this.sel) return false;
+    if (Coaches.canHire(this.career, Save.data, this.sel).ok) return true;
+    const e = Coaches.earlyCost(this.career, Save.data, this.sel);
+    return !!e && (Save.data.currencies.legacyMarks || 0) >= e;
+  },
   _hireLabel() {
     if (Coaches.active(this.career) === this.sel) return T('coach.current');
+    const e = Coaches.earlyCost(this.career, Save.data, this.sel);
+    if (e) return T('coach.hireEarly', { n: e });
     const chk = Coaches.canHire(this.career, Save.data, this.sel);
     return chk.ok ? T('coach.hire') : chk.reason === 'tier' ? T('gear.needsStage', chk.params) : T('coach.locked');
   },
   _hire() {
-    if (!Coaches.hire(this.career, Save.data, this.sel).ok) { Sound.play('ui_error'); return; }
+    const early = !!Coaches.earlyCost(this.career, Save.data, this.sel);
+    if (!(early ? Coaches.hireEarly(this.career, Save.data, this.sel) : Coaches.hire(this.career, Save.data, this.sel)).ok) { Sound.play('ui_error'); return; }
+    if (early) { Save.write(); if (typeof Reveal !== 'undefined') Reveal.show({ coach: this.sel }); }
     CareerSave.save(this.career, this.slot);
     Sound.play('fanfare');
     this.flash = { text: T('coach.hired', { name: T('coach.' + this.sel) }), t: 0 };

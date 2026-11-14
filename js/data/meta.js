@@ -81,6 +81,22 @@ const COLLECTION_DATA = {
   secretRarities: ['legendary', 'mythic'],
 };
 
+// ---- the Home hub extras (M19, plan 5.3) ----
+const HOME_DATA = {
+  goalModes: ['quickmatch', 'sixsmash', 'wicketrush', 'missions', 'collection', 'records'],   // "next goal": the first of these still locked
+  recentCount: 4,                                                                               // newest Locker items shown
+};
+
+// ---- the Reward Reveal (M19, plan 5.30): timings and rays by rarity ----
+const REVEAL_DATA = {
+  firstMinShow: 1.6,     // seconds before a tap closes the very first reveal
+  minShow: 0.35,         // ... every later one (skippable)
+  grow: 0.45,            // seconds the reward takes to grow in
+  rays: { common: 6, rare: 8, epic: 10, legendary: 14, mythic: 18 },
+  rarePulse: ['legendary', 'mythic'],     // these get the "rare" haptic pulse and a fanfare
+  dropReveal: ['epic', 'legendary', 'mythic'],   // match drops of these rarities open the full reveal
+};
+
 // ---- Trophy Room (plan 21.4): major feats as physical trophies ----
 // Each is checked against the save; art ids are existing trophy / medal / reward art.
 const TROPHY_DATA = {
@@ -118,6 +134,7 @@ const MODE_DATA = {
 
 // ---- The first-time tutorial (plan 26, 39) ----
 const TUTORIAL_DATA = {
+  welcomeVolumes: [100, 80, 60, 40, 0],     // M19: the welcome panel's VOLUME button steps through these
   // One prompt at a time. anchor = what the arrow points at.
   bat: [
     { id: 'aim',      anchor: 'pad' },
@@ -185,5 +202,6 @@ const SETTINGS_DATA = {
   aimAssist: { low: 0.5, normal: 1, high: 1.6 },
   batSensitivity: { low: 0.8, normal: 1, high: 1.25 },
   vfx: { low: 0.4, normal: 1, high: 1.4 },
+  particleCap: { low: 80, normal: 160, high: 250 },      // M19 (plan 36): most sparks on screen at once
   textSize: { normal: 1, large: 1.15 },
 };

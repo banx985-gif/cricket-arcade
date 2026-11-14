@@ -35,15 +35,17 @@ const SimMatch = {
     const at = del.sim.path.at(tIdeal, {});
     let grade = dec.leave ? 'miss' : Contact.grade(dec.shot, dec.err);
     if (!dec.leave && grade !== 'miss' && !Contact.inReach(at)) grade = 'miss';
-    const f = BallPlay.fate({ del, shotId: dec.shot || 'leave', grade, left: !!dec.leave, bat, bowl, releaseGrade: ch.grade }, r.duel);
+    const f = BallPlay.fate({ del, shotId: dec.shot || 'leave', grade, left: !!dec.leave, bat, bowl, releaseGrade: ch.grade, freeHit, match: true }, r.duel);
     const out = { kind, del, batRuns: 0, boundary: 0, wicket: null, shot: dec.shot || 'leave', grade, fate: f.kind };
     if (f.kind !== 'contact') {
-      if (f.result === 'lbw' || f.result === 'bowled' || f.result === 'hitwicket') out.wicket = f.result;
+      if (f.result === 'lbw' || f.result === 'bowled' || f.result === 'hitwicket' || f.result === 'stumped') out.wicket = f.result;
+      if (f.byes) out.byes = f.byes;
+      if (f.legByes) out.legByes = f.legByes;
       return out;
     }
     const pos = del.sim.path.at(Math.min(tIdeal + Math.max(0, dec.err), tIdeal + 0.035), {});
     const six = s.memory ? { del, aim: dec.aim, releaseGrade: ch.grade, memory: s.memory } : null;      // real-match six rules (M15 3b)
-    const c = Contact.resolve({ shotId: dec.shot, grade, err: dec.err, aim: dec.aim, ball: pos, mods: BallPlay.mods(bat, bowl, dec.shot, six) }, r.bat);
+    const c = Contact.resolve({ shotId: dec.shot, grade, err: dec.err, aim: dec.aim, ball: pos, mods: BallPlay.mods(bat, bowl, dec.shot, six, s.inn) }, r.bat);
     const plan = Fielding.resolve(pos, c, dec.shot, r.field);
     // (M17 commentary: who fielded it, where it went, an edge)
     out.fielder = plan.fielder ? plan.fielder.id : null; out.edge = c.kind === 'edge';
@@ -57,7 +59,7 @@ const SimMatch = {
     const t0 = Math.max(plan.endT, plan.fieldT || 0) + MATCH_DATA.running.pickupTime;
     const tg = Throw.aiGrade(s.fielding, r.field);
     const th = Throw.make(from, t0, tg);
-    const res = this.run(from, t0, th, bat, r.ai);
+    const res = this.run(from, t0, th, bat, r.ai, s.inn);
     out.batRuns = res.completed;
     out.throwGrade = tg;
     if (res.runOut) out.wicket = 'runout';
@@ -65,10 +67,10 @@ const SimMatch = {
   },
 
   // Computer batters running against a throw. Returns the Running when settled.
-  run(from, t0, th, bat, rng) {
+  run(from, t0, th, bat, rng, inn) {
     const T = MATCH_DATA.throw;
     const ok = Throw.make(from, t0, 'okay'), pf = Throw.make(from, t0, 'perfect');
-    const run = new Running(Infinity, { safe: pf.returnT, tight: ok.returnT }, Duel.runTimeMult(bat));
+    const run = new Running(Infinity, { safe: pf.returnT, tight: ok.returnT }, Duel.runTimeMult(bat) * BatFatigue.runMult(inn));
     const expect = ok.t1 + T.keeperDelay * MATCH_DATA.aiRunning.expectKeeper;
     const want = Running.aiPlan(expect, rng, run.runTime);
     for (let i = 0; i < want; i++) run.run(0);
@@ -103,7 +105,7 @@ const SimMatch = {
       const bat = o.batting.players[inn.striker - 1];
       const b = this.ball({ inn, bat, bowl, fatigue: o.fatigue[bowlerId] || 0, cond: o.cond,
         fielding: fieldMods.fielding, phase: BowlerRules.phase(inn, o.fmt), index: inn.legal, memory }, r);
-      const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, wicket: b.wicket });
+      const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, byes: b.byes, legByes: b.legByes, power: b.shot === 'power', wicket: b.wicket });
       if (o.onBall) o.onBall(b, res);
       if (res.overDone) BowlerRules.overDone(o.fatigue, o.bowling, bowlerId, 0);
     }

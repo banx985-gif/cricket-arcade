@@ -51,14 +51,17 @@ const CareerMatch = {
       id: 'player' + pos, no: pos, name: p.name, short: p.name.split(' ').length > 1 ? p.name[0] + '. ' + p.name.split(' ').slice(1).join(' ') : p.name,
       role: p.role === 'batter' ? 'bat' : p.role === 'bowler' ? 'bowl' : 'all', keeper: false,
       family: Career.bowls(c) ? p.family : null, leftHanded: p.batHand === 'left', stats: ms.stats, isCareer: true,
+      look: { look: c.player.look, facial: c.player.facial, skin: c.player.skin, hairColour: c.player.hairColour, presentation: c.player.presentation },   // (M18: drawn in matches)
       perks: SkillTree.mods(c),
     };
   },
 
   batPos(c) {
     const tm = Career.team(c);
-    if (tm && tm.batPos) return Math.min(c.player.role === 'batter' ? 5 : 11, tm.batPos);
-    return c.player.role === 'bowler' ? CAREER_DATA.bowlerBatsAt : (CAREER_DATA.battingRoles[c.player.batRole] || 3);
+    let n;
+    if (tm && tm.batPos) n = Math.min(c.player.role === 'batter' ? 5 : 11, tm.batPos);
+    else n = c.player.role === 'bowler' ? CAREER_DATA.bowlerBatsAt : (CAREER_DATA.battingRoles[c.player.batRole] || 3);
+    return Math.max(1, Math.min(11, n + (c.lineupNext || 0)));     // M19: the lineup event moves you for one match
   },
 
   // Build both sides for a fixture (from the match's seeded 'teams' stream).
@@ -69,7 +72,9 @@ const CareerMatch = {
     const pos = this.batPos(c);
     club.players[pos - 1] = this._playerEntity(c, pos);
     club.name = Career.team(c).name; opp.name = fixture.opp.name;
-    if (fixture.rival) Rivals.inject(opp, fixture.rival);           // the boss joins their XI (plan 14)
+    club.kit = { colours: Career.team(c).colours, crest: Career.team(c).crest };       // M18: team colours on the pitch
+    opp.kit = { colours: fixture.opp.colours, crest: fixture.opp.crest };
+    if (fixture.rival) Rivals.inject(opp, fixture.rival, Rivals.rematchBoost(c, fixture.rival));   // the boss joins their XI (plan 14); stronger in a rematch (M19)
     return { player: club, ai: opp };
   },
 
@@ -104,7 +109,8 @@ const CareerMatch = {
     Tech.begin(c);                                  // techniques: charges, stacks, Legend Moment
     // Career matches resolve the toss automatically (plan 7.13).
     const t = Match.flipToss();
-    if (t.winner === 'player') t.choice = RNG.stream('toss').chance(0.5) ? 'bat' : 'bowl';
+    // your side's captain reads the conditions too (M19); as captain (Stage 6+) you can change it on the next screen
+    if (t.winner === 'player') t.choice = Match.tossPick(RNG.stream('toss'));
     Match.choose(t.choice);
     c.matchInProgress = { n: fx.n, attempt: fx.attempt };
     c.difficulty.push({ n: fx.n, stage: c.stage, difficulty: Difficulty.forCareer(c) });   // plan 8.25 tracking
@@ -246,7 +252,7 @@ const CareerMatch = {
     const tac = inn.battingSide === 'player' && this.tacticFx();
     const b = SimMatch.ball({ inn, bat, bowl, fatigue: Match.fatigue[bowl.id] || 0, cond: Match.cond,
       fielding: Fielding.mods.fielding, phase: BowlerRules.phase(inn), index: inn.legal, aggression: tac ? tac.aggression : 0 }, r);
-    const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, wicket: b.wicket, catcher: b.wicket === 'caught' ? b.fielder : null, myCatch: this._myCatch(inn, b.wicket === 'caught' ? b.fielder : null) });
+    const res = inn.apply({ kind: b.kind, batRuns: b.batRuns, boundary: b.boundary, byes: b.byes, legByes: b.legByes, power: b.shot === 'power', wicket: b.wicket, catcher: b.wicket === 'caught' ? b.fielder : null, myCatch: this._myCatch(inn, b.wicket === 'caught' ? b.fielder : null) });
     if (res.overDone || inn.ended) Match.overDone(inn);
     Fielding.clear();
     const line = { who: bat.short, bowler: bowl.short, sym: res.symbol, how: b.wicket || (b.boundary ? String(b.boundary) : b.kind !== 'legal' ? b.kind : String(b.batRuns)),
@@ -305,6 +311,8 @@ const CareerMatch = {
     summary.profile = Profile.add(Save.data, PROFILE_DATA.xp.careerMatch, 'career');            // Global Profile Level (M12)
     // Match drops (plan 12.7): sometimes a league match, the Local Final when you win.
     // Duplicates reroll, then turn into Coins (Gear.resolveDrop).
+    // M19: every item worn this match counts toward its evolution (plan 12.6)
+    for (const id of Object.values(Gear.equipped(c))) Gear.addMatch(Save.data, id);
     summary.drop = Gear.matchDrop(c, Save.data, stageId, fx, summary.grade, summary.won);
     // Salary, contract, sponsor, rival, coach mastery, coach unlocks, events (M08).
     summary.life = CareerLife.afterMatch(c, Save.data, fx, summary, perf, stageId);
@@ -313,7 +321,9 @@ const CareerMatch = {
     const rivalP = fx.rival && summary.life.rival && summary.life.rival.beaten && Match.teams.ai.players.find((p) => p.isRival);
     const meP = Match.teams.player.players.find((p) => p.id === this.pid);
     const extra = rivalP && meP ? { rivalGap: Teams.overall(rivalP) - Teams.overall(meP) } : {};
-    summary.achievements = Achievements.afterMatch(Save.data, { pid: this.pid }, c, extra).got.concat(Achievements.checkCareer(Save.data, c));
+    const am = Achievements.afterMatch(Save.data, { pid: this.pid }, c, extra);
+    summary.achievements = am.got.concat(Achievements.checkCareer(Save.data, c));
+    summary.records = am.records || [];                       // M19: new bests for the record book
     summary.perf = perf;
     summary.opp = fx.opp;
     // Techniques used this match count toward their mastery (plan 11.4).

@@ -16,7 +16,7 @@ class Innings {
     this.runs = 0;
     this.wickets = 0;
     this.legal = 0;
-    this.extras = { wides: 0, noBalls: 0 };
+    this.extras = { wides: 0, noBalls: 0, byes: 0, legByes: 0 };
     this.fours = 0; this.sixes = 0; this.dots = 0;
     this.freeHit = false;
     this.pressure = 0;
@@ -54,7 +54,8 @@ class Innings {
   }
 
   // b: { kind: 'legal'|'wide'|'noball', batRuns (ran), boundary: 0|4|6,
-  //      wicket: null|'bowled'|'caught'|'lbw'|'hitwicket'|'runout',
+  //      wicket: null|'bowled'|'caught'|'lbw'|'hitwicket'|'stumped'|'runout',
+  //      byes / legByes: runs that went past the bat (M19: extras, not the batter's or the bowler's),
   //      contact / dtype / thr: optional details for the log }
   apply(b) {
     const sNo = this.striker;
@@ -66,7 +67,9 @@ class Innings {
     let pressure = 0;
 
     const extra = kind === 'wide' || kind === 'noball' ? 1 : 0;
-    res.runs = extra + batRuns + boundary;
+    const byes = kind === 'legal' && !b.wicket ? (b.byes || 0) + (b.legByes || 0) : 0;
+    res.runs = extra + batRuns + boundary + byes;
+    if (byes) { this.extras.byes = (this.extras.byes || 0) + (b.byes || 0); this.extras.legByes = (this.extras.legByes || 0) + (b.legByes || 0); res.byes = byes; }
     this.runs += res.runs;
     const st = this.bat(this.striker);
 
@@ -78,7 +81,7 @@ class Innings {
     if (boundary === 6) { this.sixes++; st.sixes = (st.sixes || 0) + 1; }
     if (boundary) pressure += PR.boundary;
     else if (batRuns) pressure += PR.perRun * batRuns;
-    else if (kind === 'legal' && !b.wicket) { this.dots++; pressure += PR.dot; }
+    else if (kind === 'legal' && !b.wicket && !byes) { this.dots++; pressure += PR.dot; }
 
     // The bowler's figures (run outs aren't the bowler's wicket).
     const bid = this.overBowlers[this.overBowlers.length - 1];
@@ -86,12 +89,14 @@ class Innings {
       const f = this.bowlerFigs[bid] || (this.bowlerFigs[bid] = { balls: 0, runs: 0, wkts: 0, dots: 0, extras: 0 });
       if (kind === 'legal') f.balls++;
       else f.extras = (f.extras || 0) + 1;
-      if (kind === 'legal' && res.runs === 0) f.dots = (f.dots || 0) + 1;
-      f.runs += res.runs;
+      if (kind === 'legal' && res.runs - byes === 0) f.dots = (f.dots || 0) + 1;
+      f.runs += res.runs - byes;                  // (byes and leg byes aren't the bowler's runs)
     }
 
     // Completed runs: odd = batters swap ends.
-    if (batRuns % 2 === 1) this._swap();
+    // M19 (plan 7.15): batter fatigue - twos and threes and POWER shots tire the striker a little
+    BatFatigue.add(this, sNo, batRuns, b.power);
+    if ((batRuns + byes) % 2 === 1) this._swap();
 
     if (b.wicket) {
       if (!Innings.canBeOutOn(kind, wasFreeHit, b.wicket)) {
@@ -116,12 +121,18 @@ class Innings {
     if (b.thr) e.t = b.thr;
     if (b.catcher && res.wicket) e.f = b.catcher;          // M17: the fielding position that took the catch
     if (b.myCatch && res.wicket) e.mc = 1;                 // ... and it was the career player (season goals)
+    if (b.ds) e.ds = 1;                                     // M19: a diving stop by your side
+    if (b.dc) e.dc = 1;                                     // ... a dropped catch
+    if (b.ot) e.ot = 1;                                     // ... runs taken from an overthrow
+    if (b.dist) e.m = b.dist;                               // ... how far it carried (metres)
+    if (byes) e.by = byes;                                  // ... byes / leg byes
     this.log.push(e);
 
     res.symbol = res.wicket ? 'W' : kind === 'wide' ? 'Wd' : kind === 'noball' ? 'Nb'
-      : boundary ? String(boundary) : batRuns ? String(batRuns) : '•';
+      : boundary ? String(boundary) : batRuns ? String(batRuns) : byes ? byes + 'b' : '•';
     this.thisOver.push(res.symbol);
 
+    if (kind === 'legal' && this.legal % 6 === 0) BatFatigue.overEnd(this);
     if (kind === 'legal' && this.legal % 6 === 0) {
       res.overDone = true;
       this._swap();
@@ -179,6 +190,7 @@ const Match = {
     this.isCareer = !!o.career;
     this.difficulty = o.difficulty || 'pro';      // Rookie / Pro / Legend (plan 20; game/meta.js Difficulty)
     this.quick = o.quick || null;                // a Quick Match set up on its screen (plan 19)
+    this.firstChoice = o.first === 'bat' || o.first === 'bowl' ? o.first : null;   // Quick Match: bat / bowl first (M19)
     this.innings = [];
     this.superOvers = 0;
     if (typeof Commentary !== 'undefined') Commentary.reset();
@@ -225,9 +237,18 @@ const Match = {
     const winner = rng.chance(0.5) ? 'player' : 'ai';
     const coin = rng.chance(0.5) ? 'heads' : 'tails';
     let choice = null;
-    if (winner === 'ai') choice = rng.chance(MATCH_DATA.toss.aiBowlFirstChance) ? 'bowl' : 'bat';
+    if (winner === 'ai') choice = this.tossPick(rng);
     this.toss = { winner, coin, choice };
+    // Quick Match (M19): you chose to bat or bowl first, so there's no real toss
+    if (this.firstChoice) this.toss = { winner: 'player', coin, choice: this.firstChoice, preset: true };
     return this.toss;
+  },
+  // The captain's choice from the conditions (plan 7.13, M19): a green pitch or cloud says bowl
+  // first; a dry or worn pitch (spin later on) says bat first. MATCH_DATA.toss.lean.
+  tossPick(rng) {
+    const T0 = MATCH_DATA.toss, L = T0.lean, c = this.cond || {};
+    const p = Math.max(0.1, Math.min(0.9, T0.aiBowlFirstChance + (L.pitch[c.pitch] || 0) + (L.weather[c.weather] || 0)));
+    return rng.chance(p) ? 'bowl' : 'bat';
   },
 
   choose(choice) {
@@ -354,5 +375,36 @@ const Match = {
     this.result = res;
     Log.add('match', `result: ${winner} wins ${res.marginKey} ${res.margin || ''}`);
     return { next: 'result' };
+  },
+};
+
+// M19 (plan 7.15): light batter fatigue. Kept on the innings (inn.batFat: batter no -> 0..max). It slows
+// the striker's running a touch and makes POWER a little less steady; it eases off between overs.
+// Mild by design: a 5-over match barely notices. MATCH_DATA.batFatigue.
+const BatFatigue = {
+  add(inn, no, batRuns, power) {
+    const F = MATCH_DATA.batFatigue, f = inn.batFat = inn.batFat || {};
+    let v = f[no] || 0;
+    if (batRuns >= 2) v += F.perExtraRun * (batRuns - 1);
+    if (power) v += F.perPower;
+    f[no] = Math.min(F.max, v);
+  },
+  overEnd(inn) {
+    const F = MATCH_DATA.batFatigue, f = inn.batFat || {};
+    for (const k of Object.keys(f)) f[k] = Math.max(0, f[k] - F.overRecover);
+  },
+  of(inn, no) { return (inn && inn.batFat && inn.batFat[no || inn.striker]) || 0; },
+  runMult(inn) { return 1 + this.of(inn) * MATCH_DATA.batFatigue.runSlow; },
+  jitterMult(inn) { return 1 + this.of(inn) * MATCH_DATA.batFatigue.jitter; },
+};
+
+// M19 (plan 7.10): the boundary for a ground (STADIUM_DATA.boundary). Sets BATTING_DATA.field.boundaryRadius,
+// which the fours / sixes, the rope and the stands all read. Unknown ground (or none) = the usual 66 m.
+const Grounds = {
+  apply(id) {
+    const F = BATTING_DATA.field;
+    if (F.boundaryBase === undefined) F.boundaryBase = F.boundaryRadius;
+    F.boundaryRadius = (STADIUM_DATA.boundary && STADIUM_DATA.boundary[id]) || F.boundaryBase;
+    return F.boundaryRadius;
   },
 };

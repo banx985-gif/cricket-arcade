@@ -200,6 +200,48 @@ const Gear = {
     });
   },
 
+  // ---- evolution (M19, plan 12.6): matches worn + a feat + Legacy Marks (+ Mythic Core) ----
+  evoLine(id) { return EQUIPMENT_DATA.evolution.lines.find((l) => l.from === id) || null; },
+  // A career match played wearing it (counted per item, account-wide).
+  addMatch(save, id) { const L = save && save.locker && save.locker[id]; if (L) L.m = (L.m || 0) + 1; },
+  matchesWith(save, id) { const L = save && save.locker && save.locker[id]; return (L && L.m) || 0; },
+  // The feats: 'medal' = a Gold or Diamond challenge medal; 'trophy' = any career trophy (this career or a retired one).
+  hasFeat(save, feat, c) {
+    if (!feat) return true;
+    if (feat === 'medal') return typeof Challenge !== 'undefined' && ['six', 'rush'].some((g) => Challenge.rulesets(g).some((r) => Challenge.medalRank((Challenge.record(save, r.id) || {}).medal) >= 3));
+    if (feat === 'trophy') return !!((c && c.trophies && c.trophies.length) || (save.hallOfFame || []).some((h) => h.trophies && h.trophies.length));
+    return false;
+  },
+  // Where an item stands: null (doesn't evolve) or { line, steps: [{ id, have, need, ok }], ready, done }.
+  evoStatus(save, id, c) {
+    const l = this.evoLine(id);
+    if (!l) return null;
+    const C = save.currencies || {}, steps = [
+      { id: 'matches', have: Math.min(l.matches, this.matchesWith(save, id)), need: l.matches },
+      { id: 'lm', have: Math.min(l.lm, C.legacyMarks || 0), need: l.lm },
+    ];
+    if (l.mc) steps.push({ id: 'mc', have: Math.min(l.mc, C.mythicCore || 0), need: l.mc });
+    if (l.feat) steps.push({ id: 'feat_' + l.feat, have: this.hasFeat(save, l.feat, c) ? 1 : 0, need: 1 });
+    for (const s of steps) s.ok = s.have >= s.need;
+    const done = this.owns(save, l.to);
+    return { line: l, steps, done, ready: !done && this.owns(save, id) && steps.every((s) => s.ok) };
+  },
+  // Evolve: pay, add the new item, switch a career wearing the old one. Returns { ok, to } or { ok: false, reason }.
+  evolve(save, id, c) {
+    const st = this.evoStatus(save, id, c);
+    if (!st) return { ok: false, reason: 'none' };
+    if (st.done) return { ok: false, reason: 'done' };
+    if (!st.ready) return { ok: false, reason: 'notReady' };
+    const C = save.currencies, l = st.line;
+    C.legacyMarks -= l.lm;
+    if (l.mc) C.mythicCore -= l.mc;
+    this.grant(save, l.to, 'evolution');
+    if (c) { const eq = this.ensureCareer(c); if (eq[this.item(l.to).slot] === id) eq[this.item(l.to).slot] = l.to; }
+    const A = typeof Achievements !== 'undefined' ? Achievements.life(save) : null;
+    if (A) A.evolved = (A.evolved || 0) + 1;
+    return { ok: true, to: l.to };
+  },
+
   // ---- Legacy (plan 12.8): the signature equipment on the permanent card ----
   legacySnapshot(c) { return Object.assign({}, this.equipped(c)); },
 };

@@ -57,6 +57,14 @@ const TitleScene = {
       sub: () => (Modes.unlocked(Save.data, 'missions') ? T('title.missionStars', { n: Missions.totalStars(Save.data), t: MISSION_DATA.list.length * 3 }) : T('title.lockedShort')) });
     this.topBtns.add('title.myxi', s.right - 400, s.top + 122, 370, 96, () => { if (!FullGame.guard('myxi', null)) Scenes.go(MyXI.club(Save.data) ? 'myxihome' : 'myxicreate'); }, { size: 36, color: '#9cff6a', icon: 'myxi_badge',
       disabled: () => !MyXI.unlocked(Save.data), sub: () => (MyXI.unlocked(Save.data) ? (MyXI.club(Save.data) ? MyXI.club(Save.data).name : T('myxi.createClub')) : T('myxi.locked')) });
+    // M19 (plan 5.3): the Home hub extras: CONTINUE your latest career, Credits.
+    const last = HomeHub.lastCareer(Save.data);
+    if (last) {
+      const c0 = this.cards[0];
+      this.topBtns.add(() => T('home.continue'), c0.x + 18, c0.y + c0.h - 104, c0.w - 36, 88, () => HomeHub.continueCareer(last.slot),
+        { size: 30, color: '#9cff6a', sub: () => T('home.continueSub', { name: last.s.name, ovr: last.s.overall }) }).tag = 'continue';
+    }
+    this.topBtns.add('home.credits', s.left + 150, s.bottom - 110, 190, 88, () => Scenes.go('settings', { tab: 'other' }), { size: 24, color: '#e9eef5' }).tag = 'credits';
     this.resumeBtns.clear();
     this.resumeBtns.add('resume.resume', cx - 430, 640, 420, 120, () => this._resume(), { size: 38 });
     this.resumeBtns.add('resume.abandon', cx + 10, 640, 420, 120, () => this._abandon(), { size: 40, color: '#e9eef5' });
@@ -173,7 +181,8 @@ const TitleScene = {
     ctx.font = `900 120px ${CONFIG.FONT}`;
     const titleSize = Math.max(56, Math.min(120, Math.floor(120 * room / (ctx.measureText(T('title.game')).width + 24))));
     R.text(T('title.game'), cx, 150 + bob, titleSize, '#ffffff');
-    R.text(T('title.pick'), cx, 265, 40, '#ffd23f');
+    const goal = HomeHub.nextGoal(Save.data);          // M19: the next thing to aim for
+    R.text(goal || T('title.pick'), cx, 265, goal ? 30 : 40, '#ffd23f', 'center', !!goal, 1100);
 
     for (const c of this.cards) this._drawCard(ctx, c);
 
@@ -183,6 +192,7 @@ const TitleScene = {
     Sprites.ui('logo_banx_gamex', Display.safe.left + 74, Display.safe.bottom - 92, 110, 132, { alpha: 0.95 });
     R.text(T('title.pcHint2'), cx, 1040, 20, '#b8c6d6', 'center', false);
     this._drawProfile(ctx);
+    HomeHub.drawRecent(ctx);
     if (this.lockMsg) {
       const a = Math.min(1, (3 - this.lockMsg.t) / 0.3);
       ctx.save(); ctx.globalAlpha = Math.max(0, a);
@@ -278,5 +288,50 @@ const TitleScene = {
     }
     else line = best ? T('title.best', { score: formatNumber(best.score) }) : T('title.noBest');
     R.text(line, x + w / 2, y + 566, 30, '#ffd23f');
+  },
+};
+
+// M19 (plan 5.3): the Home hub's extra panels.
+const HomeHub = {
+  // The career saved most recently that's still going: { slot, s (its summary) } or null.
+  lastCareer(save) {
+    let best = null;
+    (save.careerSlots || []).forEach((sm, i) => {
+      if (sm && sm.phase !== 'complete' && (!best || (sm.savedAt || '') > (best.s.savedAt || ''))) best = { slot: i + 1, s: sm };
+    });
+    return best;
+  },
+  continueCareer(slot) {
+    if (this._busy) return;
+    this._busy = true;
+    CareerSave.load(slot).then((c) => { this._busy = false; if (c) Scenes.go('careerhome', { slot, career: c }); else Scenes.go('careerselect'); })
+      .catch(() => { this._busy = false; Scenes.go('careerselect'); });
+  },
+  // One line: the next thing worth doing.
+  nextGoal(save) {
+    const last = this.lastCareer(save);
+    if (last) {
+      const S = CAREER_DATA.stages.find((x) => x.id === last.s.stage);
+      if (last.s.rival) return T('home.goal.rival', { name: last.s.name, rival: T('rival.' + last.s.rival) });
+      if (S && last.s.phase === 'season') return T('home.goal.career', { name: last.s.name, stage: T(S.nameKey), n: last.s.fixture || 1, t: last.s.fixtures });
+      if (S) return T('home.goal.promoted', { name: last.s.name });
+    }
+    const locked = HOME_DATA.goalModes.find((id) => !Modes.unlocked(save, id));
+    if (locked) return T('home.goal.unlock', { m: T('mode.name.' + locked), how: T(Modes.hint(locked)) });
+    if (typeof MyXI !== 'undefined' && MyXI.unlocked(save) && !MyXI.club(save)) return T('home.goal.myxi');
+    return null;
+  },
+  // The newest things in your Locker (the order they arrived in), bottom right.
+  recent(save) { return Object.keys(save.locker || {}).filter((id) => Gear.item(id) && !Gear.item(id).src.includes('starter')).slice(-HOME_DATA.recentCount).reverse(); },
+  drawRecent(ctx) {
+    const ids = this.recent(Save.data);
+    if (!ids.length || typeof GearUI === 'undefined') return;
+    const s = Display.safe, size = 78, x1 = s.right - 30;
+    R.text(T('home.recent'), x1 - ids.length * (size + 8) - 10, s.bottom - 64, 20, '#ffd23f', 'right', false);
+    ids.forEach((id, i) => {
+      const x = x1 - (i + 1) * (size + 8), y = s.bottom - 110;
+      R.roundRect(x, y, size, size, 14, 'rgba(10,22,40,0.85)', Gear.rarity(Gear.item(id)).colour, 3);
+      GearUI.framed(Gear.item(id), x + size / 2, y + size / 2, size - 8, size - 8);
+    });
   },
 };

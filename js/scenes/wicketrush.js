@@ -305,14 +305,14 @@ const WicketRushScene = Object.assign({}, PitchScene, {
 
     if (ai.leave) {
       this.shot = { leave: true, id: 'leave', contactT: null };
-      this.fate = this.isWide ? { kind: 'miss', result: null } : BallPlay.fate({ del: this.del, left: true, bat, bowl }, RNG.stream('duel'));
+      this.fate = this.isWide ? { kind: 'miss', result: null } : BallPlay.fate({ del: this.del, left: true, bat, bowl, match: !!this._sixCtx }, RNG.stream('duel'));
       return;
     }
     const pressT = tIdeal + ai.err;
     let grade = Contact.grade(ai.shot, ai.err);
     const shot = { id: ai.shot, pressT, err: ai.err, grade, swingStart: pressT, contactT: null, done: false };
     if (grade !== 'miss' && !Contact.inReach(at)) grade = shot.grade = 'miss';
-    const f = BallPlay.fate({ del: this.del, shotId: ai.shot, grade, bat, bowl, releaseGrade: this.release.grade }, RNG.stream('duel'));
+    const f = BallPlay.fate({ del: this.del, shotId: ai.shot, grade, bat, bowl, releaseGrade: this.release.grade, match: !!this._sixCtx, freeHit: !!(this.inn && this.inn.freeHit) || !!(this.release && this.release.noBall) }, RNG.stream('duel'));
     this.fate = f;
     if (f.kind === 'contact') {
       shot.contactT = Math.max(pressT, tIdeal);
@@ -420,6 +420,8 @@ const WicketRushScene = Object.assign({}, PitchScene, {
       umpire: wicket && key !== 'bowled' && key !== 'hitwicket',
       fingerUp: wicket && key === 'lbw',
     });
+    // M19: a big moment holds for the highlight camera
+    if (this._sixCtx && this._isBig(this.outcome.key)) { this.outcome._big = true; this.outcome.bigHold = this._bigHold(); this.outcome.hold = Math.max(this.outcome.hold, this.outcome.bigHold + 0.2); this._markBigSeen(); } else this.outcome._big = false;
     this._setState('outcome');
 
     const cx = CONFIG.LOGICAL_W / 2;

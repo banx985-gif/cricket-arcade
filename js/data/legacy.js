@@ -43,4 +43,11 @@ const LEGACY_DATA = {
   roleDefault: { batter: 'century_machine', bowler: 'golden_arm', allrounder: 'big_match_player' },
   // Legacy Marks for retiring: base + per trophy + for beating the Champion.
   marks: { base: 3, perTrophy: 1, champion: 2 },
+  // M19 (plan 22.3): permanent unlocks bought with Legacy Marks (Hall of Fame → LEGACY SHOP).
+  //   legends_arena: the Legends Arena for your My XI club before its final reward; hof_frame: a gold frame
+  //   on every Hall of Fame card. (Evolution steps and early coaches also cost Marks.) Defaults to tune.
+  shop: [
+    { id: 'legends_arena', lm: 8, needs: 'myxi' },
+    { id: 'hof_frame', lm: 3 },
+  ],
 };

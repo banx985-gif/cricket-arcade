@@ -9,6 +9,9 @@
 // on the off side, -90° = square on the leg side, ±180° = behind the keeper.
 
 const BATTING_DATA = {
+  // M19 (plan 32): ball trail colours. A hit: gold when perfect, else your bat's rarity colour (career);
+  // a delivery in flight: a faint tint by the bowling kind.
+  trail: { perfect: '255,210,63', plain: '255,255,255', delivery: { pace: null, swing: '127,216,255', spin: '201,160,255' }, deliveryAlpha: 0.35 },
   physics: {
     gravity: 9.81,
     ballRadius: 0.036,
@@ -186,12 +189,20 @@ const BATTING_DATA = {
     backFromZ: 0,
     catchBefore: 0.4, catchAfter: 0.6, throwBefore: 0.35, throwAfter: 0.35,
     keeperDelay: 0.3, keeperRise: 0.35, keeperAfter: 0.4, keeperHitFrame: 2,
+    // M18: celebrations (seconds for the jump / bat raise), the walk off (m/s, after a pause),
+    // running between the wickets (m/s for the stride cycle; groundK = the last part of each run
+    // spent reaching the bat over the line), the non-striker once the ball is hit (x, metres backed
+    // up from the far stumps), the umpire's signals (seconds to make each).
+    celeTime: 0.9, walkDelay: 0.6, walkSpeed: 1.3, runSpeed: 6.5, groundK: 0.22, nsX: -1.0, nsBackedUp: 2.2,
+    umpDelay: 0.15, umpTime: { ump_four: 1.4, ump_out: 0.5, other: 0.45 },
   },
   camera: {
     pitch: { pos: [1.3, 7.5, 33], target: [0.1, 0.3, 3.5], focal: 2700 },
     follow: { height: 20, back: 34, focal: 1350, lead: 0.3, cutDelay: 0.18 },
     // Highlight camera (plan 7.11): low, beside the stumps, for bowled / hit wicket.
     highlight: { pos: [4.4, 1.2, 5.6], target: [-0.3, 0.5, -0.2], focal: 1600, hold: 1.25 },
+    // M19 (plan 7.11): big moments - a low wide shot of the middle. hold: the first time; holdAgain: after that.
+    big: { pos: [-9, 2.2, 9], target: [0, 1.0, 1.5], focal: 1250, hold: 1.8, holdAgain: 0.9 },
     followEase: 3.2,
     resetEase: 5,
     ballDrawScale: 3.8,        // balls are drawn bigger than life so they read on a phone

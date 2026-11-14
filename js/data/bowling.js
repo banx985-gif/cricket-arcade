@@ -153,7 +153,7 @@ const BOWLING_DATA = {
   //   chance = shot[shotId] * grade[grade] * weakness²
   //   weakness = max(0, (safeAbove - average of Contact and Composure) / safeAbove)
   hitWicket: {
-    shot: { power: 0.55, control: 0.1, defend: 0 },
+    shot: { power: 0.22, control: 0.04, defend: 0 },   // M18: was 0.55 / 0.1 (about 1 wicket in 45; real cricket is far rarer)
     grade: { miss: 1, late: 0.55, early: 0.4, good: 0, perfect: 0 },
     safeAbove: 56,
   },

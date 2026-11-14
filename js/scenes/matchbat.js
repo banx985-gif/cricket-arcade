@@ -136,7 +136,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     if (grade !== 'miss' && !Contact.inReach(ballAtContact)) { grade = shot.grade = 'miss'; shot.missReason = 'outOfReach'; }
     else if (grade === 'miss') shot.missReason = err < 0 ? 'tooEarly' : 'tooLate';
 
-    const f = BallPlay.fate({ del: this.del, shotId, grade, bat: this.batP, bowl: this.bowlerP, releaseGrade: this.del.releaseGrade, punish: Difficulty.k('punish') }, RNG.stream('duel'));
+    const f = BallPlay.fate({ del: this.del, shotId, grade, bat: this.batP, bowl: this.bowlerP, releaseGrade: this.del.releaseGrade, punish: Difficulty.k('punish'), match: true, freeHit: this.inn.freeHit || this.extraKind === 'noball' }, RNG.stream('duel'));
     this.fate = f;
     if (f.kind === 'contact') {
       // Early presses wait for the ball; late ones connect straight away.
@@ -174,7 +174,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
       const grade = Throw.aiGrade(Duel.fieldMods(this.team).fielding, fieldingRng);
       h.throw = Throw.make(from, t0, grade);
       const ok = Throw.make(from, t0, 'okay'), pf = Throw.make(from, t0, 'perfect');
-      h.running = new Running(Infinity, { safe: pf.returnT, tight: ok.returnT }, Duel.runTimeMult(this.batP || this.batterP));
+      h.running = new Running(Infinity, { safe: pf.returnT, tight: ok.returnT }, Duel.runTimeMult(this.batP || this.batterP) * BatFatigue.runMult(this.inn));
     }
     return h;
   },
@@ -309,7 +309,7 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
       BatControls.enabled = false;
       if (!this.fate) {
         this.fate = this.extraKind === 'wide' ? { kind: 'miss', result: null }
-          : BallPlay.fate({ del: this.del, left: true, bat: this.batP, bowl: this.bowlerP }, RNG.stream('duel'));
+          : BallPlay.fate({ del: this.del, left: true, bat: this.batP, bowl: this.bowlerP, match: true }, RNG.stream('duel'));
         if (this.fate.result) this._showTiming('miss', 'noShot');
       }
     }
@@ -328,15 +328,25 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
     const boundary = key === 'six' ? 6 : key === 'four' ? 4 : 0;
     const batRuns = run ? run.completed : 0;
     let wicket = null;
-    if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') wicket = key;
+    if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket' || key === 'stumped') wicket = key;
     else if (run && run.runOut) wicket = 'runout';
-    const res = inn.apply({ kind, batRuns, boundary, wicket, contact: this.shot ? this.shot.grade : null });
+    const fx = !this.hit && this.fate ? this.fate : null;          // M19: byes / leg byes (the ball got past)
+    // M19: overthrow runs (Overthrow Thief) and how far a six went (Monster Hit, the record book)
+    const ot = run && run.overthrow ? 1 : 0;
+    const res = inn.apply({ kind, batRuns, boundary, wicket, contact: this.shot ? this.shot.grade : null, ot, power: !!(this.shot && this.shot.id === 'power'), byes: fx && fx.byes, legByes: fx && fx.legByes, dist: boundary === 6 && this._hitDist ? this._hitDist() : null });
     if (MissionMatch.on) MissionMatch.afterBall(inn);          // a mission can be decided before the innings ends
     if (res.overDone || inn.ended) Match.overDone(inn);
     if (Tech.mine(this.batterP)) Tech.batBallEnd(key, kind === 'legal', res.wicket ? wicket : null);
     if (MissionMatch.on && MissionMatch.m.tutorial) TutorialCoach.ballEnd({ shot: this.shot && this.shot.id, grade: this.shot && this.shot.grade, key, runs: batRuns, boundary });
     TechUI.btns = [];
     this._showBallResult(key, res, batRuns, wicket, true);
+  },
+
+  // Did this ball take the batter who faced it past 50 or 100 (any multiple of 50)?
+  _milestone(key, batRuns) {
+    const got = key === 'six' ? 6 : key === 'four' ? 4 : batRuns;
+    const st = got > 0 && this.batterP && this.inn && this.inn.bat ? this.inn.bat(this.batterP.no) : null;
+    return !!st && Math.floor(st.runs / 50) > Math.floor((st.runs - got) / 50);
   },
 
   // Shared by both innings scenes: popup + sounds for a finished ball.
@@ -356,7 +366,10 @@ const MatchBatScene = Object.assign({}, SixSmashScene, {
       showText: !!wicket || res.notOut || lookKey === 'padLeg',   // six/four/wide markers already say it
       umpire: res.wicket && (wicket === 'caught' || wicket === 'lbw'),
       fingerUp: res.wicket && wicket === 'lbw',
+      mile: MatchBatScene._milestone.call(this, key, batRuns),   // M18: the batter raises the bat for a 50 / 100
     });
+    // M19: a big moment holds for the highlight camera
+    if (this._isBig(this.outcome.key)) { this.outcome._big = true; this.outcome.bigHold = this._bigHold(); this.outcome.hold = Math.max(this.outcome.hold, this.outcome.bigHold + 0.2); this._markBigSeen(); } else this.outcome._big = false;
     this._setState('outcome');
     Commentary.live(this, key, res, batRuns, wicket);         // M17: the caption line
     RunControls.visible = false;
@@ -464,6 +477,37 @@ const MatchScoreHud = {
       const x = s.right - 116 - 40 - w;
       const th = MatchHud.target(ctx, x, s.top + 10, w, inn);
       MatchHud.paceChip(ctx, x + 20, s.top + 16 + th, w - 40, inn, playerBatting);
+    }
+    this.extras(ctx, scene, inn);
+  },
+  // M19 (plan 27): the objective (career / mission) while nothing is in the air, the boss bar in a
+  // rival match, and your energy in a career match. Kept to the top edge, clear of the ball's flight.
+  extras(ctx, scene, inn) {
+    const s = Display.safe, cx = CONFIG.LOGICAL_W / 2, H = MATCH_HUD_DATA;
+    const calm = !['inplay', 'delivery', 'outcome'].includes(scene.state);
+    let goal = null;
+    if (typeof CareerMatch !== 'undefined' && CareerMatch.on && CareerMatch.fixture && CareerMatch.fixture.objective) goal = CareerText.objective(CareerMatch.fixture.objective);
+    else if (typeof MissionMatch !== 'undefined' && MissionMatch.on && MissionMatch.m && typeof MissionText !== 'undefined') goal = MissionText.goal(MissionMatch.m);
+    let y = s.top + 22;
+    if (goal && calm) {
+      R.roundRect(cx - H.goalW / 2, y, H.goalW, 46, 22, 'rgba(10,22,40,0.78)', 'rgba(156,255,106,0.7)', 2);
+      R.text(T('hud.goal', { g: goal }), cx, y + 23, 22, '#9cff6a', 'center', false, H.goalW - 30);
+      y += 56;
+    }
+    // the boss bar: the rival's runs or wickets so far
+    const rv = Match.teams && Match.teams.ai && Match.teams.ai.players.find((p) => p.isRival);
+    if (rv && calm) {
+      const no = Match.teams.ai.players.indexOf(rv) + 1;
+      let line;
+      if (inn.battingSide === 'ai') { const b = inn.bat(no); line = b.balls || b.out ? T('hud.bossBat', { r: b.runs, b: b.balls, out: b.out ? T('hud.out') : '' }) : T('hud.bossWaiting'); }
+      else { const f = inn.bowlerFigs[rv.id]; line = f ? T('hud.bossBowl', { w: f.wkts, r: f.runs }) : T('hud.bossWaiting'); }
+      R.roundRect(cx - H.bossW / 2, y, H.bossW, 46, 22, 'rgba(90,10,20,0.85)', '#ffd23f', 2);
+      R.text(T('rival.' + rv.isRival) + ' · ' + line, cx, y + 23, 22, '#ffffff', 'center', false, H.bossW - 30);
+    }
+    // career energy, under the pause button
+    if (typeof CareerMatch !== 'undefined' && CareerMatch.on && CareerMatch.career) {
+      R.roundRect(s.right - 156, s.top + 140, 136, 46, 22, 'rgba(10,22,40,0.8)', 'rgba(255,255,255,0.4)', 2);
+      R.text(T('hud.energy', { n: Math.round(CareerMatch.career.energy) }), s.right - 88, s.top + 163, 22, '#9be7ff', 'center', false);
     }
   },
 };

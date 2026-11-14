@@ -244,10 +244,11 @@ const QuickMatch = {
   },
   // Build a side for the match (the AI side gets the difficulty's small rating change).
   side(save, t, side, rng, diff) {
-    if (t.cat === 'myxi' && side === 'player') return MyXI.teamFor(save);
+    if (t.cat === 'myxi' && side === 'player') { const tm = MyXI.teamFor(save); tm.kit = { colours: t.colours, crest: t.club || null }; return tm; }
     const rating = Math.max(30, Math.min(95, t.rating + (side === 'ai' ? Difficulty.D(diff).opp : 0)));
     const team = Teams.generate({ side, rating, origin: t.origin || null, rng });
     team.name = t.name; team.crest = t.crest; team.qm = t.id;
+    team.kit = { colours: t.colours, crest: t.crest ? { image: t.crest, colours: t.colours } : null };   // M18: team colours
     return team;
   },
   // Start the match from a setup; returns the toss scene.
@@ -262,6 +263,7 @@ const QuickMatch = {
     const pick = (cr, list, v) => (v === 'random' ? cr.pick(list.map((x) => x.id)) : v);
     Match.start(o.fmt, {
       difficulty: o.diff,
+      first: o.first,
       quick: { you: o.you.id, them: o.them.id, fmt: o.fmt, diff: o.diff },
       teams: () => {
         const rng = RNG.stream('teams');

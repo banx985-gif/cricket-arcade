@@ -22,6 +22,7 @@ const Scenes = {
   },
 
   go(name, params) {
+    this.overlay = null;                                   // (an overlay never outlives its screen)
     if (!this.registry[name]) { console.error('Unknown scene', name); return; }
     const missing = this._artMissing(name);
     if (!missing.length || !this.current) { this.pending = null; this._switch(name, params); return; }
@@ -69,12 +70,19 @@ const Scenes = {
       return;
     }
     if (this._story()) Story.update(realDt || dt);
+    if (this.overlay) { if (this.overlay.update) this.overlay.update(realDt || dt); return; }   // the scene under it waits (paused)
     if (this.current && this.current.update) this.current.update(dt, realDt);
   },
+  // M19: a screen opened over the current one without leaving it (Settings from the pause menu).
+  // The scene below keeps its state; closing the overlay goes straight back to it.
+  overlay: null,
+  openOverlay(scene, params) { this.overlay = scene; if (scene.enter) scene.enter(Object.assign({ overlay: true }, params || {})); },
+  closeOverlay() { const o = this.overlay; this.overlay = null; if (o && o.exit) o.exit(); if (this.current && this.current.onOverlayClosed) this.current.onOverlayClosed(); },
   _ask() { return typeof NotifyAsk !== 'undefined' && NotifyAsk.open; },
   _story() { return typeof Story !== 'undefined' && Story.open; },        // M17: a story scene over the screen
   render(ctx) {
     if (this.current && this.current.render) this.current.render(ctx);
+    if (this.overlay && this.overlay.render) this.overlay.render(ctx);
     if (this._story()) Story.render(ctx);
     if (this._ask()) NotifyAsk.render(ctx);
     if (this.pending && this.pending.t > 0.15) {        // a quick loading moment (only if it takes a while)
@@ -84,10 +92,10 @@ const Scenes = {
       R.text(T('boot.loading'), CONFIG.LOGICAL_W / 2, CONFIG.LOGICAL_H / 2, 48, '#ffffff');
     }
   },
-  pointerDown(id, x, y) { if (this.pending) return; if (this._ask()) { NotifyAsk.pointerDown(id, x, y); return; } if (this._story()) { Story.pointerDown(id, x, y); return; } if (this.current && this.current.pointerDown) this.current.pointerDown(id, x, y); },
-  pointerMove(id, x, y) { if (this._ask()) { NotifyAsk.pointerMove(id, x, y); return; } if (this._story()) { Story.pointerMove(id, x, y); return; } if (this.current && this.current.pointerMove) this.current.pointerMove(id, x, y); },
-  pointerUp(id) { if (this._ask()) { NotifyAsk.pointerUp(id); return; } if (this._story()) { Story.pointerUp(id); return; } if (this.current && this.current.pointerUp) this.current.pointerUp(id); },
-  keyDown(code) { if (this._ask()) { if (code === 'Escape') NotifyAsk.dismiss(); return; } if (this._story()) { Story.keyDown(code); return; } if (this.current && this.current.keyDown) this.current.keyDown(code); },
+  pointerDown(id, x, y) { if (this.pending) return; if (this._ask()) { NotifyAsk.pointerDown(id, x, y); return; } if (this._story()) { Story.pointerDown(id, x, y); return; } if (this.overlay) { if (this.overlay.pointerDown) this.overlay.pointerDown(id, x, y); return; } if (this.current && this.current.pointerDown) this.current.pointerDown(id, x, y); },
+  pointerMove(id, x, y) { if (this._ask()) { NotifyAsk.pointerMove(id, x, y); return; } if (this._story()) { Story.pointerMove(id, x, y); return; } if (this.overlay) { if (this.overlay.pointerMove) this.overlay.pointerMove(id, x, y); return; } if (this.current && this.current.pointerMove) this.current.pointerMove(id, x, y); },
+  pointerUp(id) { if (this._ask()) { NotifyAsk.pointerUp(id); return; } if (this._story()) { Story.pointerUp(id); return; } if (this.overlay) { if (this.overlay.pointerUp) this.overlay.pointerUp(id); return; } if (this.current && this.current.pointerUp) this.current.pointerUp(id); },
+  keyDown(code) { if (this._ask()) { if (code === 'Escape') NotifyAsk.dismiss(); return; } if (this._story()) { Story.keyDown(code); return; } if (this.overlay) { if (this.overlay.keyDown) this.overlay.keyDown(code); return; } if (this.current && this.current.keyDown) this.current.keyDown(code); },
   keyUp(code) { if (this.current && this.current.keyUp) this.current.keyUp(code); },
   appHidden() { if (this.current && this.current.onAppHidden) this.current.onAppHidden(); },
 };

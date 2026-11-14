@@ -70,6 +70,9 @@ const QuickMatchScene = {
     };
     row(QUICKMATCH_DATA.pitches, 'pitch', 606);
     row(QUICKMATCH_DATA.weathers, 'weather', 760);
+    // who bats first (M19, plan 19): the toss, or your choice
+    ['toss', 'bat', 'bowl'].forEach((f, i) => b.add('qm.first.' + f, 930 + i * 128, 920, 120, 100, () => { o.first = f; this._layout(); },
+      { size: 22, color: (o.first || 'toss') === f ? '#ffd23f' : '#5b6570', textColor: (o.first || 'toss') === f ? CONFIG.COLOR.ink : '#ffffff' }));
     b.add('qm.play', 1330, 900, 510, 130, () => this._play(), { size: 60, color: '#9cff6a' });
   },
 
@@ -117,6 +120,7 @@ const QuickMatchScene = {
     R.text(T('stadium.' + g.id), 570, 950, 22, '#ffffff');
     if (FullGame.locked('ground', g.id)) { R.roundRect(470, 820, 200, 44, 18, '#ffd23f'); R.text(T('full.badge'), 570, 842, 18, CONFIG.COLOR.ink, 'center', false); }
     if (g.id !== STADIUM_DATA.defaultStadium && !STADIUM_DATA.stadiums[g.id]) R.text(T('qm.groundSoon'), 570, 1012, 17, '#8a96a3', 'center', false);
+    R.text(T('qm.firstLabel'), 930, 898, 22, '#b8c6d6', 'left', false);
     R.text(T('qm.pitch'), 1000, 658, 26, '#b8c6d6', 'left', false);
     R.text(T('qm.weather'), 1000, 812, 26, '#b8c6d6', 'left', false);
     for (const t of this.tiles) {

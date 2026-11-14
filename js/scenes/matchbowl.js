@@ -353,14 +353,17 @@ const MatchBowlScene = Object.assign({}, WicketRushScene, {
     const boundary = key === 'six' ? 6 : key === 'four' ? 4 : 0;
     const batRuns = run ? run.completed : 0;
     let wicket = null;
-    if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket') wicket = key;
+    if (key === 'caught' || key === 'bowled' || key === 'lbw' || key === 'hitwicket' || key === 'stumped') wicket = key;
     else if (run && run.runOut) wicket = 'runout';
+    const fx = !this.hit && this.fate ? this.fate : null;          // M19: byes / leg byes
     const thr = ThrowMeter.m && ThrowMeter.m.tapped;
     DiveMoment.stop();
     const fam = this.bowler && Bowling.family(this.bowler.family), dtype = fam && fam.deliveries[this.typeIdx] ? fam.deliveries[this.typeIdx].id : null;
     ThrowMeter.stop();
     const catcher = wicket === 'caught' && this.hit && this.hit.plan.fielder ? this.hit.plan.fielder.id : null;
-    const res = inn.apply({ kind, batRuns, boundary, wicket, dtype, thr, catcher, myCatch: CareerMatch._myCatch(inn, catcher) });
+    // M19: diving stops and dropped catches (achievements: Diving Stop, Perfect Game)
+    const ds = this.hit && this.hit.dive && this.hit.dive.result === 'saved', dc = !!(this.hit && this.hit.plan && this.hit.plan.dropped && this.hit.dropShown);
+    const res = inn.apply({ kind, batRuns, boundary, wicket, dtype, thr, catcher, myCatch: CareerMatch._myCatch(inn, catcher), ds, dc, byes: fx && fx.byes, legByes: fx && fx.legByes, dist: this._hitDist ? this._hitDist() : null });
     if (MissionMatch.on) MissionMatch.afterBall(inn);
     if (res.overDone || inn.ended) Match.overDone(inn);
     if (Tech.mine(this.bowler)) Tech.bowlBallEnd(key, kind === 'legal', !!res.wicket, res.runs);

@@ -72,9 +72,10 @@ const Dev = {
     b.clear();
     const cx = CONFIG.LOGICAL_W / 2;
     // tabs
-    const tabs = ['main', 'jump', 'match', 'save', 'career', 'myxi', 'chal', 'mission'];
+    const tabs = ['main', 'jump', 'match', 'save', 'career', 'myxi', 'chal', 'mission', 'more'];
+    const tw = Math.floor(1600 / tabs.length);
     tabs.forEach((t, i) => {
-      b.add(() => T('dev.tab.' + t), cx - 792 + i * 198, 150, 190, 88, () => { this.tab = t; this._layout(); },
+      b.add(() => T('dev.tab.' + t), cx - 800 + i * tw, 150, tw - 8, 88, () => { this.tab = t; this._layout(); },
         { size: 26, color: this.tab === t ? '#ffd23f' : '#6b7a8c', textColor: this.tab === t ? '#000' : '#fff' });
     });
     const w = 600, h = 88, gap = 6;                 // (rows 94 apart: the CAREER tab has 8 rows)
@@ -206,6 +207,49 @@ const Dev = {
         r.fever.meter = CHALLENGE_DATA.six.fever.meter - 0.5; this.say(T('dev.done'));
       });
       add(1, 5, () => T('dev.chal.reset'), () => { Save.data.challenges = {}; Save.data.challengeMeta = null; Save.write(); this.say(T('dev.done')); }, { color: '#ffb3b3' });
+    } else if (this.tab === 'more') {
+      // M19 (plan 43A.3): energy / form, level / stats, grant an item / a technique, the next rival,
+      // force the pitch / weather, open every My XI competition, run the content check.
+      const withC = (fn) => () => {
+        const c = (Scenes.currentName === 'careerhome' && CareerHomeScene.career) || (CareerMatch.on && CareerMatch.career);
+        if (!c) { this.say(T('dev.career.none')); return; }
+        fn(c); CareerSave.save(c, Scenes.currentName === 'careerhome' ? CareerHomeScene.slot : CareerMatch.slot);
+        if (Scenes.currentName === 'careerhome') CareerHomeScene._layout();
+      };
+      const F = CAREER_DATA.form.levels;
+      add(0, 0, () => T('dev.more.energy'), withC((c) => { c.energy = c.energy >= CAREER_DATA.energy.max ? 10 : CAREER_DATA.energy.max; this.say(T('dev.more.energyNow', { n: c.energy })); }));
+      add(1, 0, () => T('dev.more.form'), withC((c) => { c.form = F[(F.indexOf(c.form) + 1) % F.length]; this.say(T('dev.more.formNow', { f: c.form })); }));
+      add(0, 1, () => T('dev.more.level'), withC((c) => { Career.addXp(c, 5000); this.say(T('dev.meta.level', { n: c.player.level })); }));
+      add(1, 1, () => T('dev.more.stats'), withC((c) => { for (const k of Object.keys(c.player.stats)) c.player.stats[k] = Math.min(CAREER_DATA.statMax, c.player.stats[k] + 10); this.say(T('dev.done')); }));
+      add(0, 2, () => T('dev.more.item'), () => {
+        const it = EQUIPMENT_DATA.items.find((x) => !Gear.owns(Save.data, x.id));
+        if (!it) { this.say(T('dev.more.allOwned')); return; }
+        Gear.grant(Save.data, it.id, 'shop'); Save.write(); this.say(T('gear.' + it.id));
+      });
+      add(1, 2, () => T('dev.more.tech'), () => {
+        const id = Object.keys(SKILL_TREE_DATA.techniques).find((t) => !SkillTree.discovered(Save.data, t));
+        if (!id) { this.say(T('dev.more.allOwned')); return; }
+        SkillTree.discover(Save.data, id); Save.write(); this.say(TreeText.name(id));
+      });
+      add(0, 3, () => T('dev.more.rival', { r: this.nextRival ? T('rival.' + this.nextRival) : '-' }), withC((c) => {
+        const ids = EVENT_DATA.rivals.map((r) => r.id), nx = Career.next(c);
+        if (!nx) return;
+        this.nextRival = ids[(ids.indexOf(this.nextRival) + 1) % ids.length];
+        nx.rival = this.nextRival; nx.rivalIntro = false; c.pendingEvent = null;
+      }));
+      const pitches = [null].concat(QUICKMATCH_DATA.pitches.map((x) => x.id)), weathers = [null].concat(QUICKMATCH_DATA.weathers.map((x) => x.id));
+      add(1, 3, () => T('dev.more.pitch', { p: this.pitch ? T(STADIUM_DATA.pitchTypes[this.pitch].nameKey) : T('dev.more.any') }), () => { this.pitch = pitches[(pitches.indexOf(this.pitch || null) + 1) % pitches.length]; });
+      add(1, 4, () => T('dev.more.weather', { w: this.weather ? T(STADIUM_DATA.weather[this.weather].nameKey) : T('dev.more.any') }), () => { this.weather = weathers[(weathers.indexOf(this.weather || null) + 1) % weathers.length]; });
+      add(0, 4, () => T('dev.more.myxiComps'), () => {
+        const club = MyXI.club(Save.data);
+        if (!club) { this.say(T('dev.career.none')); return; }
+        for (const C of MYXI_DATA.competitions) { club.comps[C.id] = club.comps[C.id] || {}; club.comps[C.id].cleared = club.comps[C.id].cleared || true; }
+        Save.write(); this.say(T('dev.done'));
+      });
+      add(0, 5, () => T('dev.more.check'), () => {
+        const pr = Validate.runData();
+        this.say(pr.length ? T('dev.more.checkBad', { n: pr.length, first: pr[0] }) : T('dev.more.checkOk'));
+      });
     } else if (this.tab === 'mission') {
       // M11: open every mission, jump to one, win the one you're in (a scripted run).
       const S = () => Save.data;

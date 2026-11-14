@@ -93,6 +93,26 @@ const Legacy = {
 
   // Retire: the snapshot joins the Hall of Fame; Legacy Marks; My XI unlocks the first time.
   // Frees the slot (the caller saves). Returns { snap, marks, firstRetirement }.
+  // ---- the Legacy shop (M19): { id, lm, owned, ok, reason } for each permanent unlock ----
+  shopItems(save) {
+    const C = save.currencies || {}, U = save.unlocks || {};
+    return LEGACY_DATA.shop.map((x) => {
+      const club = typeof MyXI !== 'undefined' ? MyXI.club(save) : null;
+      const owned = x.id === 'legends_arena' ? !!(club && club.stadiums.includes('legends_arena')) : !!(U.legacyShop && U.legacyShop[x.id]);
+      const reason = owned ? 'owned' : x.needs === 'myxi' && !club ? 'myxi' : (C.legacyMarks || 0) < x.lm ? 'marks' : null;
+      return { id: x.id, lm: x.lm, owned, ok: !reason, reason };
+    });
+  },
+  buy(save, id) {
+    const it = this.shopItems(save).find((x) => x.id === id);
+    if (!it || !it.ok) return { ok: false, reason: it ? it.reason : 'unknown' };
+    save.currencies.legacyMarks -= it.lm;
+    if (id === 'legends_arena') MyXI.club(save).stadiums.push('legends_arena');
+    else { save.unlocks = save.unlocks || {}; save.unlocks.legacyShop = save.unlocks.legacyShop || {}; save.unlocks.legacyShop[id] = 1; }
+    return { ok: true };
+  },
+  hasFrame(save) { return !!(save.unlocks && save.unlocks.legacyShop && save.unlocks.legacyShop.hof_frame); },
+
   retire(c, save) {
     const snap = this.snapshot(c, save);
     if (typeof Profile !== 'undefined') Profile.add(save, PROFILE_DATA.xp.careerComplete, 'retire');       // a finished career (M12)
@@ -103,6 +123,10 @@ const Legacy = {
     save.currencies.legacyMarks = (save.currencies.legacyMarks || 0) + snap.marks;
     save.unlocks = save.unlocks || {};
     if (first) save.unlocks.myxi = snap.retiredAt;          // plan 8.21: the first retirement unlocks My XI
-    return { snap, marks: snap.marks, firstRetirement: first };
+    // M19 (plan 12.7): a career that went far leaves the Legacy Emblem behind (src 'legacy')
+    const LI = EQUIPMENT_DATA.drops.legacyItem;
+    let item = null;
+    if (LI && typeof Gear !== 'undefined' && snap.stageReached >= LI.minStage && !Gear.owns(save, LI.id)) { Gear.grant(save, LI.id, 'legacy'); item = LI.id; }
+    return { snap, marks: snap.marks, firstRetirement: first, item };
   },
 };

@@ -19,6 +19,9 @@ const SettingsScene = {
   _t: 0,
 
   TABS: ['controls', 'audio', 'video', 'access', 'alerts', 'other'],
+  OVERLAY_TABS: ['controls', 'audio', 'video', 'access'],     // over a match: no resets / alerts
+  overlay: false,
+  _close() { if (this.overlay) Scenes.closeOverlay(); else Scenes.go('title'); },
   ROWS: {
     controls: [['leftHanded', 'bool'], ['controlSize', ['small', 'normal', 'large']], ['aimAssist', ['low', 'normal', 'high']],
       ['batSensitivity', ['low', 'normal', 'high']], ['aimSensitivity', ['low', 'normal', 'high']], ['aimInvert', 'bool']],
@@ -34,7 +37,9 @@ const SettingsScene = {
     this.legal = false;
     this._msg = null;
     this._t = 0;
+    this.overlay = !!(params && params.overlay);      // M19: opened over a paused match (pause menu)
     if (params && params.tab) this.tab = params.tab;
+    if (this.overlay && !this.OVERLAY_TABS.includes(this.tab)) this.tab = 'controls';
     GameSettings.ensure(Save.data);
     this._layout();
   },
@@ -58,8 +63,8 @@ const SettingsScene = {
   _layout() {
     const b = this.buttons, s = Display.safe, cx = CONFIG.LOGICAL_W / 2;
     b.clear();
-    b.add('settings.back', s.left + 24, s.top + 24, 240, 96, () => Scenes.go('title'), { size: 40, color: '#e9eef5' });
-    this.TABS.forEach((t, i) => b.add('settings.tab.' + t, cx - 810 + i * 272, 150, 262, 90, () => { this.tab = t; this._layout(); },
+    b.add('settings.back', s.left + 24, s.top + 24, 240, 96, () => this._close(), { size: 40, color: '#e9eef5' });
+    (this.overlay ? this.OVERLAY_TABS : this.TABS).forEach((t, i) => b.add('settings.tab.' + t, cx - 810 + i * 272, 150, 262, 90, () => { this.tab = t; this._layout(); },
       { size: 26, color: this.tab === t ? '#ffd23f' : '#5b6570', textColor: this.tab === t ? CONFIG.COLOR.ink : '#ffffff' }));
     const rows = this.ROWS[this.tab];
     if (rows) {
@@ -138,7 +143,7 @@ const SettingsScene = {
   pointerMove(id, x, y) { if (!Dev.pointerMove(id, x, y)) this._list().move(id, x, y); },
   pointerUp(id) { if (!Dev.pointerUp(id)) this._list().up(id); },
   keyDown(code) {
-    if (code === 'Escape') { if (this.legal) this.legal = false; else if (this.confirming) this.confirming = null; else Scenes.go('title'); }
+    if (code === 'Escape') { if (this.legal) this.legal = false; else if (this.confirming) this.confirming = null; else this._close(); }
   },
 
   render(ctx) {

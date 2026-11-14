@@ -34,6 +34,7 @@ const TossScene = {
     Stadium.setConditions(Match.cond);
     this._t = 0;
     this.phase = 'flip';
+    if (Match.toss.preset) this._t = MATCH_DATA.toss.flipTime;      // no coin to spin
     Effects.init();
     this.buttons.clear();
     Sound.play('swish');
@@ -45,7 +46,9 @@ const TossScene = {
     const cx = CONFIG.LOGICAL_W / 2;
     const b = this.buttons;
     b.clear();
-    if (Match.toss.winner === 'player') {
+    if (Match.toss.preset) {      // Quick Match: bat / bowl first was chosen on the setup screen (M19)
+      b.add('match.play', cx - 220, 800, 440, 130, () => this._go(Match.toss.choice), { size: 60 });
+    } else if (Match.toss.winner === 'player') {
       b.add('match.bat', cx - 440, 800, 400, 130, () => this._go('bat'), { size: 60, color: '#5fb0ff' });
       b.add('match.bowl', cx + 40, 800, 400, 130, () => this._go('bowl'), { size: 60, color: '#6fd36f' });
     } else {
@@ -74,7 +77,8 @@ const TossScene = {
   pointerUp(id) { if (!Dev.pointerUp(id)) this.buttons.up(id); },
   keyDown(code) {
     if (this.phase !== 'result') return;
-    if (Match.toss.winner === 'player') {
+    if (Match.toss.preset) { if (code === 'Enter' || code === 'Space') this._go(Match.toss.choice); }
+    else if (Match.toss.winner === 'player') {
       if (code === 'KeyB' || code === 'Digit1') this._go('bat');
       if (code === 'KeyW' || code === 'Digit2') this._go('bowl');
     } else if (code === 'Enter' || code === 'Space') this._go(Match.toss.choice);
@@ -103,9 +107,9 @@ const TossScene = {
     ctx.restore();
 
     if (this.phase === 'result') {
-      const won = Match.toss.winner === 'player';
-      R.text(T(won ? 'match.youWonToss' : 'match.theyWonToss'), cx, 660, 56, won ? '#9cff6a' : '#ffb36b');
-      R.text(won ? T('match.chooseBatBowl') : T(Match.toss.choice === 'bat' ? 'match.theyBat' : 'match.theyBowl'),
+      const won = Match.toss.winner === 'player', pre = Match.toss.preset;
+      R.text(T(pre ? 'match.youChose' : won ? 'match.youWonToss' : 'match.theyWonToss'), cx, 660, 56, won ? '#9cff6a' : '#ffb36b');
+      R.text(pre ? T(Match.toss.choice === 'bat' ? 'match.chose.bat' : 'match.chose.bowl') : won ? T('match.chooseBatBowl') : T(Match.toss.choice === 'bat' ? 'match.theyBat' : 'match.theyBowl'),
         cx, 730, 38, '#ffffff', 'center', false);
       this.buttons.draw();
     }
@@ -165,7 +169,7 @@ const MatchBreakScene = {
       const top = last.topScorer();
       const topP = Match.teams ? Match.teams[last.battingSide].players[top.no - 1] : null;
       R.text(T('match.topScorer', { name: topP ? topP.short : top.no, r: top.runs, b: top.balls }) + ' · ' +
-        T('match.extrasLine', { n: last.extras.wides + last.extras.noBalls }), cx, 365, 30, '#b8c6d6', 'center', false);
+        T('match.extrasLine', { n: last.extras.wides + last.extras.noBalls + (last.extras.byes || 0) + (last.extras.legByes || 0) }), cx, 365, 30, '#b8c6d6', 'center', false);
       const target = last.runs + 1;
       const chaser = last.bowlingSide;
       const balls = (last.isSuper ? MATCH_DATA.superOver.overs : Match.fmt.overs) * 6;
@@ -210,7 +214,7 @@ const MatchResultScene = {
     Save.data.currencies.coins = (Save.data.currencies.coins || 0) + this.coins;
     if (this.won) { Profile.add(Save.data, PROFILE_DATA.xp.quickWin, 'quick'); if (typeof Notify !== 'undefined') Notify.won(Save.data); }
     Sound.play('ui_currency');
-    Achievements.afterMatch(Save.data, {}, null); Achievements.checkAccount(Save.data, null);   // (M09)
+    this.records = Achievements.afterMatch(Save.data, {}, null).records || []; Achievements.checkAccount(Save.data, null);   // (M09; M19 record book)
     // Anything earned by this result (e.g. field settings at Quick Match win milestones).
     this.unlocked = Unlocks.check();
     if (this.unlocked.length) Save.write();
@@ -279,6 +283,7 @@ const MatchResultScene = {
     if (rec && !CareerMatch.on && !MyXIMatch.on && !(this.unlocked && this.unlocked.length)) R.text(T('match.record', { won: rec.won || 0, played: rec.played || 0 }), cx, 840, 30, '#d8e4f0', 'center', false);
     if (this.coins) R.text(T('qm.coinsWon', { n: this.coins, d: T('chal.diff.' + (Match.difficulty || 'pro')) }), cx, 800, 30, '#ffd23f', 'center', false);
 
+    if (this.records && this.records.length && !CareerMatch.on) RecordsUI.flag(this.records, CONFIG.LOGICAL_W / 2, 830);
     this.buttons.draw();
     Effects.drawParticles(ctx);
     R.text(T('result.seed', { seed: Match.seed }), Display.safe.right - 30, Display.safe.bottom - 30, 22, 'rgba(255,255,255,0.35)', 'right', false);

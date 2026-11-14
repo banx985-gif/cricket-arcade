@@ -21,6 +21,9 @@ const Stadium = {
 
   setConditions(c) {
     this.cond = Object.assign({ stadium: STADIUM_DATA.defaultStadium, pitch: 'balanced', weather: 'clear' }, c || {});
+    // M19 (plan 7.10): each ground has its own boundary (STADIUM_DATA.boundary, metres). Everything that
+    // reads BATTING_DATA.field.boundaryRadius (fours / sixes, the rope, the stands) follows it.
+    Grounds.apply(this.cond.stadium);
   },
   _def() { return STADIUM_DATA.stadiums[this.cond.stadium] || STADIUM_DATA.stadiums[STADIUM_DATA.defaultStadium]; },
 
